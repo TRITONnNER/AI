@@ -1,0 +1,28 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "harness"
+version = "0.1.0"
+description = "Веха 0: инфраструктура записи и воспроизведения опыта. Без ИИ."
+requires-python = ">=3.11"
+dependencies = ["numpy>=1.26"]
+
+[project.optional-dependencies]
+# Платформенные backend'ы. Ставятся только там, где реально нужны:
+# без них соответствующий backend честно отказывается работать, а не подсовывает
+# правдоподобные данные.
+linux = ["mss>=9", "evdev>=1.6", "sounddevice>=0.4"]
+windows = ["dxcam>=0.0.5", "sounddevice>=0.4"]
+dev = ["pytest>=8"]
+
+[project.scripts]
+harness = "harness.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+filterwarnings = ["error"]
