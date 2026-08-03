@@ -486,15 +486,16 @@ def main() -> int:
     args = ap.parse_args()
 
     if args.path.is_dir():
-        files = sorted(args.path.glob("*.md"))
+        # README — описание каталога, а не часть выгрузки
+        files = [p for p in sorted(args.path.glob("*.md")) if p.stem.casefold() != "readme"]
+        if not files:
+            print(f"в {args.path} пока нет частей выгрузки — только описание каталога.\n"
+                  "Промт выгрузки: docs/PROMPT-EXPORT-DESIGN.md", file=sys.stderr)
+            return 2
     elif args.path.is_file():
         files = [args.path]
     else:
         print(f"не найдено: {args.path}", file=sys.stderr)
-        return 2
-
-    if not files:
-        print(f"в {args.path} нет файлов .md", file=sys.stderr)
         return 2
 
     problems: list[Problem] = []

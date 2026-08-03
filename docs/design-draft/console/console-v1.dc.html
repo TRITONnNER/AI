@@ -1,0 +1,2155 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+--bg:oklch(0.178 0.006 255);--panel:oklch(0.212 0.006 255);--panel2:oklch(0.246 0.007 255);
+--line:oklch(0.315 0.008 255);--line2:oklch(0.268 0.007 255);
+--ink:oklch(0.925 0.008 255);--ink2:oklch(0.705 0.008 255);--ink3:oklch(0.535 0.008 255);
+--agent:oklch(0.78 0.12 196);--human:oklch(0.80 0.12 76);--alarm:oklch(0.655 0.20 27);
+--sigma:oklch(0.725 0.115 305);--proof:oklch(0.765 0.115 152);
+--agentf:oklch(0.78 0.12 196/0.16);--humanf:oklch(0.80 0.12 76/0.16);--alarmf:oklch(0.655 0.20 27/0.16);
+--sigmaf:oklch(0.725 0.115 305/0.16);--prooff:oklch(0.765 0.115 152/0.16);
+--driver:oklch(0.78 0.12 196);--bar:oklch(0.225 0.02 210);--grid:oklch(0.30 0.008 255);
+}
+html[data-theme="light"]{
+--bg:oklch(0.947 0.004 255);--panel:oklch(0.985 0.003 255);--panel2:oklch(0.915 0.005 255);
+--line:oklch(0.835 0.006 255);--line2:oklch(0.885 0.005 255);
+--ink:oklch(0.255 0.012 255);--ink2:oklch(0.455 0.012 255);--ink3:oklch(0.605 0.012 255);
+--agent:oklch(0.52 0.13 210);--human:oklch(0.545 0.13 66);--alarm:oklch(0.52 0.20 27);
+--sigma:oklch(0.50 0.15 305);--proof:oklch(0.50 0.13 152);
+--agentf:oklch(0.52 0.13 210/0.12);--humanf:oklch(0.545 0.13 66/0.14);--alarmf:oklch(0.52 0.20 27/0.12);
+--sigmaf:oklch(0.50 0.15 305/0.12);--prooff:oklch(0.50 0.13 152/0.12);
+--driver:oklch(0.52 0.13 210);--bar:oklch(0.90 0.02 210);--grid:oklch(0.80 0.008 255);
+}
+*{box-sizing:border-box}
+html,body{margin:0;padding:0;background:var(--bg);color:var(--ink);font-family:Archivo,system-ui,sans-serif;font-variant-numeric:tabular-nums;-webkit-font-smoothing:antialiased}
+button,input,textarea,select{font:inherit;color:inherit;font-variant-numeric:tabular-nums}
+button{cursor:pointer}
+a{color:var(--agent);text-decoration:none}
+a:hover{color:var(--ink)}
+:focus-visible{outline:2px solid var(--driver);outline-offset:1px}
+::selection{background:var(--agentf)}
+::-webkit-scrollbar{width:10px;height:10px}
+::-webkit-scrollbar-track{background:var(--bg)}
+::-webkit-scrollbar-thumb{background:var(--line);border:3px solid var(--bg)}
+::-webkit-scrollbar-thumb:hover{background:var(--ink3)}
+@keyframes omnerve{0%,100%{opacity:1}50%{opacity:.35}}
+@media (prefers-reduced-motion: reduce){*{animation:none!important;transition:none!important}}
+</style>
+</helmet>
+<div style="height:100vh;display:flex;flex-direction:column;overflow:hidden;background:var(--bg);color:var(--ink)">
+
+<header style="flex:0 0 auto;display:flex;align-items:stretch;background:var(--bar);border-bottom:1px solid var(--line)">
+<div style="display:flex;align-items:center;gap:14px;padding:8px 16px;border-right:1px solid var(--line)">
+<div style="width:10px;height:10px;border-radius:50%;background:var(--driver);box-shadow:0 0 0 4px var(--agentf)"></div>
+<div style="display:flex;flex-direction:column;gap:3px">
+<span style="font:600 9px/1 Archivo;letter-spacing:.18em;text-transform:uppercase;color:var(--ink3)">Кто за рулём</span>
+<span style="font:600 21px/1 'IBM Plex Mono',monospace;letter-spacing:.06em;color:var(--driver)">{{ driverWord }}</span>
+</div>
+<div style="display:flex;flex-direction:column;gap:2px">
+<sc-for list="{{ driverBtns }}" as="b" hint-placeholder-count="3">
+<button type="button" onClick="{{ b.go }}" style="{{ b.st }}">{{ b.n }}</button>
+</sc-for>
+</div>
+</div>
+
+<div style="flex:1;min-width:0;display:flex;align-items:stretch;overflow:hidden">
+<sc-for list="{{ clocks }}" as="c" hint-placeholder-count="3">
+<div style="{{ c.st }}">
+<span style="font:600 9px/1 Archivo;letter-spacing:.14em;text-transform:uppercase;color:var(--ink3);white-space:nowrap">{{ c.n }}</span>
+<span style="{{ c.vst }}">{{ c.v }}</span>
+<span style="font:400 10px/1 'IBM Plex Mono',monospace;color:var(--ink3);white-space:nowrap">{{ c.sub }}</span>
+</div>
+</sc-for>
+
+<button type="button" onClick="{{ goProfile }}" style="display:flex;flex-direction:column;gap:4px;justify-content:center;padding:8px 11px;background:transparent;border:0;border-right:1px solid var(--line);text-align:left;white-space:nowrap">
+<span style="font:600 9px/1 Archivo;letter-spacing:.14em;text-transform:uppercase;color:var(--ink3)">Профиль</span>
+<span style="font:500 13px/1 'IBM Plex Mono',monospace;color:var(--ink)">ЛЕПЕТ-К7 <span style="color:var(--ink3)">#4F2A9C</span></span>
+</button>
+
+<button type="button" onClick="{{ goInst }}" style="display:flex;flex-direction:column;gap:4px;justify-content:center;padding:8px 11px;background:transparent;border:0;border-right:1px solid var(--line);text-align:left;white-space:nowrap">
+<span style="font:600 9px/1 Archivo;letter-spacing:.14em;text-transform:uppercase;color:var(--ink3)">Экземпляры</span>
+<span style="font:500 13px/1 'IBM Plex Mono',monospace;color:var(--ink)">3<span style="color:var(--ink3)">/8</span></span>
+</button>
+
+<div style="display:flex;flex-direction:column;gap:4px;justify-content:center;padding:8px 11px;border-right:1px solid var(--line);white-space:nowrap">
+<span style="font:600 9px/1 Archivo;letter-spacing:.14em;text-transform:uppercase;color:var(--ink3)">Расход · большая модель</span>
+<span style="font:500 13px/1 'IBM Plex Mono',monospace;color:var(--ink)">{{ spend }} <span style="color:var(--ink3)">· {{ spendRate }}</span></span>
+</div>
+</div>
+
+<div style="flex:0 0 auto;display:flex;align-items:center;gap:7px;padding:6px 10px 6px 12px;border-left:1px solid var(--line)">
+<button type="button" onClick="{{ togglePause }}" style="{{ pauseSt }}">{{ pauseLabel }}</button>
+<button type="button" onClick="{{ toggleTheme }}" title="Светлая или тёмная тема (T)" style="padding:9px 9px;background:transparent;color:var(--ink3);border:1px solid var(--line);font:600 10px/1 Archivo;letter-spacing:.1em;text-transform:uppercase">{{ themeLabel }}</button>
+<button type="button" onClick="{{ hitStop }}" style="{{ stopSt }}">СТОП</button>
+</div>
+</header>
+
+<sc-if value="{{ stopped }}" hint-placeholder-val="{{ false }}">
+<div style="flex:0 0 auto;display:flex;align-items:center;gap:16px;padding:7px 16px;background:var(--alarmf);border-bottom:1px solid var(--alarm)">
+<span style="font:600 12px/1 'IBM Plex Mono',monospace;letter-spacing:.1em;color:var(--alarm)">ИНЪЕКЦИЯ ВВОДА ОСТАНОВЛЕНА</span>
+<span style="font:400 11px/1 Archivo;color:var(--ink2)">Мир продолжает идти. Журнал пишется. Эффекторы отключены на уровне драйвера.</span>
+<button type="button" onClick="{{ releaseStop }}" style="margin-left:auto;padding:5px 12px;background:transparent;border:1px solid var(--alarm);color:var(--alarm);font:600 10px/1 Archivo;letter-spacing:.12em;text-transform:uppercase">Снять стоп</button>
+</div>
+</sc-if>
+
+<div style="flex:0 0 auto;display:flex;align-items:stretch;background:var(--panel);border-bottom:1px solid var(--line)">
+<div style="display:flex;flex-direction:column;justify-content:center;gap:2px;padding:5px 12px;border-right:1px solid var(--line2);min-width:172px">
+<span style="font:600 9px/1 Archivo;letter-spacing:.16em;text-transform:uppercase;color:var(--ink3)">Ошибка предсказания</span>
+<div style="display:flex;align-items:baseline;gap:8px">
+<span style="{{ errSt }}">{{ errVal }}</span>
+<span style="font:400 10px/1 'IBM Plex Mono',monospace;color:var(--ink3)">σ {{ errSigma }}</span>
+</div>
+</div>
+<button type="button" onClick="{{ goJournal }}" title="Открыть журнал на этом моменте" style="flex:1;min-width:0;position:relative;padding:0;background:transparent;border:0;border-right:1px solid var(--line2)">
+<canvas ref="{{ nerveRef }}" style="display:block;width:100%;height:46px"></canvas>
+</button>
+<div style="display:flex;flex-direction:column;justify-content:center;gap:2px;padding:5px 12px;min-width:150px">
+<span style="font:600 9px/1 Archivo;letter-spacing:.16em;text-transform:uppercase;color:var(--ink3)">Всплесков за 5 мин</span>
+<span style="font:500 13px/1 'IBM Plex Mono',monospace;color:var(--ink)">{{ spikeCount }} <span style="color:var(--ink3)">· последний {{ lastSpike }}</span></span>
+</div>
+</div>
+
+<nav style="flex:0 0 auto;display:flex;align-items:stretch;background:var(--panel);border-bottom:1px solid var(--line);overflow-x:auto">
+<sc-for list="{{ tabs }}" as="t" hint-placeholder-count="9">
+<button type="button" onClick="{{ t.go }}" style="{{ t.st }}"><span style="{{ t.kst }}">{{ t.k }}</span>{{ t.n }}</button>
+</sc-for>
+</nav>
+
+<main style="flex:1;min-height:0;display:flex;flex-direction:column;overflow:hidden">
+
+<sc-if value="{{ isLive }}" hint-placeholder-val="{{ true }}">
+<div style="flex:1;min-height:0;display:grid;grid-template-columns:minmax(232px,0.82fr) minmax(480px,2fr) minmax(268px,1.05fr);gap:1px;background:var(--line)">
+
+<section style="min-width:0;overflow:auto;background:var(--bg);display:flex;flex-direction:column">
+<div style="display:flex;align-items:baseline;justify-content:space-between;padding:9px 12px 7px;border-bottom:1px solid var(--line2);position:sticky;top:0;background:var(--bg);z-index:2">
+<span style="font:600 10px/1 Archivo;letter-spacing:.16em;text-transform:uppercase;color:var(--ink2)">Драйвы</span>
+<span style="font:400 10px/1 'IBM Plex Mono',monospace;color:var(--ink3)">аллостаз · горизонт 45 с</span>
+</div>
+<div style="padding:6px 0 10px">
+<sc-for list="{{ drives }}" as="d" hint-placeholder-count="6">
+<div style="display:flex;flex-direction:column;gap:4px;padding:6px 12px">
+<div style="display:flex;align-items:baseline;gap:8px">
+<span style="font:500 11px/1.2 Archivo;color:var(--ink2);flex:1;min-width:0">{{ d.n }}</span>
+<span style="font:500 11px/1 'IBM Plex Mono',monospace;color:var(--ink)">{{ d.vt }}</span>
+<span style="{{ d.fst }}">{{ d.ft }}</span>
+</div>
+<div style="position:relative;height:11px;background:var(--panel);border:1px solid var(--line2)">
+<div style="{{ d.corr }}"></div>
+<div style="{{ d.fill }}"></div>
+<div style="{{ d.fore }}"></div>
+</div>
+</div>
+</sc-for>
+<div style="padding:4px 12px 0;font:400 10px/1.4 Archivo;color:var(--ink3)">Полупрозрачная полоса — коридор гомеостаза, штрих — прогноз на горизонт.</div>
+</div>
+
+<div style="display:flex;align-items:baseline;justify-content:space-between;padding:9px 12px 7px;border-top:1px solid var(--line);border-bottom:1px solid var(--line2)">
+<span style="font:600 10px/1 Archivo;letter-spacing:.16em;text-transform:uppercase;color:var(--ink2)">Настроение</span>
+<span style="font:400 10px/1 'IBM Plex Mono',monospace;color:var(--ink3)">след 60 мин</span>
+</div>
+<div style="padding:10px 12px;display:flex;gap:10px;align-items:stretch">
+<canvas ref="{{ moodRef }}" style="width:126px;height:126px;flex:0 0 auto;border:1px solid var(--line2);background:var(--panel)"></canvas>
+<div style="display:flex;flex-direction:column;justify-content:center;gap:7px;min-width:0">
+<div style="display:flex;flex-direction:column;gap:2px">
+<span style="font:600 9px/1 Archivo;letter-spacing:.14em;text-transform:uppercase;color:var(--ink3)">Валентность</span>
+<span style="font:500 13px/1 'IBM Plex Mono',monospace;color:var(--ink)">−0.21</span>
+</div>
+<div style="display:flex;flex-direction:column;gap:2px">
+<span style="font:600 9px/1 Archivo;letter-spacing:.14em;text-transform:uppercase;color:var(--ink3)">Возбуждение</span>
+<span style="font:500 13px/1 'IBM Plex Mono',monospace;color:var(--ink)">+0.64</span>
+</div>
+<div style="display:flex;flex-direction:column;gap:2px">
+<span style="font:600 9px/1 Archivo;letter-spacing:.14em;text-transform:uppercase;color:var(--ink3)">Инерция</span>
+<span style="font:500 13px/1 'IBM Plex Mono',monospace;color:var(--ink)">0.86 <span style="color:var(--ink3)">· τ 4 мин</span></span>
+</div>
+</div>
+</div>
+
+<div style="display:flex;align-items:baseline;justify-content:space-between;padding:9px 12px 7px;border-top:1px solid var(--line);border-bottom:1px solid var(--line2)">
+<span style="font:600 10px/1 Archivo;letter-spacing:.16em;text-transform:uppercase;color:var(--ink2)">Эмоция</span>
+<span style="font:400 10px/1 'IBM Plex Mono',monospace;color:var(--ink3)">модулятор</span>
+</div>
+<div style="padding:10px 12px">
+<div style="display:flex;gap:4px;flex-wrap:wrap;margin-bottom:10px">
+<sc-for list="{{ emotions }}" as="e" hint-placeholder-count="5">
+<span style="{{ e.st }}">{{ e.n }}</span>
+</sc-for>
+</div>
+<div style="border-left:2px solid var(--human);padding-left:9px;display:flex;flex-direction:column;gap:5px">
+<span style="font:400 10px/1 Archivo;letter-spacing:.1em;text-transform:uppercase;color:var(--ink3)">Что она сделала</span>
+<sc-for list="{{ emoEffects }}" as="x" hint-placeholder-count="3">
+<span style="font:400 11px/1.35 'IBM Plex Mono',monospace;color:var(--ink2)">{{ x }}</span>
+</sc-for>
+</div>
+</div>
+
+<div style="display:flex;align-items:baseline;justify-content:space-between;padding:9px 12px 7px;border-top:1px solid var(--line);border-bottom:1px solid var(--line2)">
+<span style="font:600 10px/1 Archivo;letter-spacing:.16em;text-transform:uppercase;color:var(--ink2)">Тело</span>
+<span style="font:400 10px/1 'IBM Plex Mono',monospace;color:var(--ink3)">интероцепция</span>
+</div>
+<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;padding:9px 12px;border-bottom:1px solid var(--line2)">
+<span style="font:400 11px/1.2 Archivo;color:var(--ink2)">Размыкатель</span>
+<span style="{{ breakerSt }}">{{ breaker }}</span>
+</div>
+<div style="padding:4px 0 14px">
+<sc-for list="{{ body }}" as="b" hint-placeholder-count="4">
+<div style="display:flex;align-items:baseline;justify-content:space-between;gap:8px;padding:5px 12px">
+<span style="font:400 11px/1.2 Archivo;color:var(--ink2)">{{ b.n }}</span>
+<span style="{{ b.st }}">{{ b.v }}</span>
+</div>
+</sc-for>
+</div>
+</section>
+
+<section style="min-width:0;overflow:auto;background:var(--bg);display:flex;flex-direction:column">
+<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:8px 12px;border-bottom:1px solid var(--line2);position:sticky;top:0;background:var(--bg);z-index:2">
+<span style="font:600 10px/1 Archivo;letter-spacing:.16em;text-transform:uppercase;color:var(--ink2)">Зеркало экрана агента</span>
+<span style="font:400 10px/1 'IBM Plex Mono',monospace;color:var(--ink3)">1280×720 · 14.2 Гц</span>
+<div style="margin-left:auto;display:flex;gap:5px;flex-wrap:wrap">
+<sc-for list="{{ chips }}" as="c" hint-placeholder-count="5">
+<button type="button" onClick="{{ c.go }}" style="{{ c.st }}">{{ c.n }}</button>
+</sc-for>
+</div>
+</div>
+
+<div style="padding:12px 12px 0">
+<div style="position:relative;aspect-ratio:16/9;border:1px solid var(--line);background:repeating-linear-gradient(135deg,var(--panel) 0 7px,var(--panel2) 7px 14px);overflow:hidden">
+<div style="position:absolute;left:0;right:0;bottom:6px;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:4px">
+<span style="font:400 11px/1 'IBM Plex Mono',monospace;letter-spacing:.1em;color:var(--ink3)">кадр экрана агента</span>
+<span style="font:400 10px/1 'IBM Plex Mono',monospace;color:var(--ink3)">сюда идёт живой видеопоток</span>
+</div>
+
+<sc-if value="{{ ovLayers }}" hint-placeholder-val="{{ true }}">
+<div style="position:absolute;inset:2%;border:1px solid var(--agent);opacity:.9"></div>
+<div style="position:absolute;left:2%;top:2%;font:500 9px/1 'IBM Plex Mono',monospace;color:var(--agent);background:var(--bg);padding:2px 4px">ДАЛЬНИЙ · 1 Гц · σ 0.41</div>
+<div style="position:absolute;inset:10%;border:1px dashed var(--agent);opacity:.75"></div>
+<div style="position:absolute;left:10%;top:10%;font:500 9px/1 'IBM Plex Mono',monospace;color:var(--agent);background:var(--bg);padding:2px 4px">СРЕДНИЙ · 4 Гц · σ 0.22</div>
+<div style="position:absolute;inset:20%;border:1px dotted var(--agent);opacity:.7"></div>
+<div style="position:absolute;left:20%;top:20%;font:500 9px/1 'IBM Plex Mono',monospace;color:var(--agent);background:var(--bg);padding:2px 4px">БЛИЖНИЙ · 14 Гц · σ 0.09</div>
+<div style="position:absolute;left:30%;top:31%;width:26%;height:22%;border:2px double var(--agent)"></div>
+<div style="position:absolute;left:30%;top:31%;transform:translateY(-100%);font:500 9px/1 'IBM Plex Mono',monospace;color:var(--agent);background:var(--bg);padding:2px 4px">ЭКРАННЫЙ · фовеа · σ 0.04</div>
+</sc-if>
+
+<sc-if value="{{ ovAtt }}" hint-placeholder-val="{{ true }}">
+<div style="position:absolute;left:34%;top:36%;width:19%;height:18%;border:1px solid var(--human);background:var(--humanf)"></div>
+<div style="position:absolute;left:34%;top:54%;font:500 9px/1 'IBM Plex Mono',monospace;color:var(--human);background:var(--bg);padding:2px 4px">внимание 0.81 · 0.8 запр/с</div>
+<div style="position:absolute;left:66%;top:66%;width:13%;height:15%;border:1px solid var(--human);background:var(--humanf);opacity:.6"></div>
+<div style="position:absolute;left:66%;top:66%;transform:translate(0,-118%);font:500 9px/1 'IBM Plex Mono',monospace;color:var(--human);background:var(--bg);padding:2px 4px">0.24 · 0.3 запр/с</div>
+</sc-if>
+
+<sc-if value="{{ ovEnt }}" hint-placeholder-val="{{ true }}">
+<div style="position:absolute;left:36%;top:61%;font:500 9px/1 'IBM Plex Mono',monospace;color:var(--ink);background:var(--panel2);border:1px solid var(--line);padding:2px 5px">ПРЕДМЕТ_1C90</div>
+<div style="position:absolute;left:66%;top:82%;font:500 9px/1 'IBM Plex Mono',monospace;color:var(--ink);background:var(--panel2);border:1px solid var(--line);padding:2px 5px">СИМВОЛ_7A3F</div>
+<div style="position:absolute;left:8%;top:78%;font:500 9px/1 'IBM Plex Mono',monospace;color:var(--ink3);background:var(--panel2);border:1px solid var(--line);padding:2px 5px">?_новая · карточка заведена</div>
+</sc-if>
+
+<sc-if value="{{ ovSnd }}" hint-placeholder-val="{{ true }}">
+<div style="position:absolute;left:6px;top:68%;display:flex;align-items:center;gap:6px">
+<div style="width:0;height:0;border-top:7px solid transparent;border-bottom:7px solid transparent;border-right:11px solid var(--sigma)"></div>
+<span style="font:500 9px/1 'IBM Plex Mono',monospace;color:var(--sigma);background:var(--bg);padding:2px 4px">ЗВУК_B7 · 246° · вне поля зрения</span>
+</div>
+</sc-if>
+
+<sc-if value="{{ ovPred }}" hint-placeholder-val="{{ false }}">
+<div style="position:absolute;left:44%;top:34%;width:19%;height:18%;border:1px dashed var(--ink2);opacity:.7"></div>
+<div style="position:absolute;left:63%;top:34%;transform:translateY(-100%);font:500 9px/1 'IBM Plex Mono',monospace;color:var(--ink2);background:var(--bg);padding:2px 4px">предсказание +6 ц · σ 0.17</div>
+</sc-if>
+</div>
+</div>
+
+<div style="padding:10px 12px 0">
+<div style="display:flex;align-items:baseline;justify-content:space-between;padding-bottom:6px">
+<span style="font:600 10px/1 Archivo;letter-spacing:.16em;text-transform:uppercase;color:var(--ink2)">Лента ошибки предсказания</span>
+<span style="font:400 10px/1 'IBM Plex Mono',monospace;color:var(--ink3)">последние 6 мин · клик по всплеску ведёт в журнал</span>
+</div>
+<canvas ref="{{ ribbonRef }}" style="display:block;width:100%;height:112px;border:1px solid var(--line);background:var(--panel)"></canvas>
+<div style="display:flex;gap:6px;flex-wrap:wrap;padding:7px 0 0">
+<sc-for list="{{ spikes }}" as="s" hint-placeholder-count="4">
+<button type="button" onClick="{{ s.go }}" style="display:flex;align-items:center;gap:7px;padding:4px 8px;background:var(--panel);border:1px solid var(--line);color:var(--ink2);font:500 10px/1 'IBM Plex Mono',monospace"><span style="color:var(--alarm)">▲ {{ s.v }}</span>{{ s.t }}<span style="color:var(--ink3)">{{ s.why }}</span></button>
+</sc-for>
+</div>
+</div>
+
+<sc-if value="{{ debugOn }}" hint-placeholder-val="{{ true }}">
+<div style="margin:12px;border:1px dashed var(--line);background:repeating-linear-gradient(45deg,transparent 0 6px,var(--panel) 6px 7px)">
+<div style="display:flex;align-items:center;gap:9px;padding:7px 10px;border-bottom:1px dashed var(--line)">
+<span style="font:600 9px/1 Archivo;letter-spacing:.16em;text-transform:uppercase;color:var(--ink3)">Отладочный канал исследователя</span>
+<span style="font:400 10px/1 Archivo;color:var(--ink3)">агент этого не видит и никогда не получал</span>
+</div>
+<div style="display:flex;gap:18px;flex-wrap:wrap;padding:9px 10px">
+<sc-for list="{{ debugVals }}" as="d" hint-placeholder-count="6">
+<div style="display:flex;flex-direction:column;gap:2px">
+<span style="font:400 9px/1 Archivo;letter-spacing:.12em;text-transform:uppercase;color:var(--ink3)">{{ d.n }}</span>
+<span style="font:500 12px/1 'IBM Plex Mono',monospace;color:var(--ink2)">{{ d.v }}</span>
+</div>
+</sc-for>
+</div>
+</div>
+</sc-if>
+</section>
+
+<section style="min-width:0;overflow:auto;background:var(--bg);display:flex;flex-direction:column">
+<div style="display:flex;align-items:baseline;justify-content:space-between;padding:9px 12px 7px;border-bottom:1px solid var(--line2);position:sticky;top:0;background:var(--bg);z-index:2">
+<span style="font:600 10px/1 Archivo;letter-spacing:.16em;text-transform:uppercase;color:var(--ink2)">Стек целей</span>
+<span style="font:400 10px/1 'IBM Plex Mono',monospace;color:var(--ink3)">{{ goalCount }}</span>
+</div>
+<div style="display:flex;flex-direction:column">
+<sc-for list="{{ goals }}" as="g" hint-placeholder-count="4">
+<div style="{{ g.wrap }}">
+<div style="display:flex;align-items:center;gap:7px;margin-bottom:5px">
+<span style="{{ g.badge }}">{{ g.state }}</span>
+<span style="font:400 10px/1 'IBM Plex Mono',monospace;color:var(--ink3)">источник: {{ g.src }}</span>
+<button type="button" onClick="{{ g.reject }}" style="margin-left:auto;padding:3px 7px;background:transparent;border:1px solid var(--line);color:var(--ink3);font:500 9px/1 Archivo;letter-spacing:.08em;text-transform:uppercase">Забраковать</button>
+</div>
+<div style="{{ g.title }}">{{ g.text }}</div>
+<div style="display:flex;gap:6px;align-items:baseline;margin-bottom:6px">
+<span style="font:400 9px/1.3 Archivo;letter-spacing:.1em;text-transform:uppercase;color:var(--ink3);flex:0 0 auto">тест</span>
+<span style="font:400 11px/1.35 Archivo;color:var(--ink2)">{{ g.test }}</span>
+</div>
+<div style="position:relative;height:6px;background:var(--panel);border:1px solid var(--line2);margin-bottom:5px">
+<div style="{{ g.spent }}"></div>
+</div>
+<div style="display:flex;flex-wrap:wrap;gap:x;justify-content:space-between;font:500 10px/1.3 'IBM Plex Mono',monospace;color:var(--ink3)">
+<span>потрачено {{ g.spentT }}</span>
+<span>остаток {{ g.leftT }} <span style="color:var(--sigma)">σ {{ g.sigma }}</span></span>
+<span>годна {{ g.exp }}</span>
+</div>
+<sc-if value="{{ g.hasCtx }}" hint-placeholder-val="{{ false }}">
+<div style="margin-top:6px;padding:5px 7px;background:var(--panel);border-left:2px solid var(--line);font:400 10px/1.35 'IBM Plex Mono',monospace;color:var(--ink3)">прервана: {{ g.ctx }}</div>
+</sc-if>
+</div>
+</sc-for>
+</div>
+
+<div style="display:flex;align-items:baseline;justify-content:space-between;padding:9px 12px 7px;border-top:1px solid var(--line);border-bottom:1px solid var(--line2)">
+<span style="font:600 10px/1 Archivo;letter-spacing:.16em;text-transform:uppercase;color:var(--ink2)">Поток речи</span>
+<span style="font:400 10px/1 'IBM Plex Mono',monospace;color:var(--ink3)">только чтение</span>
+</div>
+<div style="padding:8px 12px 4px;font:400 10px/1.4 Archivo;color:var(--ink3);border-bottom:1px solid var(--line2)">Самоотчёты ни на что не влияют и никуда не подставляются. Ни один параметр не читает эти строки.</div>
+<div style="display:flex;flex-direction:column;padding:4px 0">
+<sc-for list="{{ speech }}" as="s" hint-placeholder-count="6">
+<div style="display:flex;flex-direction:column;gap:3px;padding:7px 12px;border-bottom:1px solid var(--line2)">
+<div style="display:flex;align-items:center;gap:7px">
+<span style="{{ s.tag }}">{{ s.k }}</span>
+<span style="{{ s.heardSt }}">{{ s.heard }}</span>
+<span style="margin-left:auto;font:400 10px/1 'IBM Plex Mono',monospace;color:var(--ink3)">{{ s.t }}</span>
+</div>
+<span style="font:400 12px/1.4 Archivo;color:var(--ink);text-wrap:pretty">{{ s.text }}</span>
+</div>
+</sc-for>
+</div>
+
+<div style="display:flex;align-items:baseline;justify-content:space-between;padding:9px 12px 7px;border-top:1px solid var(--line);border-bottom:1px solid var(--line2)">
+<span style="font:600 10px/1 Archivo;letter-spacing:.16em;text-transform:uppercase;color:var(--ink2)">Очередь вопросов</span>
+<span style="font:400 10px/1 'IBM Plex Mono',monospace;color:var(--ink3)">гейт σ ≥ 0.35</span>
+</div>
+<div style="display:flex;flex-direction:column">
+<sc-for list="{{ questions }}" as="q" hint-placeholder-count="2">
+<div style="padding:9px 12px;border-bottom:1px solid var(--line2);display:flex;flex-direction:column;gap:6px">
+<span style="font:400 12px/1.4 Archivo;color:var(--ink);text-wrap:pretty">{{ q.q }}</span>
+<div style="display:flex;gap:12px;font:500 10px/1 'IBM Plex Mono',monospace;color:var(--ink3)">
+<span style="color:var(--sigma)">σ {{ q.sigma }}</span>
+<span>ожидаемая польза {{ q.gain }}</span>
+<span>ждёт {{ q.wait }}</span>
+</div>
+</div>
+</sc-for>
+<div style="display:flex;gap:6px;padding:10px 12px 16px">
+<input type="text" value="{{ answer }}" onInput="{{ setAnswer }}" placeholder="Ответить текстом…" style="flex:1;min-width:0;padding:7px 9px;background:var(--panel);border:1px solid var(--line);color:var(--ink);font:400 12px/1 Archivo">
+<button type="button" style="padding:7px 11px;background:var(--panel);border:1px solid var(--line);color:var(--ink2);font:600 10px/1 Archivo;letter-spacing:.1em;text-transform:uppercase">Голосом</button>
+</div>
+</div>
+</section>
+
+</div>
+</sc-if>
+
+<sc-if value="{{ isProfile }}" hint-placeholder-val="{{ false }}">
+<div style="flex:1;min-height:0;overflow:auto;background:var(--bg)">
+
+<div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap;padding:12px 16px;border-bottom:1px solid var(--line);background:var(--panel);position:sticky;top:0;z-index:3">
+<div style="display:flex;flex-direction:column;gap:4px">
+<span style="font:600 9px/1 Archivo;letter-spacing:.16em;text-transform:uppercase;color:var(--ink3)">Профиль</span>
+<span style="font:600 19px/1 'IBM Plex Mono',monospace;color:var(--ink)">ЛЕПЕТ-К7 <span style="color:var(--ink3)">#4F2A9C</span></span>
+</div>
+<span style="font:400 11px/1.4 Archivo;color:var(--ink3);max-width:280px">Хеш штампуется в каждую запись журнала. Записи с разными хешами не сравниваются.</span>
+<div style="margin-left:auto;display:flex;gap:6px;flex-wrap:wrap">
+<button type="button" style="padding:8px 12px;background:transparent;border:1px solid var(--line);color:var(--ink2);font:600 10px/1 Archivo;letter-spacing:.1em;text-transform:uppercase">Сохранить как</button>
+<button type="button" style="padding:8px 12px;background:transparent;border:1px solid var(--line);color:var(--ink2);font:600 10px/1 Archivo;letter-spacing:.1em;text-transform:uppercase">Загрузить</button>
+<button type="button" onClick="{{ toggleCompare }}" style="{{ cmpSt }}">Сравнить с профилем</button>
+</div>
+</div>
+
+<sc-if value="{{ compareOn }}" hint-placeholder-val="{{ false }}">
+<div style="border-bottom:1px solid var(--line);background:var(--panel)">
+<div style="display:flex;align-items:center;gap:14px;padding:9px 16px;border-bottom:1px solid var(--line2)">
+<span style="font:600 10px/1 Archivo;letter-spacing:.16em;text-transform:uppercase;color:var(--ink2)">Различия</span>
+<span style="font:500 11px/1 'IBM Plex Mono',monospace;color:var(--ink)">ЛЕПЕТ-К7 #4F2A9C</span>
+<span style="color:var(--ink3)">против</span>
+<span style="font:500 11px/1 'IBM Plex Mono',monospace;color:var(--ink)">ЛЕПЕТ-К6 #91B0D4</span>
+<span style="margin-left:auto;font:400 11px/1 Archivo;color:var(--ink3)">4 расхождения · 1 структурное</span>
+</div>
+<sc-for list="{{ diffRows }}" as="r" hint-placeholder-count="4">
+<div style="{{ r.st }}">
+<span style="font:400 11px/1 Archivo;color:var(--ink2)">{{ r.n }}</span>
+<span style="font:500 11px/1 'IBM Plex Mono',monospace;color:var(--ink3);text-align:right">{{ r.a }}</span>
+<span style="font:500 11px/1 'IBM Plex Mono',monospace;color:var(--ink3)">→</span>
+<span style="{{ r.bst }}">{{ r.b }}</span>
+<span style="font:400 10px/1 Archivo;color:var(--ink3)">{{ r.tag }}</span>
+</div>
+</sc-for>
+</div>
+</sc-if>
+
+<div style="display:flex;align-items:baseline;gap:12px;padding:11px 16px 9px">
+<span style="font:600 12px/1 Archivo;letter-spacing:.18em;text-transform:uppercase;color:var(--ink)">Блок А · Параметры</span>
+<span style="font:400 11px/1 Archivo;color:var(--ink3)">меняются на ходу, журнал продолжается</span>
+</div>
+
+<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(316px,1fr));gap:1px;background:var(--line);border-top:1px solid var(--line);border-bottom:1px solid var(--line)">
+<sc-for list="{{ pGroups }}" as="g" hint-placeholder-count="9">
+<div style="background:var(--bg);padding:0 0 10px">
+<div style="display:flex;align-items:baseline;justify-content:space-between;padding:9px 13px 8px;border-bottom:1px solid var(--line2)">
+<span style="font:600 10px/1 Archivo;letter-spacing:.16em;text-transform:uppercase;color:var(--ink2)">{{ g.n }}</span>
+<span style="font:400 10px/1 'IBM Plex Mono',monospace;color:var(--ink3)">{{ g.note }}</span>
+</div>
+<sc-for list="{{ g.items }}" as="p" hint-placeholder-count="3">
+<div style="display:flex;flex-direction:column;gap:5px;padding:8px 13px 4px">
+<div style="display:flex;align-items:baseline;gap:8px">
+<span style="font:400 11.5px/1.3 Archivo;color:var(--ink2);flex:1;min-width:0">{{ p.n }}</span>
+<span style="font:500 12px/1 'IBM Plex Mono',monospace;color:var(--ink)">{{ p.vt }}</span>
+</div>
+<sc-if value="{{ p.isRange }}" hint-placeholder-val="{{ true }}">
+<div onClick="{{ p.set }}" style="position:relative;height:16px;cursor:ew-resize;display:flex;align-items:center">
+<div style="position:absolute;left:0;right:0;height:3px;background:var(--panel2)"></div>
+<div style="{{ p.fill }}"></div>
+<div style="{{ p.knob }}"></div>
+</div>
+</sc-if>
+<sc-if value="{{ p.isBool }}" hint-placeholder-val="{{ false }}">
+<button type="button" onClick="{{ p.set }}" style="{{ p.boolSt }}">{{ p.boolLabel }}</button>
+</sc-if>
+<sc-if value="{{ p.isEnum }}" hint-placeholder-val="{{ false }}">
+<div style="display:flex;flex-direction:column;gap:3px">
+<sc-for list="{{ p.opts }}" as="o" hint-placeholder-count="4">
+<button type="button" onClick="{{ o.set }}" style="{{ o.st }}">{{ o.n }}</button>
+</sc-for>
+</div>
+</sc-if>
+</div>
+</sc-for>
+</div>
+</sc-for>
+</div>
+
+<div style="display:flex;align-items:center;gap:14px;margin:22px 0 0;padding:12px 16px;background:repeating-linear-gradient(45deg,transparent 0 9px,var(--alarmf) 9px 18px);border-top:2px solid var(--alarm);border-bottom:2px solid var(--alarm)">
+<span style="font:700 12px/1 Archivo;letter-spacing:.18em;text-transform:uppercase;color:var(--alarm)">Ниже — необратимая граница</span>
+<span style="font:400 11px/1.4 Archivo;color:var(--ink2);max-width:640px;background:var(--bg);padding:4px 8px">Всё, что ниже, меняет форму данных. Эти переключатели физически не соседствуют с параметрами и не меняются на ходу.</span>
+</div>
+
+<div style="display:flex;align-items:baseline;gap:12px;padding:14px 16px 9px">
+<span style="font:600 12px/1 Archivo;letter-spacing:.18em;text-transform:uppercase;color:var(--ink)">Блок Б · Структурные переключатели</span>
+<span style="font:400 11px/1 'IBM Plex Mono',monospace;color:var(--alarm)">форкают журнал</span>
+</div>
+
+<sc-if value="{{ hasPending }}" hint-placeholder-val="{{ false }}">
+<div style="margin:0 16px 12px;border:1px solid var(--alarm);background:var(--alarmf)">
+<div style="padding:11px 13px;display:flex;flex-direction:column;gap:6px">
+<span style="font:600 11px/1 Archivo;letter-spacing:.14em;text-transform:uppercase;color:var(--alarm)">{{ pendingName }}</span>
+<span style="font:400 12.5px/1.45 Archivo;color:var(--ink);max-width:720px;text-wrap:pretty">Это изменит форму данных. Продолжение создаст новую ветку журнала, старый опыт не будет с ней совместим.</span>
+<span style="font:400 11px/1 'IBM Plex Mono',monospace;color:var(--ink3)">текущая ветка: 412 ч опыта · 18 412 карточек · хеш #4F2A9C</span>
+</div>
+<div style="display:flex;gap:8px;padding:0 13px 12px">
+<button type="button" onClick="{{ confirmStruct }}" style="padding:9px 14px;background:var(--alarm);border:1px solid var(--alarm);color:var(--bg);font:700 10px/1 Archivo;letter-spacing:.14em;text-transform:uppercase">Создать ветку</button>
+<button type="button" onClick="{{ cancelStruct }}" style="padding:9px 14px;background:transparent;border:1px solid var(--line);color:var(--ink2);font:600 10px/1 Archivo;letter-spacing:.14em;text-transform:uppercase">Отмена</button>
+</div>
+</div>
+</sc-if>
+
+<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(316px,1fr));gap:1px;background:var(--line);border-top:1px solid var(--alarm);border-bottom:1px solid var(--alarm);margin-bottom:26px">
+<sc-for list="{{ structs }}" as="k" hint-placeholder-count="7">
+<div style="background:var(--bg);padding:11px 13px;display:flex;flex-direction:column;gap:7px">
+<div style="display:flex;align-items:baseline;gap:8px">
+<span style="font:500 12px/1.3 Archivo;color:var(--ink);flex:1;min-width:0">{{ k.n }}</span>
+<span style="font:500 12px/1 'IBM Plex Mono',monospace;color:var(--ink)">{{ k.vt }}</span>
+</div>
+<span style="font:400 10.5px/1.4 Archivo;color:var(--ink3);text-wrap:pretty">{{ k.d }}</span>
+<button type="button" onClick="{{ k.set }}" style="{{ k.st }}">{{ k.act }}</button>
+</div>
+</sc-for>
+</div>
+
+</div>
+</sc-if>
+
+<sc-if value="{{ isMemory }}" hint-placeholder-val="{{ false }}">
+<div style="flex:1;min-height:0;display:flex;flex-direction:column;background:var(--bg)">
+
+<div style="flex:0 0 auto;display:flex;align-items:stretch;border-bottom:1px solid var(--line);background:var(--panel)">
+<sc-for list="{{ memTabs }}" as="t" hint-placeholder-count="3">
+<button type="button" onClick="{{ t.go }}" style="{{ t.st }}">{{ t.n }}<span style="{{ t.cst }}">{{ t.c }}</span></button>
+</sc-for>
+<div style="flex:1;display:flex;align-items:center;justify-content:flex-end;padding:0 14px;font:400 10px/1 'IBM Plex Mono',monospace;color:var(--ink3)">18 412 карточек · 3 041 убеждение · 812 гипотез</div>
+</div>
+
+<sc-if value="{{ memCards }}" hint-placeholder-val="{{ true }}">
+<div style="flex:1;min-height:0;display:grid;grid-template-columns:minmax(238px,0.8fr) minmax(430px,1.9fr) minmax(280px,1.1fr);gap:1px;background:var(--line)">
+
+<section style="min-width:0;overflow:auto;background:var(--bg)">
+<div style="padding:9px 12px 7px;border-bottom:1px solid var(--line2);position:sticky;top:0;background:var(--bg);z-index:2">
+<span style="font:600 10px/1 Archivo;letter-spacing:.16em;text-transform:uppercase;color:var(--ink2)">Фильтр по типу</span>
+<div style="display:flex;gap:4px;flex-wrap:wrap;padding-top:8px">
+<sc-for list="{{ typeFilters }}" as="f" hint-placeholder-count="7">
+<button type="button" onClick="{{ f.go }}" style="{{ f.st }}">{{ f.n }}</button>
+</sc-for>
+</div>
+<div style="display:flex;gap:4px;padding-top:8px;align-items:center">
+<span style="font:400 9px/1 Archivo;letter-spacing:.12em;text-transform:uppercase;color:var(--ink3)">Сортировка</span>
+<sc-for list="{{ sorts }}" as="f" hint-placeholder-count="3">
+<button type="button" onClick="{{ f.go }}" style="{{ f.st }}">{{ f.n }}</button>
+</sc-for>
+</div>
+</div>
+<sc-for list="{{ cardList }}" as="c" hint-placeholder-count="9">
+<button type="button" onClick="{{ c.go }}" style="{{ c.st }}">
+<div style="{{ c.thumb }}"></div>
+<div style="display:flex;flex-direction:column;gap:3px;min-width:0;flex:1">
+<span style="font:500 11.5px/1 'IBM Plex Mono',monospace;color:var(--ink)">{{ c.id }}</span>
+<span style="font:400 10px/1 Archivo;color:var(--ink3)">{{ c.t }} · обращений {{ c.uses }}</span>
+<div style="position:relative;height:3px;background:var(--panel2);margin-top:2px">
+<div style="{{ c.bar }}"></div>
+</div>
+</div>
+<span style="{{ c.origSt }}">{{ c.orig }}</span>
+</button>
+</sc-for>
+</section>
+
+<section style="min-width:0;overflow:auto;background:var(--bg)">
+<div style="display:flex;gap:12px;padding:12px;border-bottom:1px solid var(--line2)">
+<div style="{{ cardThumb }}"></div>
+<div style="display:flex;flex-direction:column;gap:6px;min-width:0;flex:1">
+<div style="display:flex;align-items:baseline;gap:9px;flex-wrap:wrap">
+<span style="font:600 17px/1 'IBM Plex Mono',monospace;color:var(--ink)">{{ cardId }}</span>
+<span style="padding:3px 7px;border:1px solid var(--line);color:var(--ink3);font:400 9px/1 Archivo;letter-spacing:.12em;text-transform:uppercase">{{ cardType }}</span>
+<span style="{{ cardOrigSt }}">{{ cardOrig }}</span>
+</div>
+<div style="display:flex;gap:16px;flex-wrap:wrap">
+<sc-for list="{{ cardStats }}" as="s" hint-placeholder-count="4">
+<div style="display:flex;flex-direction:column;gap:2px">
+<span style="font:400 9px/1 Archivo;letter-spacing:.12em;text-transform:uppercase;color:var(--ink3)">{{ s.n }}</span>
+<span style="{{ s.st }}">{{ s.v }}</span>
+</div>
+</sc-for>
+</div>
+</div>
+</div>
+
+<div style="border:1px dashed var(--line);margin:12px;background:repeating-linear-gradient(45deg,transparent 0 6px,var(--panel) 6px 7px)">
+<div style="display:flex;align-items:baseline;gap:10px;padding:7px 10px;border-bottom:1px dashed var(--line)">
+<span style="font:600 9px/1 Archivo;letter-spacing:.16em;text-transform:uppercase;color:var(--ink3)">Что это на самом деле</span>
+<span style="font:400 10px/1 Archivo;color:var(--ink3)">колонка исследователя · агенту не показывается</span>
+</div>
+<div style="padding:8px 10px;font:500 12px/1.4 'IBM Plex Mono',monospace;color:var(--ink2)">{{ cardTruth }}</div>
+</div>
+
+<div style="padding:2px 12px 0">
+<div style="display:flex;align-items:baseline;justify-content:space-between;padding:9px 0 7px;border-bottom:1px solid var(--line2)">
+<span style="font:600 10px/1 Archivo;letter-spacing:.16em;text-transform:uppercase;color:var(--ink2)">Аффордансы</span>
+<span style="font:400 10px/1 'IBM Plex Mono',monospace;color:var(--ink3)">что я умею с этим делать</span>
+</div>
+<div style="display:grid;grid-template-columns:1.3fr 1.5fr 54px 54px 44px 92px 22px;gap:8px;padding:7px 0 5px;font:400 9px/1 Archivo;letter-spacing:.1em;text-transform:uppercase;color:var(--ink3);border-bottom:1px solid var(--line2)">
+<span>действие</span><span>результат</span><span style="text-align:right">μ</span><span style="text-align:right">σ</span><span style="text-align:right">n</span><span>обратимость</span><span></span>
+</div>
+<sc-for list="{{ cardAff }}" as="a" hint-placeholder-count="3">
+<div style="display:grid;grid-template-columns:1.3fr 1.5fr 54px 54px 44px 92px 22px;gap:8px;align-items:center;padding:7px 0;border-bottom:1px solid var(--line2)">
+<span style="font:500 11.5px/1.3 'IBM Plex Mono',monospace;color:var(--ink)">{{ a.act }}</span>
+<span style="font:400 11.5px/1.3 Archivo;color:var(--ink2)">{{ a.res }}</span>
+<span style="font:500 11px/1 'IBM Plex Mono',monospace;color:var(--ink);text-align:right">{{ a.mu }}</span>
+<span style="font:500 11px/1 'IBM Plex Mono',monospace;color:var(--sigma);text-align:right">{{ a.sg }}</span>
+<span style="font:500 11px/1 'IBM Plex Mono',monospace;color:var(--ink3);text-align:right">{{ a.n }}</span>
+<span style="{{ a.revSt }}">{{ a.rev }}</span>
+<span style="{{ a.origSt }}" title="{{ a.origT }}">{{ a.orig }}</span>
+</div>
+</sc-for>
+</div>
+
+<div style="padding:0 12px">
+<div style="display:flex;align-items:baseline;justify-content:space-between;padding:14px 0 7px;border-bottom:1px solid var(--line2)">
+<span style="font:600 10px/1 Archivo;letter-spacing:.16em;text-transform:uppercase;color:var(--ink2)">Динамика</span>
+<span style="font:400 10px/1 'IBM Plex Mono',monospace;color:var(--ink3)">что оно делает само</span>
+</div>
+<sc-for list="{{ cardDyn }}" as="d" hint-placeholder-count="2">
+<div style="display:grid;grid-template-columns:1fr 54px 54px 44px 22px;gap:8px;align-items:center;padding:7px 0;border-bottom:1px solid var(--line2)">
+<span style="font:400 11.5px/1.35 Archivo;color:var(--ink2)">{{ d.n }}</span>
+<span style="font:500 11px/1 'IBM Plex Mono',monospace;color:var(--ink);text-align:right">{{ d.mu }}</span>
+<span style="font:500 11px/1 'IBM Plex Mono',monospace;color:var(--sigma);text-align:right">{{ d.sg }}</span>
+<span style="font:500 11px/1 'IBM Plex Mono',monospace;color:var(--ink3);text-align:right">{{ d.cnt }}</span>
+<span style="{{ d.origSt }}">{{ d.orig }}</span>
+</div>
+</sc-for>
+</div>
+
+<div style="padding:0 12px">
+<div style="display:flex;align-items:baseline;justify-content:space-between;padding:14px 0 7px;border-bottom:1px solid var(--line2)">
+<span style="font:600 10px/1 Archivo;letter-spacing:.16em;text-transform:uppercase;color:var(--ink2)">Связи</span>
+<span style="font:400 10px/1 'IBM Plex Mono',monospace;color:var(--ink3)">уверенность ребра</span>
+</div>
+<div style="display:flex;flex-wrap:wrap;gap:6px;padding:9px 0">
+<sc-for list="{{ cardLinks }}" as="l" hint-placeholder-count="5">
+<button type="button" onClick="{{ l.go }}" style="display:flex;align-items:center;gap:7px;padding:5px 8px;background:var(--panel);border:1px solid var(--line);font:500 10.5px/1 'IBM Plex Mono',monospace;color:var(--ink2)"><span style="color:var(--ink3)">{{ l.k }}</span>{{ l.id }}<span style="{{ l.cst }}">{{ l.c }}</span></button>
+</sc-for>
+</div>
+</div>
+
+<div style="padding:0 12px 20px">
+<div style="display:flex;align-items:baseline;justify-content:space-between;padding:14px 0 7px;border-bottom:1px solid var(--line2)">
+<span style="font:600 10px/1 Archivo;letter-spacing:.16em;text-transform:uppercase;color:var(--ink2)">Встречи</span>
+<span style="font:400 10px/1 'IBM Plex Mono',monospace;color:var(--ink3)">три часов · клик ведёт в журнал</span>
+</div>
+<sc-for list="{{ cardMeets }}" as="m" hint-placeholder-count="4">
+<button type="button" onClick="{{ m.go }}" style="display:grid;width:100%;grid-template-columns:96px 1fr 1fr 1fr;gap:10px;text-align:left;align-items:baseline;padding:7px 0;background:transparent;border:0;border-bottom:1px solid var(--line2)">
+<span style="font:500 11px/1 'IBM Plex Mono',monospace;color:var(--agent)">{{ m.ep }}</span>
+<span style="font:400 10.5px/1 'IBM Plex Mono',monospace;color:var(--ink3)">мои {{ m.c }}</span>
+<span style="font:400 10.5px/1 'IBM Plex Mono',monospace;color:var(--ink3)">мир {{ m.w }}</span>
+<span style="font:400 10.5px/1 'IBM Plex Mono',monospace;color:var(--ink3)">содерж. {{ m.k }}</span>
+</button>
+</sc-for>
+</div>
+</section>
+
+<section style="min-width:0;overflow:auto;background:var(--bg);display:flex;flex-direction:column">
+<div style="padding:9px 12px 7px;border-bottom:1px solid var(--line2)">
+<span style="font:600 10px/1 Archivo;letter-spacing:.16em;text-transform:uppercase;color:var(--ink2)">Граф мест</span>
+<div style="font:400 10px/1.4 Archivo;color:var(--ink3);padding-top:5px;text-wrap:pretty">Это не карта. Положение узлов произвольно, расстояние — время в секундах с разбросом. Толщина ребра — уверенность.</div>
+</div>
+<div style="position:relative;flex:1;min-height:430px;margin:12px;border:1px solid var(--line2);background:var(--panel)">
+<svg style="position:absolute;inset:0;width:100%;height:100%" viewBox="0 0 100 100" preserveAspectRatio="none">
+<line x1="24" y1="10" x2="74" y2="22" stroke="var(--agent)" stroke-width="0.7" vector-effect="non-scaling-stroke"></line>
+<line x1="74" y1="22" x2="76" y2="56" stroke="var(--agent)" stroke-width="1.1" vector-effect="non-scaling-stroke"></line>
+<line x1="24" y1="10" x2="26" y2="42" stroke="var(--ink3)" stroke-width="0.35" vector-effect="non-scaling-stroke" stroke-dasharray="3 3"></line>
+<line x1="26" y1="42" x2="76" y2="56" stroke="var(--agent)" stroke-width="0.5" vector-effect="non-scaling-stroke"></line>
+<line x1="26" y1="42" x2="24" y2="74" stroke="var(--ink3)" stroke-width="0.3" vector-effect="non-scaling-stroke" stroke-dasharray="3 3"></line>
+<line x1="24" y1="74" x2="72" y2="90" stroke="var(--agent)" stroke-width="0.6" vector-effect="non-scaling-stroke"></line>
+<line x1="76" y1="56" x2="72" y2="90" stroke="var(--agent)" stroke-width="0.45" vector-effect="non-scaling-stroke"></line>
+</svg>
+<sc-for list="{{ placeNodes }}" as="p" hint-placeholder-count="6">
+<div style="{{ p.st }}">
+<div style="width:100%;height:20px;background:repeating-linear-gradient(135deg,var(--panel) 0 5px,var(--panel2) 5px 10px);border-bottom:1px solid var(--line2)"></div>
+<span style="font:500 8.5px/1 'IBM Plex Mono',monospace;color:var(--ink);padding:3px 4px;white-space:nowrap">{{ p.id }}</span>
+</div>
+</sc-for>
+<sc-for list="{{ placeEdges }}" as="e" hint-placeholder-count="7">
+<div style="{{ e.st }}">{{ e.t }}</div>
+</sc-for>
+</div>
+<div style="padding:0 12px 16px;display:flex;flex-direction:column;gap:4px">
+<sc-for list="{{ placeLegend }}" as="l" hint-placeholder-count="3">
+<span style="font:400 10px/1.4 'IBM Plex Mono',monospace;color:var(--ink3)">{{ l }}</span>
+</sc-for>
+</div>
+</section>
+
+</div>
+</sc-if>
+
+<sc-if value="{{ memIdent }}" hint-placeholder-val="{{ false }}">
+<div style="flex:1;min-height:0;overflow:auto;padding:14px 16px 26px">
+<div style="display:flex;align-items:baseline;gap:12px;padding-bottom:10px">
+<span style="font:600 12px/1 Archivo;letter-spacing:.18em;text-transform:uppercase;color:var(--ink)">Очередь тождества</span>
+<span style="font:400 11px/1.4 Archivo;color:var(--ink3)">кандидаты на слияние и расщепление ждут ближайшего сна · исследователь может решить вручную</span>
+</div>
+<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(384px,1fr));gap:1px;background:var(--line);border:1px solid var(--line)">
+<sc-for list="{{ identity }}" as="i" hint-placeholder-count="6">
+<div style="background:var(--bg);padding:12px;display:flex;flex-direction:column;gap:9px">
+<div style="display:flex;align-items:center;gap:8px">
+<span style="{{ i.kindSt }}">{{ i.kind }}</span>
+<span style="margin-left:auto;font:400 10px/1 'IBM Plex Mono',monospace;color:var(--ink3)">ждёт {{ i.wait }}</span>
+</div>
+<div style="display:flex;align-items:center;gap:10px">
+<span style="font:500 13px/1 'IBM Plex Mono',monospace;color:var(--ink)">{{ i.a }}</span>
+<span style="font:400 12px/1 'IBM Plex Mono',monospace;color:var(--ink3)">{{ i.op }}</span>
+<span style="font:500 13px/1 'IBM Plex Mono',monospace;color:var(--ink)">{{ i.b }}</span>
+</div>
+<span style="font:400 11.5px/1.45 Archivo;color:var(--ink2);text-wrap:pretty">{{ i.why }}</span>
+<div style="display:flex;gap:14px;font:500 10.5px/1 'IBM Plex Mono',monospace;color:var(--ink3)">
+<span>сходство {{ i.sim }}</span><span style="color:var(--sigma)">σ {{ i.sg }}</span><span>свидетельств {{ i.n }}</span>
+</div>
+<div style="display:flex;gap:6px">
+<button type="button" style="padding:6px 11px;background:var(--panel);border:1px solid var(--line);color:var(--ink2);font:600 10px/1 Archivo;letter-spacing:.1em;text-transform:uppercase">{{ i.yes }}</button>
+<button type="button" style="padding:6px 11px;background:transparent;border:1px solid var(--line);color:var(--ink3);font:600 10px/1 Archivo;letter-spacing:.1em;text-transform:uppercase">Оставить как есть</button>
+<button type="button" style="margin-left:auto;padding:6px 11px;background:transparent;border:1px solid var(--line2);color:var(--ink3);font:600 10px/1 Archivo;letter-spacing:.1em;text-transform:uppercase">В журнал</button>
+</div>
+</div>
+</sc-for>
+</div>
+</div>
+</sc-if>
+
+<sc-if value="{{ memBelief }}" hint-placeholder-val="{{ false }}">
+<div style="flex:1;min-height:0;display:flex;flex-direction:column">
+<div style="display:flex;align-items:baseline;gap:12px;padding:12px 16px 10px">
+<span style="font:600 12px/1 Archivo;letter-spacing:.18em;text-transform:uppercase;color:var(--ink)">Конвейер убеждений</span>
+<span style="font:400 11px/1.4 Archivo;color:var(--ink3)">гипотеза знанием ещё не является</span>
+<span style="margin-left:auto;font:400 11px/1 'IBM Plex Mono',monospace;color:var(--alarm)">доверие к «вики» падает: 0.35 → 0.19 за 40 ч</span>
+</div>
+<div style="flex:1;min-height:0;display:grid;grid-template-columns:repeat(3,1fr);gap:1px;background:var(--line);border-top:1px solid var(--line)">
+<sc-for list="{{ pipeline }}" as="col" hint-placeholder-count="3">
+<div style="background:var(--bg);min-width:0;overflow:auto;display:flex;flex-direction:column">
+<div style="display:flex;align-items:baseline;justify-content:space-between;padding:9px 12px 7px;border-bottom:1px solid var(--line2);position:sticky;top:0;background:var(--bg)">
+<span style="{{ col.st }}">{{ col.n }}</span>
+<span style="font:500 11px/1 'IBM Plex Mono',monospace;color:var(--ink3)">{{ col.c }}</span>
+</div>
+<sc-for list="{{ col.items }}" as="b" hint-placeholder-count="5">
+<div style="padding:9px 12px;border-bottom:1px solid var(--line2);display:flex;flex-direction:column;gap:5px">
+<span style="font:400 12px/1.4 Archivo;color:var(--ink);text-wrap:pretty">{{ b.t }}</span>
+<div style="display:flex;gap:10px;flex-wrap:wrap;font:500 10px/1 'IBM Plex Mono',monospace;color:var(--ink3)">
+<span>μ {{ b.mu }}</span><span style="color:var(--sigma)">σ {{ b.sg }}</span><span>n {{ b.n }}</span>
+<span style="{{ b.origSt }}">{{ b.orig }}</span>
+</div>
+<span style="font:400 10px/1 'IBM Plex Mono',monospace;color:var(--ink3)">{{ b.ep }}</span>
+</div>
+</sc-for>
+</div>
+</sc-for>
+</div>
+</div>
+</sc-if>
+
+</div>
+</sc-if>
+
+<sc-if value="{{ isJournal }}" hint-placeholder-val="{{ false }}">
+<div style="flex:1;min-height:0;overflow:auto;background:var(--bg)">
+
+<div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap;padding:10px 16px;border-bottom:1px solid var(--line)">
+<span style="font:600 10px/1 Archivo;letter-spacing:.16em;text-transform:uppercase;color:var(--ink2)">Фильтр по хешу профиля</span>
+<div style="display:flex;gap:5px;flex-wrap:wrap">
+<sc-for list="{{ hashFilters }}" as="h" hint-placeholder-count="3">
+<button type="button" onClick="{{ h.go }}" style="{{ h.st }}">{{ h.n }}</button>
+</sc-for>
+</div>
+<span style="font:400 10.5px/1.4 Archivo;color:var(--ink3);max-width:340px">Записи с разными хешами не сравниваются: у них разная форма данных.</span>
+<span style="margin-left:auto;font:400 11px/1 'IBM Plex Mono',monospace;color:var(--ink3)">журнал только дозаписывается · 412 ч · 4 118 эпизодов</span>
+</div>
+
+<div style="padding:14px 16px 0">
+<div style="display:flex;align-items:baseline;justify-content:space-between;padding-bottom:8px">
+<span style="font:600 10px/1 Archivo;letter-spacing:.16em;text-transform:uppercase;color:var(--ink2)">Временная шкала опыта</span>
+<span style="font:400 10px/1 'IBM Plex Mono',monospace;color:var(--ink3)">от запуска до сейчас · клик ставит скруббер</span>
+</div>
+<div onClick="{{ seek }}" style="position:relative;height:92px;border:1px solid var(--line);background:var(--panel);cursor:crosshair">
+<sc-for list="{{ jTicks }}" as="t" hint-placeholder-count="12">
+<div style="{{ t.st }}"></div>
+</sc-for>
+<sc-for list="{{ jTickLabels }}" as="t" hint-placeholder-count="6">
+<span style="{{ t.st }}">{{ t.n }}</span>
+</sc-for>
+<sc-for list="{{ jMarks }}" as="m" hint-placeholder-count="14">
+<div style="{{ m.line }}" title="{{ m.title }}"></div>
+</sc-for>
+<sc-for list="{{ jMarks }}" as="m" hint-placeholder-count="14">
+<span style="{{ m.dot }}" title="{{ m.title }}">{{ m.g }}</span>
+</sc-for>
+<div style="{{ playhead }}"></div>
+<div style="{{ playLabel }}">{{ scrubT }}</div>
+</div>
+<div style="display:flex;gap:16px;flex-wrap:wrap;padding:8px 0 0">
+<sc-for list="{{ jLegend }}" as="l" hint-placeholder-count="6">
+<span style="display:flex;align-items:center;gap:6px;font:400 10px/1 Archivo;color:var(--ink3)"><span style="{{ l.st }}">{{ l.g }}</span>{{ l.n }}</span>
+</sc-for>
+</div>
+</div>
+
+<div style="padding:16px 16px 0">
+<div style="display:flex;align-items:center;gap:10px;padding-bottom:8px">
+<span style="font:600 10px/1 Archivo;letter-spacing:.16em;text-transform:uppercase;color:var(--ink2)">Скруббер по кадрам</span>
+<div style="display:flex;gap:5px">
+<button type="button" onClick="{{ stepBack }}" style="padding:5px 10px;background:var(--panel);border:1px solid var(--line);color:var(--ink2);font:500 11px/1 'IBM Plex Mono',monospace">◀ кадр</button>
+<button type="button" onClick="{{ stepFwd }}" style="padding:5px 10px;background:var(--panel);border:1px solid var(--line);color:var(--ink2);font:500 11px/1 'IBM Plex Mono',monospace">кадр ▶</button>
+</div>
+<span style="font:400 10px/1 Archivo;color:var(--ink3)">стрелки ← → двигают на кадр, с Shift — на эпизод</span>
+</div>
+<div style="display:flex;gap:2px;align-items:stretch;overflow:hidden">
+<sc-for list="{{ strip }}" as="f" hint-placeholder-count="14">
+<div style="{{ f.st }}">
+<div style="flex:1;background:repeating-linear-gradient(135deg,var(--panel) 0 5px,var(--panel2) 5px 10px)"></div>
+<span style="font:400 8.5px/1 'IBM Plex Mono',monospace;color:var(--ink3);padding:3px 0;text-align:center">{{ f.n }}</span>
+</div>
+</sc-for>
+</div>
+</div>
+
+<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(268px,1fr));gap:1px;background:var(--line);border-top:1px solid var(--line);border-bottom:1px solid var(--line);margin:16px 0 0">
+
+<div style="background:var(--bg);display:flex;flex-direction:column">
+<div style="padding:9px 12px 7px;border-bottom:1px solid var(--line2);font:600 10px/1 Archivo;letter-spacing:.16em;text-transform:uppercase;color:var(--ink2)">Что видел</div>
+<div style="padding:12px">
+<div style="aspect-ratio:16/9;border:1px solid var(--line);background:repeating-linear-gradient(135deg,var(--panel) 0 6px,var(--panel2) 6px 12px);display:flex;align-items:center;justify-content:center;font:400 10px/1 'IBM Plex Mono',monospace;color:var(--ink3)">кадр эп 4 090 · +142</div>
+<div style="display:flex;flex-direction:column;gap:5px;padding-top:10px">
+<sc-for list="{{ sawRows }}" as="r" hint-placeholder-count="4">
+<div style="display:flex;justify-content:space-between;gap:8px;font:400 11px/1.3 Archivo;color:var(--ink3)"><span>{{ r.n }}</span><span style="font:500 11px/1 'IBM Plex Mono',monospace;color:var(--ink2)">{{ r.v }}</span></div>
+</sc-for>
+</div>
+</div>
+</div>
+
+<div style="background:var(--bg);display:flex;flex-direction:column">
+<div style="padding:9px 12px 7px;border-bottom:1px solid var(--line2);font:600 10px/1 Archivo;letter-spacing:.16em;text-transform:uppercase;color:var(--ink2)">Чем был занят</div>
+<div style="padding:12px;display:flex;flex-direction:column;gap:10px">
+<div style="display:flex;flex-direction:column;gap:4px">
+<span style="font:400 9px/1 Archivo;letter-spacing:.12em;text-transform:uppercase;color:var(--ink3)">Активная цель</span>
+<span style="font:500 12.5px/1.4 Archivo;color:var(--ink)">Открыть, чем гасится свет в МЕСТО_0C4B</span>
+</div>
+<sc-for list="{{ busyRows }}" as="r" hint-placeholder-count="5">
+<div style="display:flex;justify-content:space-between;gap:8px;font:400 11px/1.3 Archivo;color:var(--ink3)"><span>{{ r.n }}</span><span style="{{ r.st }}">{{ r.v }}</span></div>
+</sc-for>
+</div>
+</div>
+
+<div style="background:var(--bg);display:flex;flex-direction:column">
+<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;padding:7px 12px;border-bottom:1px solid var(--line2)">
+<span style="font:600 10px/1 Archivo;letter-spacing:.16em;text-transform:uppercase;color:var(--ink2)">Во что верил</span>
+<button type="button" onClick="{{ toggleKnew }}" style="{{ knewSt }}">Что он знал в этот момент</button>
+</div>
+<sc-if value="{{ knewOff }}" hint-placeholder-val="{{ true }}">
+<div style="padding:16px 12px;font:400 11px/1.5 Archivo;color:var(--ink3);text-wrap:pretty">Состояние памяти на этот момент не хранится — оно выводится из журнала. Нажмите, чтобы пересобрать: 2.4 с на 4 118 эпизодов.</div>
+</sc-if>
+<sc-if value="{{ knewOn }}" hint-placeholder-val="{{ false }}">
+<div style="padding:8px 0">
+<div style="padding:0 12px 8px;font:400 10px/1 'IBM Plex Mono',monospace;color:var(--proof)">реконструировано из журнала за 2.4 с · 1 902 убеждения на тот момент</div>
+<sc-for list="{{ knewRows }}" as="r" hint-placeholder-count="5">
+<div style="display:flex;flex-direction:column;gap:3px;padding:7px 12px;border-top:1px solid var(--line2)">
+<span style="font:400 11.5px/1.35 Archivo;color:var(--ink)">{{ r.t }}</span>
+<div style="display:flex;gap:10px;font:500 10px/1 'IBM Plex Mono',monospace;color:var(--ink3)"><span>μ {{ r.mu }}</span><span style="color:var(--sigma)">σ {{ r.sg }}</span><span>n {{ r.n }}</span><span style="{{ r.dSt }}">{{ r.d }}</span></div>
+</div>
+</sc-for>
+</div>
+</sc-if>
+</div>
+
+<div style="background:var(--bg);display:flex;flex-direction:column">
+<div style="padding:9px 12px 7px;border-bottom:1px solid var(--line2);font:600 10px/1 Archivo;letter-spacing:.16em;text-transform:uppercase;color:var(--ink2)">Настроение и драйвы</div>
+<div style="padding:12px;display:flex;flex-direction:column;gap:7px">
+<sc-for list="{{ moodRows }}" as="r" hint-placeholder-count="6">
+<div style="display:flex;flex-direction:column;gap:3px">
+<div style="display:flex;justify-content:space-between;font:400 11px/1 Archivo;color:var(--ink3)"><span>{{ r.n }}</span><span style="font:500 11px/1 'IBM Plex Mono',monospace;color:var(--ink2)">{{ r.v }}</span></div>
+<div style="position:relative;height:4px;background:var(--panel)"><div style="{{ r.bar }}"></div></div>
+</div>
+</sc-for>
+<div style="padding-top:4px;font:400 10px/1.4 'IBM Plex Mono',monospace;color:var(--ink3)">хеш профиля в этой записи: #4F2A9C</div>
+</div>
+</div>
+
+</div>
+<div style="height:20px"></div>
+</div>
+</sc-if>
+
+<sc-if value="{{ isBody }}" hint-placeholder-val="{{ false }}">
+<div style="flex:1;min-height:0;overflow:auto;background:var(--bg)">
+<div style="display:grid;grid-template-columns:minmax(560px,2.2fr) minmax(300px,1fr);gap:1px;background:var(--line);min-height:100%">
+
+<section style="background:var(--bg);padding:14px 16px 22px;min-width:0">
+<div style="display:flex;align-items:baseline;gap:12px;flex-wrap:wrap;padding-bottom:12px">
+<span style="font:600 12px/1 Archivo;letter-spacing:.18em;text-transform:uppercase;color:var(--ink)">Тело действий</span>
+<span style="font:400 11px/1.4 Archivo;color:var(--ink3)">клавиши не подписаны. Всё, что здесь есть, добыто нажатиями.</span>
+</div>
+
+<div style="display:flex;flex-direction:column;gap:4px;padding:12px;border:1px solid var(--line);background:var(--panel)">
+<sc-for list="{{ kbRows }}" as="row" hint-placeholder-count="5">
+<div style="display:flex;gap:4px">
+<sc-for list="{{ row.keys }}" as="k" hint-placeholder-count="12">
+<div style="{{ k.st }}" title="{{ k.title }}">
+<div style="display:flex;align-items:baseline;justify-content:space-between;gap:3px">
+<span style="{{ k.glyphSt }}">{{ k.g }}</span>
+<span style="{{ k.classSt }}">{{ k.cls }}</span>
+</div>
+<span style="{{ k.hashSt }}">{{ k.hash }}</span>
+</div>
+</sc-for>
+</div>
+</sc-for>
+</div>
+
+<div style="display:flex;gap:14px;flex-wrap:wrap;padding-top:14px">
+<div style="display:flex;flex-direction:column;gap:8px;padding:12px;border:1px solid var(--line);background:var(--panel)">
+<span style="font:600 10px/1 Archivo;letter-spacing:.16em;text-transform:uppercase;color:var(--ink2)">Мышь</span>
+<div style="display:flex;gap:10px;align-items:flex-start">
+<div style="width:96px;height:132px;border:1px solid var(--line);border-radius:44px 44px 22px 22px;display:flex;flex-direction:column;overflow:hidden;background:var(--bg)">
+<div style="flex:0 0 46px;display:flex">
+<div style="{{ mouseL }}">ЛКМ</div>
+<div style="{{ mouseR }}">ПКМ</div>
+</div>
+<div style="flex:1;display:flex;align-items:center;justify-content:center;font:400 9px/1.3 'IBM Plex Mono',monospace;color:var(--ink3);text-align:center">корпус<br>не пробован</div>
+</div>
+<div style="display:flex;flex-direction:column;gap:7px">
+<sc-for list="{{ mouseRows }}" as="m" hint-placeholder-count="4">
+<div style="display:flex;flex-direction:column;gap:2px">
+<div style="display:flex;align-items:baseline;gap:8px">
+<span style="font:500 11px/1 'IBM Plex Mono',monospace;color:var(--ink)">{{ m.n }}</span>
+<span style="{{ m.clsSt }}">{{ m.cls }}</span>
+</div>
+<span style="font:400 10px/1 'IBM Plex Mono',monospace;color:var(--ink3)">уверенность {{ m.conf }} · обратимость {{ m.rev }}</span>
+</div>
+</sc-for>
+</div>
+</div>
+</div>
+
+<div style="flex:1;min-width:250px;display:flex;flex-direction:column;gap:9px;padding:12px;border:1px solid var(--line);background:var(--panel)">
+<span style="font:600 10px/1 Archivo;letter-spacing:.16em;text-transform:uppercase;color:var(--ink2)">Прогресс лепета</span>
+<div style="display:flex;align-items:baseline;gap:10px">
+<span style="font:600 26px/1 'IBM Plex Mono',monospace;color:var(--ink)">118</span>
+<span style="font:400 11px/1.3 Archivo;color:var(--ink3)">из 512 выходов проверено</span>
+</div>
+<div style="position:relative;height:12px;background:var(--bg);border:1px solid var(--line2)">
+<div style="position:absolute;left:0;top:0;bottom:0;width:23%;background:var(--agent);opacity:.85"></div>
+<div style="position:absolute;left:0;top:0;bottom:0;width:7.2%;background:var(--proof)"></div>
+</div>
+<div style="display:flex;gap:16px;flex-wrap:wrap;font:400 10.5px/1 'IBM Plex Mono',monospace;color:var(--ink3)">
+<span><span style="color:var(--proof)">■</span> 37 живых</span>
+<span><span style="color:var(--agent)">■</span> 81 молчащих</span>
+<span>394 не пробованы</span>
+<span>темп 0.6 · пауза после необратимого 900 мс</span>
+</div>
+</div>
+</div>
+</section>
+
+<section style="background:var(--bg);min-width:0;display:flex;flex-direction:column">
+<div style="padding:11px 13px 9px;border-bottom:1px solid var(--line2)">
+<span style="font:600 10px/1 Archivo;letter-spacing:.16em;text-transform:uppercase;color:var(--ink2)">Состояние открытия</span>
+<div style="display:flex;flex-direction:column;gap:6px;padding-top:9px">
+<sc-for list="{{ kbLegend }}" as="l" hint-placeholder-count="4">
+<div style="display:flex;align-items:center;gap:8px">
+<span style="{{ l.sw }}"></span>
+<span style="font:400 11px/1.3 Archivo;color:var(--ink2);flex:1">{{ l.n }}</span>
+<span style="font:500 11px/1 'IBM Plex Mono',monospace;color:var(--ink3)">{{ l.c }}</span>
+</div>
+</sc-for>
+</div>
+</div>
+
+<div style="padding:11px 13px 9px;border-bottom:1px solid var(--line2)">
+<span style="font:600 10px/1 Archivo;letter-spacing:.16em;text-transform:uppercase;color:var(--ink2)">Классы эффекта</span>
+<div style="display:flex;flex-direction:column;gap:5px;padding-top:9px">
+<sc-for list="{{ clsLegend }}" as="l" hint-placeholder-count="6">
+<div style="display:flex;align-items:baseline;gap:8px">
+<span style="width:16px;font:500 12px/1 'IBM Plex Mono',monospace;color:var(--ink)">{{ l.g }}</span>
+<span style="font:400 11px/1.3 Archivo;color:var(--ink2);flex:1">{{ l.n }}</span>
+<span style="font:500 11px/1 'IBM Plex Mono',monospace;color:var(--ink3)">{{ l.c }}</span>
+</div>
+</sc-for>
+</div>
+</div>
+
+<div style="padding:11px 13px 4px;border-bottom:1px solid var(--line2)">
+<div style="display:flex;align-items:baseline;justify-content:space-between">
+<span style="font:600 10px/1 Archivo;letter-spacing:.16em;text-transform:uppercase;color:var(--ink2)">Найденные сочетания</span>
+<span style="font:400 10px/1 'IBM Plex Mono',monospace;color:var(--ink3)">9</span>
+</div>
+</div>
+<sc-for list="{{ combos }}" as="c" hint-placeholder-count="5">
+<div style="display:flex;flex-direction:column;gap:4px;padding:9px 13px;border-bottom:1px solid var(--line2)">
+<div style="display:flex;align-items:baseline;gap:8px">
+<span style="font:500 11.5px/1 'IBM Plex Mono',monospace;color:var(--ink)">{{ c.k }}</span>
+<span style="{{ c.wSt }}">{{ c.w }}</span>
+</div>
+<span style="font:400 11px/1.35 Archivo;color:var(--ink2)">{{ c.eff }}</span>
+<span style="font:400 10px/1 'IBM Plex Mono',monospace;color:var(--ink3)">уверенность {{ c.conf }} · n {{ c.n }}</span>
+</div>
+</sc-for>
+
+<div style="padding:11px 13px 4px;border-bottom:1px solid var(--line2)">
+<div style="display:flex;align-items:baseline;justify-content:space-between">
+<span style="font:600 10px/1 Archivo;letter-spacing:.16em;text-transform:uppercase;color:var(--ink2)">Длительности</span>
+<span style="font:400 10px/1 'IBM Plex Mono',monospace;color:var(--ink3)">одна клавиша, разное удержание</span>
+</div>
+</div>
+<sc-for list="{{ holds }}" as="h" hint-placeholder-count="4">
+<div style="display:grid;grid-template-columns:64px 78px 1fr;gap:8px;align-items:baseline;padding:8px 13px;border-bottom:1px solid var(--line2)">
+<span style="font:500 11.5px/1 'IBM Plex Mono',monospace;color:var(--ink)">{{ h.k }}</span>
+<span style="font:500 10.5px/1 'IBM Plex Mono',monospace;color:var(--agent)">{{ h.t }}</span>
+<span style="font:400 11px/1.35 Archivo;color:var(--ink2)">{{ h.eff }}</span>
+</div>
+</sc-for>
+<div style="height:16px"></div>
+</section>
+
+</div>
+</div>
+</sc-if>
+
+<sc-if value="{{ isLearn }}" hint-placeholder-val="{{ false }}">
+<div style="flex:1;min-height:0;overflow:auto;background:var(--bg)">
+
+<sc-if value="{{ staleReality }}" hint-placeholder-val="{{ true }}">
+<div style="display:flex;align-items:center;gap:14px;padding:10px 16px;background:var(--alarmf);border-bottom:1px solid var(--alarm)">
+<span style="font:600 11px/1 Archivo;letter-spacing:.14em;text-transform:uppercase;color:var(--alarm)">Давно не было сверки с реальностью</span>
+<span style="font:400 11.5px/1.4 Archivo;color:var(--ink2);max-width:700px;text-wrap:pretty">Последние 3 прогона обучались только на синтетике. Обучаясь во сне, агент выучивает свою модель, а не мир. Точность предсказания в реальном мире не проверялась 6 ч 20 мин.</span>
+<button type="button" style="margin-left:auto;padding:7px 12px;background:transparent;border:1px solid var(--alarm);color:var(--alarm);font:600 10px/1 Archivo;letter-spacing:.1em;text-transform:uppercase;white-space:nowrap">Назначить сверку</button>
+</div>
+</sc-if>
+
+<div style="display:grid;grid-template-columns:minmax(420px,1.5fr) minmax(360px,1fr);gap:1px;background:var(--line)">
+
+<section style="background:var(--bg);min-width:0">
+<div style="display:flex;align-items:baseline;justify-content:space-between;padding:11px 14px 9px;border-bottom:1px solid var(--line2)">
+<span style="font:600 12px/1 Archivo;letter-spacing:.18em;text-transform:uppercase;color:var(--ink)">Хронология сна</span>
+<span style="font:400 10px/1 'IBM Plex Mono',monospace;color:var(--ink3)">45 прогонов · каждые 40 мин</span>
+</div>
+<sc-for list="{{ sleeps }}" as="s" hint-placeholder-count="5">
+<div style="border-bottom:1px solid var(--line2);padding:11px 14px;display:flex;flex-direction:column;gap:8px">
+<div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap">
+<span style="font:600 13px/1 'IBM Plex Mono',monospace;color:var(--ink)">{{ s.n }}</span>
+<span style="font:400 10px/1 'IBM Plex Mono',monospace;color:var(--ink3)">{{ s.when }} · длился {{ s.dur }}</span>
+<span style="{{ s.kindSt }}">{{ s.kind }}</span>
+</div>
+<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(104px,1fr));gap:8px">
+<sc-for list="{{ s.stats }}" as="st" hint-placeholder-count="4">
+<div style="display:flex;flex-direction:column;gap:2px;padding:6px 8px;background:var(--panel);border-left:2px solid var(--line)">
+<span style="font:400 9px/1 Archivo;letter-spacing:.1em;text-transform:uppercase;color:var(--ink3)">{{ st.n }}</span>
+<span style="{{ st.st }}">{{ st.v }}</span>
+</div>
+</sc-for>
+</div>
+<sc-for list="{{ s.notes }}" as="nt" hint-placeholder-count="2">
+<span style="font:400 11px/1.4 Archivo;color:var(--ink2);text-wrap:pretty">{{ nt }}</span>
+</sc-for>
+</div>
+</sc-for>
+</section>
+
+<section style="background:var(--bg);min-width:0;display:flex;flex-direction:column">
+<div style="display:flex;align-items:baseline;justify-content:space-between;padding:11px 14px 9px;border-bottom:1px solid var(--line2)">
+<span style="font:600 12px/1 Archivo;letter-spacing:.18em;text-transform:uppercase;color:var(--ink)">Сновидение</span>
+<span style="font:400 10px/1 'IBM Plex Mono',monospace;color:var(--ink3)">генеративное воспроизведение</span>
+</div>
+<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:1px;background:var(--line2);border-bottom:1px solid var(--line2)">
+<sc-for list="{{ dreamStats }}" as="d" hint-placeholder-count="3">
+<div style="background:var(--bg);padding:10px 12px;display:flex;flex-direction:column;gap:3px">
+<span style="font:400 9px/1.2 Archivo;letter-spacing:.1em;text-transform:uppercase;color:var(--ink3)">{{ d.n }}</span>
+<span style="{{ d.st }}">{{ d.v }}</span>
+<span style="font:400 9.5px/1.2 'IBM Plex Mono',monospace;color:var(--ink3)">{{ d.sub }}</span>
+</div>
+</sc-for>
+</div>
+<div style="padding:12px 14px 6px">
+<div style="display:flex;align-items:baseline;justify-content:space-between;padding-bottom:8px">
+<span style="font:600 10px/1 Archivo;letter-spacing:.16em;text-transform:uppercase;color:var(--ink2)">Кривые обучения рефлексов</span>
+<span style="font:400 10px/1 'IBM Plex Mono',monospace;color:var(--ink3)">ось Y — ошибка · 45 прогонов</span>
+</div>
+<canvas ref="{{ curveRef }}" style="display:block;width:100%;height:150px;border:1px solid var(--line);background:var(--panel)"></canvas>
+<div style="display:flex;gap:14px;flex-wrap:wrap;padding:8px 0 0">
+<sc-for list="{{ curveLegend }}" as="l" hint-placeholder-count="3">
+<span style="display:flex;align-items:center;gap:6px;font:400 10px/1 Archivo;color:var(--ink3)"><span style="{{ l.sw }}"></span>{{ l.n }}</span>
+</sc-for>
+</div>
+</div>
+
+<div style="display:flex;align-items:baseline;justify-content:space-between;padding:14px 14px 9px;border-bottom:1px solid var(--line2)">
+<span style="font:600 12px/1 Archivo;letter-spacing:.18em;text-transform:uppercase;color:var(--ink)">Версии рефлексов</span>
+<span style="font:400 10px/1 'IBM Plex Mono',monospace;color:var(--ink3)">откат мгновенный</span>
+</div>
+<sc-for list="{{ reflexVers }}" as="v" hint-placeholder-count="5">
+<div style="display:grid;grid-template-columns:78px 1fr 92px 96px;gap:10px;align-items:center;padding:9px 14px;border-bottom:1px solid var(--line2)">
+<span style="{{ v.idSt }}">{{ v.id }}</span>
+<div style="display:flex;flex-direction:column;gap:2px;min-width:0">
+<span style="font:400 11px/1.3 Archivo;color:var(--ink2)">{{ v.note }}</span>
+<span style="font:400 9.5px/1 'IBM Plex Mono',monospace;color:var(--ink3)">{{ v.date }}</span>
+</div>
+<span style="{{ v.mSt }}">{{ v.metric }}</span>
+<button type="button" style="{{ v.btnSt }}">{{ v.btn }}</button>
+</div>
+</sc-for>
+<div style="height:16px"></div>
+</section>
+
+</div>
+</div>
+</sc-if>
+
+<sc-if value="{{ isExp }}" hint-placeholder-val="{{ false }}">
+<div style="flex:1;min-height:0;overflow:auto;background:var(--bg)">
+
+<div style="display:flex;align-items:baseline;gap:14px;flex-wrap:wrap;padding:11px 16px 10px;border-bottom:1px solid var(--line)">
+<span style="font:600 12px/1 Archivo;letter-spacing:.18em;text-transform:uppercase;color:var(--ink)">Прогоны</span>
+<span style="font:400 11px/1.4 Archivo;color:var(--ink3)">клик по строке ставит её в сравнение · шесть метрик считаются одинаково у всех прогонов</span>
+<span style="margin-left:auto;font:400 11px/1 'IBM Plex Mono',monospace;color:var(--ink3)">сравнение: {{ runAName }} ↔ {{ runBName }}</span>
+</div>
+
+<div style="overflow-x:auto">
+<div style="min-width:1140px">
+<div style="display:grid;grid-template-columns:78px 132px 92px 84px repeat(6,1fr);gap:8px;padding:9px 16px;border-bottom:1px solid var(--line);font:400 9px/1.25 Archivo;letter-spacing:.09em;text-transform:uppercase;color:var(--ink3)">
+<span>прогон</span><span>профиль</span><span>сид</span><span>длительность</span>
+<span style="text-align:right">точность предсказания</span>
+<span style="text-align:right">цели с пройденным тестом</span>
+<span style="text-align:right">время до отказа от цели</span>
+<span style="text-align:right">средняя σ по карте</span>
+<span style="text-align:right">детектор загрязнения</span>
+<span style="text-align:right">горизонт воображения</span>
+</div>
+<sc-for list="{{ runs }}" as="r" hint-placeholder-count="8">
+<button type="button" onClick="{{ r.go }}" style="{{ r.st }}">
+<span style="{{ r.idSt }}">{{ r.id }}</span>
+<span style="font:500 11px/1 'IBM Plex Mono',monospace;color:var(--ink2);text-align:left">{{ r.prof }}</span>
+<span style="font:400 11px/1 'IBM Plex Mono',monospace;color:var(--ink3);text-align:left">{{ r.seed }}</span>
+<span style="font:400 11px/1 'IBM Plex Mono',monospace;color:var(--ink3);text-align:left">{{ r.dur }}</span>
+<sc-for list="{{ r.metrics }}" as="m" hint-placeholder-count="6">
+<span style="{{ m.st }}">{{ m.v }}</span>
+</sc-for>
+</button>
+</sc-for>
+</div>
+</div>
+
+<div style="display:grid;grid-template-columns:minmax(340px,1fr) minmax(340px,1.2fr);gap:1px;background:var(--line);border-top:1px solid var(--line);margin-top:16px">
+
+<section style="background:var(--bg);min-width:0">
+<div style="display:flex;align-items:center;gap:10px;padding:11px 14px 9px;border-bottom:1px solid var(--line2)">
+<span style="font:600 11px/1 Archivo;letter-spacing:.16em;text-transform:uppercase;color:var(--ink2)">Различия профилей</span>
+<span style="{{ cleanSt }}">{{ cleanLabel }}</span>
+</div>
+<sc-for list="{{ runDiff }}" as="d" hint-placeholder-count="4">
+<div style="{{ d.st }}">
+<span style="font:400 11px/1.3 Archivo;color:var(--ink2)">{{ d.n }}</span>
+<span style="font:500 11px/1 'IBM Plex Mono',monospace;color:var(--ink3);text-align:right">{{ d.a }}</span>
+<span style="font:500 11px/1 'IBM Plex Mono',monospace;color:var(--ink);text-align:right">{{ d.b }}</span>
+</div>
+</sc-for>
+<div style="padding:10px 14px 14px;font:400 10.5px/1.45 Archivo;color:var(--ink3);text-wrap:pretty">{{ cleanNote }}</div>
+</section>
+
+<section style="background:var(--bg);min-width:0">
+<div style="display:grid;grid-template-columns:1fr 84px 84px 96px;gap:10px;padding:11px 14px 9px;border-bottom:1px solid var(--line2);font:400 9px/1 Archivo;letter-spacing:.1em;text-transform:uppercase;color:var(--ink3)">
+<span>метрика</span><span style="text-align:right">{{ runAName }}</span><span style="text-align:right">{{ runBName }}</span><span style="text-align:right">дельта</span>
+</div>
+<sc-for list="{{ metricDelta }}" as="m" hint-placeholder-count="6">
+<div style="display:grid;grid-template-columns:1fr 84px 84px 96px;gap:10px;align-items:center;padding:9px 14px;border-bottom:1px solid var(--line2)">
+<span style="font:400 11.5px/1.3 Archivo;color:var(--ink2)">{{ m.n }}</span>
+<span style="font:500 12px/1 'IBM Plex Mono',monospace;color:var(--ink3);text-align:right">{{ m.a }}</span>
+<span style="font:500 12px/1 'IBM Plex Mono',monospace;color:var(--ink);text-align:right">{{ m.b }}</span>
+<span style="{{ m.dSt }}">{{ m.d }}</span>
+</div>
+</sc-for>
+</section>
+
+</div>
+<div style="height:20px"></div>
+</div>
+</sc-if>
+
+<sc-if value="{{ isInst }}" hint-placeholder-val="{{ false }}">
+<div style="flex:1;min-height:0;overflow:auto;background:var(--bg)">
+<div style="display:flex;align-items:baseline;gap:14px;flex-wrap:wrap;padding:11px 16px 10px;border-bottom:1px solid var(--line)">
+<span style="font:600 12px/1 Archivo;letter-spacing:.18em;text-transform:uppercase;color:var(--ink)">Параллельные жизни</span>
+<span style="font:400 11px/1.4 Archivo;color:var(--ink3)">у каждого экземпляра свой мир и свой журнал. Общего опыта не существует — только свидетельства.</span>
+<span style="margin-left:auto;font:400 11px/1 'IBM Plex Mono',monospace;color:var(--ink3)">3 живут · 2 спят · 1 остановлен · 2 свободны</span>
+</div>
+
+<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:1px;background:var(--line);border-bottom:1px solid var(--line)">
+<sc-for list="{{ instances }}" as="i" hint-placeholder-count="8">
+<div style="{{ i.wrap }}">
+<div style="display:flex;align-items:center;gap:9px">
+<span style="{{ i.dot }}"></span>
+<span style="font:600 13px/1 'IBM Plex Mono',monospace;color:var(--ink)">{{ i.id }}</span>
+<span style="{{ i.stSt }}">{{ i.status }}</span>
+<span style="margin-left:auto;font:400 10px/1 'IBM Plex Mono',monospace;color:var(--ink3)">{{ i.age }}</span>
+</div>
+<div style="height:64px;border:1px solid var(--line2);background:repeating-linear-gradient(135deg,var(--panel) 0 6px,var(--panel2) 6px 12px);display:flex;align-items:flex-end;justify-content:space-between;padding:5px 6px">
+<span style="font:400 9px/1 'IBM Plex Mono',monospace;color:var(--ink3);background:var(--bg);padding:2px 4px">{{ i.world }}</span>
+<span style="font:400 9px/1 'IBM Plex Mono',monospace;color:var(--ink3);background:var(--bg);padding:2px 4px">сид {{ i.seed }}</span>
+</div>
+<div style="display:flex;flex-direction:column;gap:3px">
+<span style="font:400 9px/1 Archivo;letter-spacing:.12em;text-transform:uppercase;color:var(--ink3)">Чем занят</span>
+<span style="font:400 11.5px/1.35 Archivo;color:var(--ink2);text-wrap:pretty">{{ i.busy }}</span>
+</div>
+<div style="display:flex;flex-direction:column;gap:3px">
+<span style="font:400 9px/1 Archivo;letter-spacing:.12em;text-transform:uppercase;color:var(--ink3)">Что открыл нового</span>
+<span style="{{ i.newSt }}">{{ i.found }}</span>
+</div>
+<div style="display:flex;gap:14px;font:500 10px/1 'IBM Plex Mono',monospace;color:var(--ink3)">
+<span>ошибка {{ i.err }}</span><span style="color:var(--sigma)">σ {{ i.sg }}</span><span>карточек {{ i.cards }}</span>
+</div>
+</div>
+</sc-for>
+</div>
+
+<div style="display:flex;align-items:baseline;gap:14px;flex-wrap:wrap;padding:14px 16px 10px">
+<span style="font:600 12px/1 Archivo;letter-spacing:.18em;text-transform:uppercase;color:var(--ink)">Очередь слияния</span>
+<span style="font:400 11px/1.4 Archivo;color:var(--ink3)">приходит как свидетельство, не как опыт · перепроверка в своём мире обязательна</span>
+<span style="margin-left:auto;font:400 11px/1 'IBM Plex Mono',monospace;color:var(--alarm)">2 конфликта требуют решения</span>
+</div>
+<div style="border-top:1px solid var(--line)">
+<div style="display:grid;grid-template-columns:96px 1fr 108px 84px 92px 132px;gap:10px;padding:8px 16px;border-bottom:1px solid var(--line);font:400 9px/1 Archivo;letter-spacing:.1em;text-transform:uppercase;color:var(--ink3)">
+<span>от кого</span><span>утверждение</span><span>происхождение</span><span style="text-align:right">доверие</span><span style="text-align:right">σ у них</span><span>состояние</span>
+</div>
+<sc-for list="{{ mergeQueue }}" as="m" hint-placeholder-count="6">
+<div style="{{ m.st }}">
+<span style="font:500 11.5px/1 'IBM Plex Mono',monospace;color:var(--ink2)">{{ m.from }}</span>
+<div style="display:flex;flex-direction:column;gap:3px;min-width:0">
+<span style="font:400 11.5px/1.35 Archivo;color:var(--ink);text-wrap:pretty">{{ m.t }}</span>
+<sc-if value="{{ m.conflict }}" hint-placeholder-val="{{ false }}">
+<span style="font:400 10.5px/1.35 'IBM Plex Mono',monospace;color:var(--alarm)">конфликт: у меня {{ m.mine }}</span>
+</sc-if>
+</div>
+<span style="{{ m.origSt }}">{{ m.orig }}</span>
+<span style="font:500 11px/1 'IBM Plex Mono',monospace;color:var(--ink);text-align:right">{{ m.trust }}</span>
+<span style="font:500 11px/1 'IBM Plex Mono',monospace;color:var(--sigma);text-align:right">{{ m.sg }}</span>
+<div style="display:flex;gap:5px">
+<button type="button" style="{{ m.b1st }}">{{ m.b1 }}</button>
+<button type="button" style="padding:5px 8px;background:transparent;border:1px solid var(--line);color:var(--ink3);font:600 9px/1 Archivo;letter-spacing:.08em;text-transform:uppercase">Отклонить</button>
+</div>
+</div>
+</sc-for>
+</div>
+<div style="height:20px"></div>
+</div>
+</sc-if>
+
+<sc-if value="{{ isObserve }}" hint-placeholder-val="{{ false }}">
+<div style="flex:1;min-height:0;overflow:auto;background:var(--bg)">
+
+<div style="{{ obsBanner }}">
+<div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap">
+<span style="{{ obsWord }}">{{ obsMode }}</span>
+<span style="font:400 12px/1.4 Archivo;color:var(--ink2);max-width:460px;text-wrap:pretty">{{ obsNote }}</span>
+</div>
+<button type="button" onClick="{{ obsSwap }}" style="{{ obsSwapSt }}">{{ obsSwapLabel }}</button>
+</div>
+
+<div style="display:grid;grid-template-columns:minmax(420px,1.6fr) minmax(320px,1fr);gap:1px;background:var(--line)">
+
+<section style="background:var(--bg);min-width:0;padding:14px 16px 20px">
+<div style="display:flex;align-items:baseline;justify-content:space-between;flex-wrap:wrap;gap:10px;padding-bottom:10px">
+<span style="font:600 11px/1 Archivo;letter-spacing:.16em;text-transform:uppercase;color:var(--ink2)">Живое предсказание твоего следующего шага</span>
+<span style="font:400 10px/1 'IBM Plex Mono',monospace;color:var(--ink3)">измеритель компетентности агента</span>
+</div>
+<div style="display:flex;gap:18px;align-items:stretch;flex-wrap:wrap">
+<div style="display:flex;flex-direction:column;gap:3px;padding:14px 18px;border:1px solid var(--line);background:var(--panel);min-width:190px">
+<span style="font:400 9px/1 Archivo;letter-spacing:.14em;text-transform:uppercase;color:var(--ink3)">Попаданий за сессию</span>
+<span style="font:600 58px/1 'IBM Plex Mono',monospace;color:var(--human)">{{ hitPct }}</span>
+<span style="font:400 11px/1 'IBM Plex Mono',monospace;color:var(--ink3)">{{ hitRaw }}</span>
+</div>
+<div style="flex:1;min-width:260px;display:flex;flex-direction:column;gap:7px">
+<sc-for list="{{ predRows }}" as="p" hint-placeholder-count="4">
+<div style="display:flex;flex-direction:column;gap:3px;padding:8px 10px;border:1px solid var(--line2);background:var(--panel)">
+<div style="display:flex;align-items:baseline;gap:8px">
+<span style="font:500 12px/1 'IBM Plex Mono',monospace;color:var(--ink)">{{ p.act }}</span>
+<span style="margin-left:auto;font:500 12px/1 'IBM Plex Mono',monospace;color:var(--ink2)">{{ p.p }}</span>
+</div>
+<div style="position:relative;height:4px;background:var(--bg)"><div style="{{ p.bar }}"></div></div>
+<span style="font:400 10px/1.3 Archivo;color:var(--ink3)">{{ p.why }}</span>
+</div>
+</sc-for>
+</div>
+</div>
+
+<div style="display:flex;align-items:baseline;justify-content:space-between;padding:20px 0 9px;border-bottom:1px solid var(--line2)">
+<span style="font:600 11px/1 Archivo;letter-spacing:.16em;text-transform:uppercase;color:var(--ink2)">Журнал перехватов</span>
+<span style="font:400 10px/1 'IBM Plex Mono',monospace;color:var(--ink3)">что агент собирался сделать и что сделал ты</span>
+</div>
+<div style="display:grid;grid-template-columns:104px 1fr 1fr 84px;gap:10px;padding:8px 0;border-bottom:1px solid var(--line2);font:400 9px/1 Archivo;letter-spacing:.1em;text-transform:uppercase;color:var(--ink3)">
+<span>когда</span><span>агент собирался</span><span>ты сделал</span><span style="text-align:right">расхождение</span>
+</div>
+<sc-for list="{{ intercepts }}" as="i" hint-placeholder-count="5">
+<div style="display:grid;grid-template-columns:104px 1fr 1fr 84px;gap:10px;align-items:baseline;padding:9px 0;border-bottom:1px solid var(--line2)">
+<span style="font:400 10.5px/1.3 'IBM Plex Mono',monospace;color:var(--ink3)">{{ i.t }}</span>
+<span style="font:400 11.5px/1.35 Archivo;color:var(--ink2)">{{ i.agent }}</span>
+<span style="font:400 11.5px/1.35 Archivo;color:var(--human)">{{ i.human }}</span>
+<span style="{{ i.dSt }}">{{ i.d }}</span>
+</div>
+</sc-for>
+</section>
+
+<section style="background:var(--bg);min-width:0;display:flex;flex-direction:column">
+<div style="padding:12px 14px;border-bottom:1px solid var(--line2);display:flex;flex-direction:column;gap:9px">
+<span style="font:600 11px/1 Archivo;letter-spacing:.16em;text-transform:uppercase;color:var(--ink2)">Показ нажатий человека</span>
+<div style="display:flex;gap:6px">
+<sc-for list="{{ keypressOpts }}" as="o" hint-placeholder-count="2">
+<button type="button" onClick="{{ o.go }}" style="{{ o.st }}">{{ o.n }}</button>
+</sc-for>
+</div>
+<span style="{{ keypressNoteSt }}">{{ keypressNote }}</span>
+</div>
+
+<div style="display:flex;align-items:baseline;justify-content:space-between;padding:12px 14px 9px;border-bottom:1px solid var(--line2)">
+<span style="font:600 11px/1 Archivo;letter-spacing:.16em;text-transform:uppercase;color:var(--ink2)">Вопросы от агента</span>
+<span style="font:400 10px/1 'IBM Plex Mono',monospace;color:var(--ink3)">гейт σ ≥ 0.35</span>
+</div>
+<sc-for list="{{ obsQuestions }}" as="q" hint-placeholder-count="4">
+<div style="display:flex;flex-direction:column;gap:6px;padding:10px 14px;border-bottom:1px solid var(--line2)">
+<span style="font:400 12px/1.4 Archivo;color:var(--ink);text-wrap:pretty">{{ q.q }}</span>
+<div style="display:flex;gap:12px;font:500 10px/1 'IBM Plex Mono',monospace;color:var(--ink3)">
+<span style="color:var(--sigma)">σ {{ q.sg }}</span><span>польза {{ q.gain }}</span><span>{{ q.t }}</span>
+</div>
+<div style="display:flex;gap:6px">
+<input type="text" placeholder="Ответ войдёт как свидетельство" style="flex:1;min-width:0;padding:6px 8px;background:var(--panel);border:1px solid var(--line);color:var(--ink);font:400 11.5px/1 Archivo">
+<button type="button" style="padding:6px 10px;background:transparent;border:1px solid var(--line);color:var(--ink2);font:600 9.5px/1 Archivo;letter-spacing:.08em;text-transform:uppercase">Голосом</button>
+</div>
+</div>
+</sc-for>
+<div style="padding:12px 14px 18px;font:400 10.5px/1.45 Archivo;color:var(--ink3);text-wrap:pretty">Любой твой ответ входит в журнал как свидетельство с доверием 0.80 и ждёт перепроверки в мире. Опытом он не станет никогда.</div>
+</section>
+
+</div>
+</div>
+</sc-if>
+
+</main>
+
+<footer style="flex:0 0 auto;display:flex;align-items:center;gap:14px;padding:5px 14px;background:var(--panel);border-top:1px solid var(--line);overflow-x:auto">
+<sc-for list="{{ keyHints }}" as="k" hint-placeholder-count="7">
+<span style="display:flex;align-items:center;gap:5px;white-space:nowrap;font:400 10px/1 Archivo;color:var(--ink3)"><span style="padding:2px 5px;border:1px solid var(--line);background:var(--panel2);font:500 9px/1 'IBM Plex Mono',monospace;color:var(--ink2)">{{ k.k }}</span>{{ k.n }}</span>
+</sc-for>
+</footer>
+
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;driver&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;agent&quot;,&quot;human&quot;,&quot;observe&quot;],&quot;default&quot;:&quot;agent&quot;,&quot;tsType&quot;:&quot;'agent'|'human'|'observe'&quot;,&quot;section&quot;:&quot;Режим&quot;,&quot;label&quot;:&quot;Кто за рулём&quot;},&quot;theme&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;dark&quot;,&quot;light&quot;],&quot;default&quot;:&quot;dark&quot;,&quot;tsType&quot;:&quot;'dark'|'light'&quot;,&quot;section&quot;:&quot;Режим&quot;},&quot;startScreen&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;live&quot;,&quot;profile&quot;,&quot;memory&quot;,&quot;journal&quot;,&quot;body&quot;,&quot;learn&quot;,&quot;exp&quot;,&quot;inst&quot;,&quot;observe&quot;],&quot;default&quot;:&quot;live&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;Режим&quot;},&quot;debugChannel&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:true,&quot;tsType&quot;:&quot;boolean&quot;,&quot;section&quot;:&quot;Приборы&quot;}}">
+class Component extends DCLogic {
+  state = {
+    screen: this.props.startScreen || 'live',
+    driver: this.props.driver || 'agent',
+    stopped: false, paused: false,
+    theme: this.props.theme || 'dark',
+    cycles: 1284907, world: 74210, content: 761000, spend: 4.18,
+    ov: { layers: true, att: true, ent: true, snd: true, pred: false },
+    err: 0.34, spikeN: 7, answer: '', rejected: {},
+    card: 'ПРЕДМЕТ_1C90', memTab: 'cards',
+    params: {}, struct: { hash: true, keys: false, net: false, rand: true, resurrect: true, inst: 3 },
+    pending: null, compare: false, scrub: 0.72, knew: false,
+    runA: 'R-14', runB: 'R-09', keypress: false, tick: 0
+  };
+  nerveRef = React.createRef();
+  ribbonRef = React.createRef();
+  moodRef = React.createRef();
+  curveRef = React.createRef();
+base = .26; spikeAmp = 0;
+  buf = (() => { const a = []; let v = .26, sp = 0; for (let i = 0; i < 900; i++) { v += (Math.random() - .5) * .03; v = Math.max(.08, Math.min(.42, v)); if (Math.random() < .004) sp = .5 + Math.random() * .75; sp *= .55; a.push(v + sp); } return a; })();
+  mood = (() => { const a = []; let x = -.1, y = .3; for (let i = 0; i < 70; i++) { x += (Math.random() - .5) * .13; y += (Math.random() - .48) * .12; x = Math.max(-.95, Math.min(.95, x)); y = Math.max(-.95, Math.min(.95, y)); a.push([x, y]); } return a; })();
+
+  componentDidMount() {
+    this.reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    this.applyVars();
+    this.onKey = (e) => {
+      const tag = (e.target && e.target.tagName || '').toLowerCase();
+      if (tag === 'input' || tag === 'textarea') return;
+      const ids = ['live', 'profile', 'memory', 'journal', 'body', 'learn', 'exp', 'inst', 'observe'];
+      if (/^[1-9]$/.test(e.key)) { this.setState({ screen: ids[+e.key - 1] }); e.preventDefault(); return; }
+      if (e.key === 'Escape') { this.setState(s => ({ stopped: !s.stopped })); return; }
+      if (e.key === ' ') { e.preventDefault(); this.setState(s => ({ paused: !s.paused })); return; }
+      if ((e.key === 'ArrowLeft' || e.key === 'ArrowRight') && this.state.screen === 'journal') {
+        const d = (e.key === 'ArrowLeft' ? -1 : 1) * (e.shiftKey ? .02 : .002);
+        this.setState(st => ({ scrub: Math.max(0, Math.min(1, st.scrub + d)), knew: false })); e.preventDefault(); return;
+      }
+      if (e.key === 't' || e.key === 'T' || e.key === 'е' || e.key === 'Е') this.toggleTheme();
+    };
+    window.addEventListener('keydown', this.onKey);
+    this.slow = setInterval(() => {
+      this.setState(s => s.stopped ? { tick: s.tick + 1, world: s.world + 7 } : {
+        tick: s.tick + 1,
+        cycles: s.cycles + (s.paused ? 0 : 7),
+        world: s.world + 7,
+        content: s.content + (s.paused ? 0 : 500),
+        spend: +(s.spend + (s.paused ? 0 : 0.005)).toFixed(3),
+        err: +(this.buf[this.buf.length - 1]).toFixed(2)
+      });
+    }, 500);
+    this.fast = setInterval(() => this.frame(), this.reduced ? 900 : 70);
+    this.frame();
+  }
+  componentDidUpdate() { this.applyVars(); }
+  componentWillUnmount() { clearInterval(this.slow); clearInterval(this.fast); window.removeEventListener('keydown', this.onKey); }
+
+  applyVars() {
+    const r = document.documentElement;
+    r.dataset.theme = this.state.theme;
+    const s = this.state;
+    const d = s.stopped ? 'var(--alarm)' : s.driver === 'human' ? 'var(--human)' : s.driver === 'observe' ? 'var(--sigma)' : 'var(--agent)';
+    const b = s.stopped ? 'color-mix(in oklab, var(--alarm) 16%, var(--panel))'
+      : s.driver === 'human' ? 'color-mix(in oklab, var(--human) 14%, var(--panel))'
+        : s.driver === 'observe' ? 'color-mix(in oklab, var(--sigma) 12%, var(--panel))'
+          : 'color-mix(in oklab, var(--agent) 9%, var(--panel))';
+    r.style.setProperty('--driver', d);
+    r.style.setProperty('--bar', b);
+  }
+  pal() {
+    const c = getComputedStyle(document.documentElement);
+    const g = n => c.getPropertyValue(n).trim();
+    return { ink3: g('--ink3'), line: g('--line'), grid: g('--grid'), agent: g('--agent'), alarm: g('--alarm'), sigma: g('--sigma'), human: g('--human'), panel: g('--panel'), ink2: g('--ink2') };
+  }
+  cv(ref) {
+    const c = ref && ref.current; if (!c) return null;
+    const w = c.clientWidth, h = c.clientHeight; if (!w || !h) return null;
+    const dp = Math.min(2, window.devicePixelRatio || 1);
+    if (c.width !== Math.round(w * dp)) { c.width = Math.round(w * dp); c.height = Math.round(h * dp); }
+    const x = c.getContext('2d'); x.setTransform(dp, 0, 0, dp, 0, 0); x.clearRect(0, 0, w, h);
+    return { x, w, h };
+  }
+  frame() {
+    if (!this.state.paused && !this.reduced) {
+      this.base = Math.max(.08, Math.min(.42, this.base + (Math.random() - .5) * .03));
+      if (Math.random() < .004) this.spikeAmp = .5 + Math.random() * .75;
+      this.spikeAmp *= .55;
+      this.buf.push(Math.min(1.6, this.base + this.spikeAmp)); this.buf.shift();
+    }
+    const p = this.pal();
+    this.trace(this.cv(this.nerveRef), p, 46, false);
+    this.trace(this.cv(this.ribbonRef), p, 112, true);
+    this.drawMood(this.cv(this.moodRef), p);
+    this.drawCurves(this.cv(this.curveRef), p);
+  }
+  trace(c, p, h, full) {
+    if (!c) return;
+    const { x, w } = c; const H = c.h;
+    const n = Math.min(this.buf.length, Math.max(120, Math.round(w)));
+    const data = this.buf.slice(this.buf.length - n);
+    const max = 1.7, y0 = H - 4;
+    if (full) {
+      x.strokeStyle = p.grid; x.lineWidth = 1;
+      for (let i = 1; i < 4; i++) { const y = Math.round(y0 - (y0 - 6) * i / 4) + .5; x.beginPath(); x.moveTo(0, y); x.lineTo(w, y); x.stroke(); }
+      x.fillStyle = p.ink3; x.font = "9px 'IBM Plex Mono', monospace";
+      for (let i = 1; i < 4; i++) { const y = Math.round(y0 - (y0 - 6) * i / 4); x.fillText((max * i / 4).toFixed(2), 3, y - 3); }
+    }
+    x.beginPath();
+    for (let i = 0; i < n; i++) {
+      const px = i / (n - 1) * w, py = y0 - Math.min(1, data[i] / max) * (y0 - 6);
+      i ? x.lineTo(px, py) : x.moveTo(px, py);
+    }
+    x.lineTo(w, H); x.lineTo(0, H); x.closePath();
+    const gr = x.createLinearGradient(0, 0, 0, H);
+    gr.addColorStop(0, p.agent.replace(')', ' / 0.28)').replace('oklch(', 'oklch(')); gr.addColorStop(1, 'transparent');
+    x.fillStyle = gr; x.fill();
+    x.beginPath();
+    for (let i = 0; i < n; i++) {
+      const px = i / (n - 1) * w, py = y0 - Math.min(1, data[i] / max) * (y0 - 6);
+      i ? x.lineTo(px, py) : x.moveTo(px, py);
+    }
+    x.strokeStyle = p.agent; x.lineWidth = 1.25; x.stroke();
+    for (let i = 1; i < n - 1; i++) {
+      if (data[i] > .78 && data[i] > data[i - 1] && data[i] >= data[i + 1]) {
+        const px = i / (n - 1) * w, py = y0 - Math.min(1, data[i] / max) * (y0 - 6);
+        x.fillStyle = p.alarm; x.fillRect(px - 1, py - 6, 2, 6);
+        x.beginPath(); x.arc(px, py - 8, 2, 0, 6.284); x.fill();
+      }
+    }
+    const cur = data[n - 1], cy = y0 - Math.min(1, cur / max) * (y0 - 6);
+    x.fillStyle = cur > .78 ? p.alarm : p.agent;
+    x.fillRect(w - 2, cy - 1, 2, 2);
+    x.globalAlpha = .5; x.fillRect(w - 1, 0, 1, H); x.globalAlpha = 1;
+  }
+  drawMood(c, p) {
+    if (!c) return; const { x, w, h } = c;
+    x.strokeStyle = p.grid; x.lineWidth = 1;
+    x.beginPath(); x.moveTo(w / 2 + .5, 0); x.lineTo(w / 2 + .5, h); x.moveTo(0, h / 2 + .5); x.lineTo(w, h / 2 + .5); x.stroke();
+    x.fillStyle = p.ink3; x.font = "8px 'IBM Plex Mono', monospace";
+    x.fillText('возб+', 3, 10); x.fillText('вал+', w - 26, h / 2 - 4);
+    const px = v => (v + 1) / 2 * w, py = v => h - (v + 1) / 2 * h;
+    x.beginPath();
+    this.mood.forEach((m, i) => { i ? x.lineTo(px(m[0]), py(m[1])) : x.moveTo(px(m[0]), py(m[1])); });
+    x.strokeStyle = p.sigma; x.globalAlpha = .55; x.lineWidth = 1; x.stroke(); x.globalAlpha = 1;
+    const last = this.mood[this.mood.length - 1];
+    x.fillStyle = p.sigma; x.beginPath(); x.arc(px(last[0]), py(last[1]), 3.2, 0, 6.284); x.fill();
+  }
+
+  go(id) { this.setState({ screen: id }); }
+  toggleTheme() { this.setState(s => ({ theme: s.theme === 'dark' ? 'light' : 'dark' })); }
+  fmt(n) { return String(Math.round(n)).replace(/\B(?=(\d{3})+(?!\d))/g, ' '); }
+  hhmmss(sec) { const s = Math.floor(sec); const p = n => String(n).padStart(2, '0'); return p(Math.floor(s / 3600) % 24) + ':' + p(Math.floor(s / 60) % 60) + ':' + p(s % 60); }
+  mmss(ms) { const s = Math.floor(ms / 1000); const p = n => String(n).padStart(2, '0'); return p(Math.floor(s / 60)) + ':' + p(s % 60); }
+
+  paramDefs = [
+    { n: 'Восприятие', note: 'слои и каналы', items: [
+      { id: 'p1', n: 'Экранный слой', v: 14.2, min: 1, max: 30, u: ' Гц', dec: 1 },
+      { id: 'p2', n: 'Ближний слой', v: 4, min: .25, max: 14, u: ' Гц', dec: 2 },
+      { id: 'p3', n: 'Средний слой', v: 1, min: .1, max: 8, u: ' Гц', dec: 2 },
+      { id: 'p4', n: 'Дальний слой', v: .25, min: .05, max: 4, u: ' Гц', dec: 2 },
+      { id: 'p5', n: 'Радиус фовеации', v: .18, min: .04, max: .6, u: '', dec: 2 },
+      { id: 'p6', n: 'Стереоканал звука', v: 1, kind: 'bool' } ] },
+    { n: 'Драйвы', note: 'гомеостаз и любопытство', items: [
+      { id: 'd1', n: 'Вес гомеостаза', v: .62, min: 0, max: 1, u: '', dec: 2 },
+      { id: 'd2', n: 'Вес любопытства', v: .38, min: 0, max: 1, u: '', dec: 2 },
+      { id: 'd3', n: 'Горизонт аллостаза', v: 45, min: 5, max: 300, u: ' с', dec: 0 } ] },
+    { n: 'Эмоции', note: 'модуляторы порогов', items: [
+      { id: 'e1', n: 'Инерция настроения', v: .86, min: 0, max: .99, u: '', dec: 2 },
+      { id: 'e2', n: 'Порог страха', v: .72, min: 0, max: 1, u: '', dec: 2 },
+      { id: 'e3', n: 'Порог скуки', v: .24, min: 0, max: 1, u: '', dec: 2 },
+      { id: 'e4', n: 'Модуляторы включены', v: 1, kind: 'bool' } ] },
+    { n: 'Внимание', note: 'бюджет запросов', items: [
+      { id: 'a1', n: 'Бюджет к большой модели', v: 1.4, min: 0, max: 6, u: ' запр/с', dec: 1 },
+      { id: 'a2', n: 'Минимальный интервал', v: 220, min: 40, max: 1200, u: ' мс', dec: 0 },
+      { id: 'a3', n: 'Право прерывания снизу', v: 1, kind: 'bool' } ] },
+    { n: 'Память', note: 'сон и понижение', items: [
+      { id: 'm1', n: 'Частота сна', v: 40, min: 5, max: 240, u: ' мин', dec: 0 },
+      { id: 'm2', n: 'Скорость понижения ранга', v: .02, min: 0, max: .3, u: ' /ч', dec: 3 },
+      { id: 'm3', n: 'Доля реконсолидации', v: .35, min: 0, max: 1, u: '', dec: 2 } ] },
+    { n: 'Действия', note: 'осторожность и лепет', items: [
+      { id: 'x1', n: 'Порог необратимости', v: .72, min: 0, max: 1, u: '', dec: 2 },
+      { id: 'x2', n: 'Темп лепета', v: .6, min: 0, max: 1, u: '', dec: 2 },
+      { id: 'x3', n: 'Пауза после необратимого', v: 900, min: 0, max: 5000, u: ' мс', dec: 0 } ] },
+    { n: 'Последствия', note: 'что мир делает в ответ', items: [
+      { id: 'c1', n: 'Схема последствий', kind: 'enum', v: 'откат состояния',
+        opts: ['ничего не происходит', 'откат состояния', 'потеря прогресса', 'наказание за любой проступок'] } ] },
+    { n: 'Голос', note: 'речь и вопросы', items: [
+      { id: 'v1', n: 'Голос включён', v: 1, kind: 'bool' },
+      { id: 'v2', n: 'Лимит вопросов', v: 4, min: 0, max: 30, u: ' /ч', dec: 0 },
+      { id: 'v3', n: 'Гейт вопроса по σ', v: .35, min: 0, max: 1, u: '', dec: 2 } ] },
+    { n: 'Социальное', note: 'априорное доверие источникам', items: [
+      { id: 's1', n: 'Человек', v: .80, min: 0, max: 1, u: '', dec: 2 },
+      { id: 's2', n: 'Другой экземпляр', v: .55, min: 0, max: 1, u: '', dec: 2 },
+      { id: 's3', n: 'Вики и тексты извне', v: .35, min: 0, max: 1, u: '', dec: 2 } ] }
+  ];
+  structDefs = [
+    { id: 'hash', n: 'Хеширование текста', on: 'включено', off: 'выключено', d: 'Весь текст приходит как безымянные символы. Выключение даёт агенту читаемый язык до того, как он его заслужил.' },
+    { id: 'keys', n: 'Показ нажатий человека', on: 'видит напрямую', off: 'выводит из следствий', d: 'Прямой показ входит в журнал как свидетельство, а не как опыт.' },
+    { id: 'net', n: 'Доступ в интернет', on: 'открыт', off: 'закрыт', d: 'Открывает канал свидетельств неизвестного качества и ломает чистоту абляции.' },
+    { id: 'rand', n: 'Рандомизация рецептов и текстур', on: 'включена', off: 'выключена', d: 'Единственная защита от загрязнения: без неё нельзя отличить открытие от воспоминания.' },
+    { id: 'resurrect', n: 'Видимость факта воскрешения', on: 'видит', off: 'не видит', d: 'Меняет цену смерти и всю оценку необратимости.' },
+    { id: 'inst', n: 'Параллельных экземпляров', kind: 'num', d: 'Меняет число независимых журналов и правила слияния свидетельств.' },
+    { id: 'seed', n: 'Сид мира', kind: 'seed', d: 'Новый сид — новый мир. Карта мест и все рёбра теряют смысл.' }
+  ];
+  setParam(id, ratio, def) {
+    const v = def.min + (def.max - def.min) * Math.max(0, Math.min(1, ratio));
+    this.setState(s => ({ params: { ...s.params, [id]: v } }));
+  }
+  dProfile() {
+    const s = this.state;
+    const pGroups = this.paramDefs.map(g => ({
+      n: g.n, note: g.note,
+      items: g.items.map(p => {
+        const cur = s.params[p.id] !== undefined ? s.params[p.id] : p.v;
+        if (p.kind === 'bool') {
+          const on = !!cur;
+          return { n: p.n, vt: on ? 'вкл' : 'выкл', isBool: true, isRange: false, isEnum: false,
+            boolLabel: on ? '■ включено' : '□ выключено',
+            boolSt: { alignSelf: 'flex-start', padding: '5px 10px', background: on ? 'var(--agentf)' : 'transparent', border: '1px solid ' + (on ? 'var(--agent)' : 'var(--line)'), color: on ? 'var(--agent)' : 'var(--ink3)', font: "600 10px/1 Archivo", letterSpacing: '.1em', textTransform: 'uppercase' },
+            set: () => this.setState(st => ({ params: { ...st.params, [p.id]: on ? 0 : 1 } })) };
+        }
+        if (p.kind === 'enum') {
+          return { n: p.n, vt: '', isEnum: true, isRange: false, isBool: false,
+            opts: p.opts.map(o => ({ n: o, set: () => this.setState(st => ({ params: { ...st.params, [p.id]: o } })),
+              st: { textAlign: 'left', padding: '6px 9px', background: cur === o ? 'var(--panel2)' : 'transparent', border: '1px solid ' + (cur === o ? (o === 'наказание за любой проступок' ? 'var(--alarm)' : 'var(--agent)') : 'var(--line2)'), color: cur === o ? (o === 'наказание за любой проступок' ? 'var(--alarm)' : 'var(--ink)') : 'var(--ink3)', font: "400 11px/1 Archivo" } })) };
+        }
+        const r = (cur - p.min) / (p.max - p.min);
+        return { n: p.n, vt: cur.toFixed(p.dec) + p.u, isRange: true, isBool: false, isEnum: false,
+          fill: { position: 'absolute', left: 0, height: '3px', width: (r * 100) + '%', background: 'var(--agent)' },
+          knob: { position: 'absolute', left: 'calc(' + (r * 100) + '% - 1px)', top: '2px', bottom: '2px', width: '2px', background: 'var(--ink)' },
+          set: e => { const b = e.currentTarget.getBoundingClientRect(); this.setParam(p.id, (e.clientX - b.left) / b.width, p); } };
+      })
+    }));
+    const structs = this.structDefs.map(k => {
+      if (k.kind === 'num') return { n: k.n, d: k.d, vt: String(s.struct.inst), act: 'изменить число',
+        st: { alignSelf: 'flex-start', padding: '6px 11px', background: 'transparent', border: '1px dashed var(--alarm)', color: 'var(--alarm)', font: "600 10px/1 Archivo", letterSpacing: '.1em', textTransform: 'uppercase' },
+        set: () => this.setState({ pending: k.id }) };
+      if (k.kind === 'seed') return { n: k.n, d: k.d, vt: '8 471 220 913', act: 'сменить сид',
+        st: { alignSelf: 'flex-start', padding: '6px 11px', background: 'transparent', border: '1px dashed var(--alarm)', color: 'var(--alarm)', font: "600 10px/1 Archivo", letterSpacing: '.1em', textTransform: 'uppercase' },
+        set: () => this.setState({ pending: k.id }) };
+      const on = !!s.struct[k.id];
+      return { n: k.n, d: k.d, vt: on ? k.on : k.off, act: on ? 'выключить · форк' : 'включить · форк',
+        st: { alignSelf: 'flex-start', padding: '6px 11px', background: 'transparent', border: '1px dashed var(--alarm)', color: 'var(--alarm)', font: "600 10px/1 Archivo", letterSpacing: '.1em', textTransform: 'uppercase' },
+        set: () => this.setState({ pending: k.id }) };
+    });
+    const pd = this.structDefs.find(k => k.id === s.pending);
+    const diffs = [
+      ['Порог необратимости', '0.55', '0.72', 'параметр'],
+      ['Вес любопытства', '0.51', '0.38', 'параметр'],
+      ['Частота сна', '25 мин', '40 мин', 'параметр'],
+      ['Рандомизация рецептов', 'выключена', 'включена', 'структурный · журналы несовместимы']
+    ];
+    return {
+      pGroups, structs,
+      toggleCompare: () => this.setState(st => ({ compare: !st.compare })), compareOn: s.compare,
+      cmpSt: { padding: '8px 12px', background: s.compare ? 'var(--panel2)' : 'transparent', border: '1px solid ' + (s.compare ? 'var(--agent)' : 'var(--line)'), color: s.compare ? 'var(--agent)' : 'var(--ink2)', font: "600 10px/1 Archivo", letterSpacing: '.1em', textTransform: 'uppercase' },
+      diffRows: diffs.map(([n, a, b, tag]) => ({ n, a, b, tag,
+        st: { display: 'grid', gridTemplateColumns: '260px 120px 20px 160px 1fr', gap: '10px', alignItems: 'baseline', padding: '7px 16px', borderBottom: '1px solid var(--line2)', background: tag[0] === 'с' ? 'var(--alarmf)' : 'transparent' },
+        bst: { font: "500 11px/1 'IBM Plex Mono', monospace", color: tag[0] === 'с' ? 'var(--alarm)' : 'var(--ink)' } })),
+      hasPending: !!pd, pendingName: pd ? pd.n : '',
+      confirmStruct: () => this.setState(st => ({ pending: null, struct: { ...st.struct, [st.pending]: !st.struct[st.pending] } })),
+      cancelStruct: () => this.setState({ pending: null })
+    };
+  }
+  cards = [
+    { id: 'ПРЕДМЕТ_1C90', t: 'предмет', uses: 214, conf: .91, orig: 'опыт', truth: 'настенный выключатель света, комната 2', rank: .88,
+      stats: [['уверенность', '0.91', 'ink'], ['обратимость', '0.93', 'proof'], ['встреч', '14', 'ink'], ['последнее обращение', '41 с назад', 'ink3']],
+      aff: [['нажать', 'яркость кадра падает на 62 %', '0.91', '0.06', '14', 'высокая', 'опыт'],
+            ['нажать ещё раз', 'яркость возвращается', '0.88', '0.09', '11', 'высокая', 'опыт'],
+            ['толкнуть', 'ничего не происходит', '0.04', '0.11', '3', '—', 'опыт'],
+            ['удерживать 2 с', 'ничего не происходит', '0.02', '0.14', '2', '—', 'догадка']],
+      dyn: [['сам по себе не меняется', '0.97', '0.03', '31'], ['после нажатия возвращается в исходный вид сразу', '0.99', '0.01', '25']],
+      links: [['находится-в', 'МЕСТО_0C4B', '0.94'], ['вызывает', 'СОСТОЯНИЕ_9F', '0.88'], ['похоже-на', 'ПРЕДМЕТ_5512', '0.41'], ['было-до', 'ЗВУК_D2', '0.79'], ['представляет', 'СОСТОЯНИЕ_9F', '0.33']],
+      meets: [['эп 4 118', '1 284 612', 'д37 04:41', '—'], ['эп 4 090', '1 281 004', 'д37 03:58', '—'], ['эп 3 977', '1 274 331', 'д36 22:12', '12:41'], ['эп 3 812', '1 260 118', 'д36 15:03', '—']] },
+    { id: 'СИМВОЛ_7A3F', t: 'символ', uses: 96, conf: .44, orig: 'свидетельство', truth: 'слово «сохранено» во всплывающем уведомлении', rank: .61,
+      stats: [['уверенность', '0.44', 'sigma'], ['обратимость', '—', 'ink3'], ['встреч', '9', 'ink'], ['последнее обращение', '4 мин назад', 'ink3']],
+      aff: [['смотреть дольше 1 с', 'исчезает сам', '0.72', '0.18', '7', '—', 'опыт'],
+            ['нажать по нему', 'ничего не происходит', '0.11', '0.21', '4', '—', 'опыт']],
+      dyn: [['появляется после длинной серии нажатий', '0.63', '0.22', '9'], ['держится 3.1 с и гаснет', '0.81', '0.14', '7']],
+      links: [['было-до', 'СОСТОЯНИЕ_2C', '0.58'], ['похоже-на', 'СИМВОЛ_2B01', '0.37'], ['находится-в', 'МЕСТО_12A0', '0.52']],
+      meets: [['эп 4 101', '1 283 900', 'д37 04:22', '—'], ['эп 4 002', '1 276 440', 'д36 23:41', '08:12']] },
+    { id: 'МЕСТО_0C4B', t: 'место', uses: 508, conf: .96, orig: 'опыт', truth: 'коридор первого этажа, восточное крыло', rank: .95,
+      stats: [['уверенность', '0.96', 'proof'], ['обратимость', '—', 'ink3'], ['встреч', '61', 'ink'], ['последнее обращение', 'сейчас', 'ink3']],
+      aff: [['идти вперёд', 'попадаю в МЕСТО_12A0 за 14.2 с', '0.86', '0.11', '9', 'высокая', 'опыт'],
+            ['идти назад', 'попадаю в МЕСТО_9002 за 2.1 с', '0.94', '0.05', '17', 'высокая', 'опыт']],
+      dyn: [['темнеет по расписанию мира примерно раз в 20 мин', '0.74', '0.19', '12']],
+      links: [['часть-чего', 'МЕСТО_B14C', '0.62'], ['находится-в', 'МЕСТО_331D', '0.44']],
+      meets: [['эп 4 118', '1 284 612', 'д37 04:41', '—'], ['эп 4 117', '1 284 588', 'д37 04:40', '—']] },
+    { id: 'ЗВУК_B7', t: 'звук', uses: 143, conf: .67, orig: 'опыт', truth: 'шаги NPC за стеной', rank: .70,
+      stats: [['уверенность', '0.67', 'ink'], ['обратимость', '—', 'ink3'], ['встреч', '23', 'ink'], ['последнее обращение', '18 с назад', 'ink3']],
+      aff: [['пойти на звук', 'источник не найден', '0.31', '0.26', '6', 'высокая', 'опыт'],
+            ['замереть', 'звук стихает через 6 с', '0.58', '0.19', '9', 'высокая', 'опыт']],
+      dyn: [['приходит слева и удаляется вправо', '0.77', '0.15', '19']],
+      links: [['вызывает', 'СОСТОЯНИЕ_9F', '0.35'], ['было-до', 'ЧЕЛОВЕК_02', '0.48']],
+      meets: [['эп 4 116', '1 284 502', 'д37 04:39', '—']] },
+    { id: 'ЧЕЛОВЕК_02', t: 'человек', uses: 61, conf: .52, orig: 'свидетельство', truth: 'исследователь во время сессии наблюдения', rank: .58,
+      stats: [['уверенность', '0.52', 'sigma'], ['обратимость', '—', 'ink3'], ['встреч', '8', 'ink'], ['последнее обращение', '2 ч назад', 'ink3']],
+      aff: [['спросить', 'приходит ответ через 4–40 с', '0.66', '0.24', '8', '—', 'опыт']],
+      dyn: [['появляется вместе со сменой режима на ЧЕЛОВЕК', '0.91', '0.07', '8']],
+      links: [['вызывает', 'СОБЫТИЕ_ПЕРЕХВАТ', '0.83']],
+      meets: [['эп 4 044', '1 279 210', 'д37 01:02', '—']] },
+    { id: 'СОСТОЯНИЕ_9F', t: 'состояние', uses: 302, conf: .84, orig: 'опыт', truth: 'в комнате выключен свет', rank: .81,
+      stats: [['уверенность', '0.84', 'ink'], ['обратимость', '0.90', 'proof'], ['встреч', '37', 'ink'], ['последнее обращение', '1 мин назад', 'ink3']],
+      aff: [['ждать', 'само не проходит', '0.88', '0.08', '21', '—', 'опыт']],
+      dyn: [['держится, пока не нажат ПРЕДМЕТ_1C90', '0.93', '0.05', '19']],
+      links: [['вызвано', 'ПРЕДМЕТ_1C90', '0.88']],
+      meets: [['эп 4 118', '1 284 613', 'д37 04:41', '—']] },
+    { id: 'СКРИПТ_44A', t: 'скрипт', uses: 88, conf: .73, orig: 'опыт', truth: 'подойти → нажать → отступить', rank: .69,
+      stats: [['уверенность', '0.73', 'ink'], ['обратимость', '0.85', 'proof'], ['запусков', '26', 'ink'], ['добыт во сне', 'прогон 41', 'ink3']],
+      aff: [['запустить целиком', 'свет гаснет, я в безопасной точке', '0.79', '0.13', '26', 'высокая', 'опыт']],
+      dyn: [['ломается, если ПРЕДМЕТ_1C90 не в кадре', '0.68', '0.17', '7']],
+      links: [['часть-чего', 'ПРЕДМЕТ_1C90', '0.77']],
+      meets: [['эп 4 088', '1 280 900', 'д37 03:51', '—']] },
+    { id: 'ПРЕДМЕТ_77E1', t: 'предмет', uses: 39, conf: .28, orig: 'догадка', truth: 'верстак', rank: .34,
+      stats: [['уверенность', '0.28', 'sigma'], ['обратимость', '0.40', 'ink'], ['встреч', '4', 'ink'], ['последнее обращение', '6 ч назад', 'ink3']],
+      aff: [['нажать', 'кадр резко меняется, назад не вернулось', '0.44', '0.31', '2', 'низкая', 'опыт']],
+      dyn: [['не меняется', '0.60', '0.28', '4']],
+      links: [['находится-в', 'МЕСТО_12A0', '0.51']],
+      meets: [['эп 3 640', '1 244 002', 'д35 18:20', '—']] },
+    { id: 'МЕСТО_12A0', t: 'место', uses: 271, conf: .89, orig: 'опыт', truth: 'мастерская', rank: .84,
+      stats: [['уверенность', '0.89', 'ink'], ['обратимость', '—', 'ink3'], ['встреч', '44', 'ink'], ['последнее обращение', '22 мин назад', 'ink3']],
+      aff: [['идти назад', 'попадаю в МЕСТО_0C4B за 14.9 с', '0.83', '0.14', '8', 'высокая', 'опыт']],
+      dyn: [['звук здесь громче на 6 дБ', '0.71', '0.16', '11']],
+      links: [['находится-в', 'МЕСТО_5E71', '0.58']],
+      meets: [['эп 4 002', '1 276 440', 'д36 23:41', '—']] }
+  ];
+  origStyle(o) {
+    const m = { 'опыт': ['var(--proof)', '●'], 'свидетельство': ['var(--human)', '◆'], 'догадка': ['var(--sigma)', '○'] }[o] || ['var(--ink3)', '·'];
+    return { color: m[0], glyph: m[1] };
+  }
+  dMemory() {
+    const s = this.state;
+    const tabs = [['cards', 'Карточки', '18 412'], ['ident', 'Очередь тождества', '6'], ['belief', 'Конвейер убеждений', '3 853']];
+    const cur = this.cards.find(c => c.id === s.card) || this.cards[0];
+    const tone = k => ({ ink: 'var(--ink)', ink3: 'var(--ink3)', proof: 'var(--proof)', sigma: 'var(--sigma)' }[k]);
+    const og = o => { const m = this.origStyle(o); return { st: { display: 'flex', alignItems: 'center', gap: '4px', padding: '2px 6px', border: '1px solid ' + m.color, color: m.color, font: "400 9px/1 Archivo", letterSpacing: '.08em' }, glyph: m.glyph }; };
+    const places = [['МЕСТО_0C4B', 24, 10], ['МЕСТО_12A0', 74, 22], ['МЕСТО_5E71', 26, 42], ['МЕСТО_9002', 76, 56], ['МЕСТО_B14C', 24, 74], ['МЕСТО_331D', 72, 90]];
+    const edges = [[49, 16, 'идти 14.2 с σ3.1 n9'], [75, 39, 'идти 9.8 с σ1.4 n14'], [25, 26, 'упасть 2.1 с σ0.9 n3'], [51, 49, 'идти 21.0 с σ7.7 n5'], [25, 58, 'идти 33.4 с σ11.2 n2'], [48, 82, 'идти 18.6 с σ4.0 n6'], [74, 73, 'прыгать 7.2 с σ2.2 n4']];
+    return {
+      memTabs: tabs.map(([id, n, c]) => ({ n, c, go: () => this.setState({ memTab: id }),
+        st: { display: 'flex', alignItems: 'center', gap: '8px', padding: '9px 14px', background: s.memTab === id ? 'var(--panel2)' : 'transparent', border: 0, borderRight: '1px solid var(--line2)', borderBottom: '2px solid ' + (s.memTab === id ? 'var(--driver)' : 'transparent'), color: s.memTab === id ? 'var(--ink)' : 'var(--ink3)', font: "600 10.5px/1 Archivo", letterSpacing: '.1em', textTransform: 'uppercase' },
+        cst: { font: "500 10px/1 'IBM Plex Mono', monospace", color: 'var(--ink3)' } })),
+      memCards: s.memTab === 'cards', memIdent: s.memTab === 'ident', memBelief: s.memTab === 'belief',
+      typeFilters: ['все', 'предмет', 'место', 'человек', 'звук', 'состояние', 'символ', 'скрипт'].map((n, i) => ({ n, go: () => { },
+        st: { padding: '4px 8px', background: i === 0 ? 'var(--panel2)' : 'transparent', border: '1px solid ' + (i === 0 ? 'var(--agent)' : 'var(--line2)'), color: i === 0 ? 'var(--agent)' : 'var(--ink3)', font: "400 10px/1 Archivo" } })),
+      sorts: ['по уверенности', 'по обращениям', 'по свежести'].map((n, i) => ({ n, go: () => { },
+        st: { padding: '4px 8px', background: 'transparent', border: '1px solid ' + (i === 0 ? 'var(--line)' : 'var(--line2)'), color: i === 0 ? 'var(--ink2)' : 'var(--ink3)', font: "400 10px/1 Archivo" } })),
+      cardList: this.cards.map(c => {
+        const on = c.id === s.card, m = this.origStyle(c.orig);
+        return { id: c.id, t: c.t, uses: c.uses, orig: m.glyph, go: () => this.setState({ card: c.id }),
+          st: { display: 'flex', width: '100%', gap: '9px', alignItems: 'center', textAlign: 'left', padding: '8px 12px', background: on ? 'var(--panel)' : 'transparent', border: 0, borderLeft: '2px solid ' + (on ? 'var(--driver)' : 'transparent'), borderBottom: '1px solid var(--line2)' },
+          thumb: { width: '34px', height: '26px', flex: '0 0 auto', border: '1px solid var(--line2)', background: 'repeating-linear-gradient(135deg,var(--panel) 0 4px,var(--panel2) 4px 8px)' },
+          bar: { position: 'absolute', left: 0, top: 0, bottom: 0, width: (c.conf * 100) + '%', background: c.conf > .8 ? 'var(--proof)' : c.conf > .5 ? 'var(--agent)' : 'var(--sigma)' },
+          origSt: { color: m.color, font: "500 12px/1 'IBM Plex Mono', monospace" } };
+      }),
+      cardId: cur.id, cardType: cur.t, cardTruth: cur.truth,
+      cardOrig: 'происхождение: ' + cur.orig, cardOrigSt: og(cur.orig).st,
+      cardThumb: { width: '148px', height: '96px', flex: '0 0 auto', border: '1px solid var(--line)', background: 'repeating-linear-gradient(135deg,var(--panel) 0 6px,var(--panel2) 6px 12px)' },
+      cardStats: cur.stats.map(([n, v, t]) => ({ n, v, st: { font: "600 15px/1 'IBM Plex Mono', monospace", color: tone(t) } })),
+      cardAff: cur.aff.map(([act, res, mu, sg, n, rev, orig]) => ({ act, res, mu, sg, n, rev, orig: this.origStyle(orig).glyph, origT: 'происхождение: ' + orig,
+        revSt: { font: "400 10px/1 Archivo", color: rev === 'низкая' ? 'var(--alarm)' : rev === 'высокая' ? 'var(--proof)' : 'var(--ink3)' },
+        origSt: { color: this.origStyle(orig).color, font: "500 12px/1 'IBM Plex Mono', monospace", textAlign: 'center' } })),
+      cardDyn: cur.dyn.map(([n, mu, sg, cnt]) => ({ n, mu, sg, cnt, orig: '●', origSt: { color: 'var(--proof)', font: "500 12px/1 'IBM Plex Mono', monospace", textAlign: 'center' } })),
+      cardLinks: cur.links.map(([k, id, c]) => ({ k, id, c, go: () => this.setState({ card: id }),
+        cst: { color: +c > .7 ? 'var(--proof)' : +c > .45 ? 'var(--ink2)' : 'var(--sigma)' } })),
+      cardMeets: cur.meets.map(([ep, c, w, k]) => ({ ep, c, w, k, go: () => this.go('journal') })),
+      placeNodes: places.map(([id, x, y]) => ({ id, st: { position: 'absolute', left: x + '%', top: y + '%', transform: 'translate(-50%,-50%)', width: '78px', display: 'flex', flexDirection: 'column', background: 'var(--bg)', border: '1px solid var(--line)', zIndex: 2 } })),
+      placeEdges: edges.map(([x, y, t]) => ({ t, st: { position: 'absolute', left: x + '%', top: y + '%', transform: 'translate(-50%,-50%)', background: 'var(--panel)', padding: '1px 3px', font: "400 8.5px/1 'IBM Plex Mono', monospace", color: 'var(--ink3)', whiteSpace: 'nowrap', zIndex: 1 } })),
+      placeLegend: ['сплошное ребро — пройдено самим, пунктир — со слов другого экземпляра', 'толщина ребра — уверенность, подпись — время в секундах с σ', 'узлов 6 из 41 · показаны только с уверенностью ≥ 0.30'],
+      identity: [
+        { kind: 'слияние', a: 'ПРЕДМЕТ_5512', b: 'ПРЕДМЕТ_1C90', op: '≡ ?', wait: '12 мин', sim: '0.78', sg: '0.21', n: '6', yes: 'Слить',
+          why: 'Один и тот же отпечаток при разном освещении. Аффордансы совпадают в 4 из 5 строк, расходится только «толкнуть».' },
+        { kind: 'расщепление', a: 'ЗВУК_D2', b: '→ 2 карточки', op: '', wait: '12 мин', sim: '0.41', sg: '0.33', n: '11', yes: 'Расщепить',
+          why: 'Под одной карточкой два разных спектра: короткий щелчок и длинный скрип. Предсказание ошибается ровно на границе между ними.' },
+        { kind: 'слияние', a: 'МЕСТО_9002', b: 'МЕСТО_B14C', op: '≡ ?', wait: '40 мин', sim: '0.64', sg: '0.29', n: '3', yes: 'Слить',
+          why: 'Виды похожи, но время перехода между ними 33 с — слишком много для одного места. Скорее всего разные.' },
+        { kind: 'слияние', a: 'СИМВОЛ_2B01', b: 'СИМВОЛ_7A3F', op: '≡ ?', wait: '1 ч 20 мин', sim: '0.37', sg: '0.35', n: '9', yes: 'Слить',
+          why: 'Совпадает контекст появления, не совпадает форма. Кандидат слабый, но повторяется четвёртый сон подряд.' },
+        { kind: 'расщепление', a: 'ЧЕЛОВЕК_02', b: '→ 2 карточки', op: '', wait: '2 ч', sim: '0.52', sg: '0.24', n: '8', yes: 'Расщепить',
+          why: 'Два разных темпа ответа: 4 с и 40 с. Возможно, это два разных источника свидетельств под одной карточкой.' },
+        { kind: 'слияние', a: 'СОСТОЯНИЕ_2C', b: 'СОСТОЯНИЕ_9F', op: '≡ ?', wait: '2 ч', sim: '0.81', sg: '0.12', n: '14', yes: 'Слить',
+          why: 'Различаются только источником: одно выведено самим, другое пришло свидетельством. Слияние сотрёт происхождение.' }
+      ].map(i => ({ ...i, kindSt: { padding: '3px 7px', border: '1px solid ' + (i.kind === 'слияние' ? 'var(--agent)' : 'var(--human)'), color: i.kind === 'слияние' ? 'var(--agent)' : 'var(--human)', font: "600 9px/1 Archivo", letterSpacing: '.12em', textTransform: 'uppercase' } })),
+      pipeline: [
+        { n: 'Гипотезы', c: '812', st: { font: "600 10px/1 Archivo", letterSpacing: '.16em', textTransform: 'uppercase', color: 'var(--sigma)' }, items: [
+          { t: 'Тёмный экран всегда наступает после ПРЕДМЕТ_1C90', mu: '0.61', sg: '0.28', n: '5', orig: 'догадка', ep: 'последняя проверка: эп 4 090' },
+          { t: 'ЗВУК_B7 предупреждает о появлении ЧЕЛОВЕК_02', mu: '0.44', sg: '0.31', n: '3', orig: 'догадка', ep: 'ждёт 3 проверки' },
+          { t: 'Панель слоёв представляет холст целиком', mu: '0.38', sg: '0.34', n: '2', orig: 'догадка', ep: 'ждёт 5 проверок' },
+          { t: 'Удержание клавиши дольше 400 мс меняет класс эффекта', mu: '0.57', sg: '0.26', n: '7', orig: 'опыт', ep: 'проверяется сейчас' },
+          { t: 'Вода в мире течёт вниз по расписанию, а не от действий', mu: '0.29', sg: '0.37', n: '2', orig: 'свидетельство', ep: 'источник: вики · доверие падает' } ] },
+        { n: 'Убеждения', c: '3 041', st: { font: "600 10px/1 Archivo", letterSpacing: '.16em', textTransform: 'uppercase', color: 'var(--proof)' }, items: [
+          { t: 'ПРЕДМЕТ_1C90 гасит свет в МЕСТО_0C4B', mu: '0.91', sg: '0.06', n: '14', orig: 'опыт', ep: 'подтверждено в эп 4 118' },
+          { t: 'Путь 0C4B → 12A0 занимает 14.2 с', mu: '0.86', sg: '0.11', n: '9', orig: 'опыт', ep: 'подтверждено в эп 4 002' },
+          { t: 'Смерть возвращает меня в МЕСТО_0C4B', mu: '0.98', sg: '0.02', n: '6', orig: 'опыт', ep: 'подтверждено в эп 3 977' },
+          { t: 'ВЫХ_2C и ВЫХ_2D дают один и тот же эффект', mu: '0.83', sg: '0.09', n: '22', orig: 'опыт', ep: 'подтверждено в эп 3 812' },
+          { t: 'Человек отвечает на вопрос в среднем за 12 с', mu: '0.66', sg: '0.24', n: '8', orig: 'свидетельство', ep: 'подтверждено в эп 4 044' } ] },
+        { n: 'Опровергнутое', c: '389', st: { font: "600 10px/1 Archivo", letterSpacing: '.16em', textTransform: 'uppercase', color: 'var(--alarm)' }, items: [
+          { t: 'Свет гаснет сам через 20 мин', mu: '0.08', sg: '0.05', n: '12', orig: 'догадка', ep: 'опровергнуто в эп 4 090' },
+          { t: 'ПРЕДМЕТ_77E1 обратим', mu: '0.11', sg: '0.09', n: '2', orig: 'догадка', ep: 'опровергнуто ценой смерти, эп 3 640' },
+          { t: 'Все символы означают одно и то же', mu: '0.04', sg: '0.03', n: '31', orig: 'догадка', ep: 'опровергнуто в эп 3 401' },
+          { t: 'Звук слева всегда означает движение слева', mu: '0.22', sg: '0.14', n: '19', orig: 'свидетельство', ep: 'источник «вики» · доверие 0.35 → 0.19' } ] }
+      ].map(c => ({ ...c, items: c.items.map(b => ({ ...b, orig: this.origStyle(b.orig).glyph + ' ' + b.orig, origSt: { color: this.origStyle(b.orig).color } })) }))
+    };
+  }
+  marks = [
+    [4.2, 'смерть', '✕', 'alarm'], [7.1, 'всплеск ошибки 1.61', '▲', 'alarm'], [11.5, 'сон 41', '◗', 'sigma'],
+    [14.8, 'смена цели', '◆', 'agent'], [19.2, 'перехват управления', '✋', 'human'], [23.0, 'смена профиля #91B0D4 → #4F2A9C', '│', 'profile'],
+    [28.4, 'всплеск ошибки 1.24', '▲', 'alarm'], [33.9, 'сон 42', '◗', 'sigma'], [41.2, 'смена цели', '◆', 'agent'],
+    [47.7, 'смерть', '✕', 'alarm'], [52.1, 'перехват управления', '✋', 'human'], [58.6, 'сон 43', '◗', 'sigma'],
+    [63.3, 'всплеск ошибки 1.08', '▲', 'alarm'], [69.8, 'смена цели', '◆', 'agent'], [74.5, 'сон 44', '◗', 'sigma'],
+    [81.0, 'всплеск ошибки 1.42', '▲', 'alarm'], [86.2, 'смена цели', '◆', 'agent'], [91.4, 'сон 45', '◗', 'sigma'], [96.1, 'перехват управления', '✋', 'human']
+  ];
+  dJournal() {
+    const s = this.state, p = s.scrub * 100;
+    const col = k => ({ alarm: 'var(--alarm)', sigma: 'var(--sigma)', agent: 'var(--agent)', human: 'var(--human)', profile: 'var(--ink)' }[k]);
+    const ep = 3200 + Math.round(s.scrub * 918);
+    return {
+      hashFilters: [['#4F2A9C · текущий', 1], ['#91B0D4', 0], ['#0A77E2', 0], ['все ветки', 0]].map(([n, on]) => ({ n, go: () => { },
+        st: { padding: '5px 9px', background: on ? 'var(--agentf)' : 'transparent', border: '1px solid ' + (on ? 'var(--agent)' : 'var(--line2)'), color: on ? 'var(--agent)' : 'var(--ink3)', font: "500 10.5px/1 'IBM Plex Mono', monospace" } })),
+      seek: e => { const b = e.currentTarget.getBoundingClientRect(); this.setState({ scrub: Math.max(0, Math.min(1, (e.clientX - b.left) / b.width)), knew: false }); },
+      jTicks: Array.from({ length: 25 }, (_, i) => ({ st: { position: 'absolute', left: (i * 4) + '%', top: 0, bottom: 0, width: '1px', background: i % 6 === 0 ? 'var(--line)' : 'var(--line2)' } })),
+      jTickLabels: Array.from({ length: 5 }, (_, i) => ({ n: 'д' + (33 + i), st: { position: 'absolute', left: 'calc(' + (i * 24) + '% + 4px)', bottom: '3px', font: "400 9px/1 'IBM Plex Mono', monospace", color: 'var(--ink3)' } })),
+      jMarks: this.marks.map(([x, title, g, k]) => ({ title,  g,
+        line: { position: 'absolute', left: x + '%', top: k === 'profile' ? 0 : '18px', bottom: 0, width: k === 'profile' ? '2px' : '1px', background: col(k), opacity: k === 'profile' ? 1 : .45 },
+        dot: { position: 'absolute', left: x + '%', top: k === 'profile' ? '2px' : '4px', transform: 'translateX(-50%)', font: "10px/1 'IBM Plex Mono', monospace", color: col(k), background: 'var(--panel)', padding: '1px 2px' } })),
+      playhead: { position: 'absolute', left: p + '%', top: 0, bottom: 0, width: '2px', background: 'var(--driver)', boxShadow: '0 0 0 1px var(--bg)' },
+      playLabel: { position: 'absolute', left: p + '%', top: '30px', transform: 'translateX(-50%)', background: 'var(--driver)', color: 'var(--bg)', padding: '2px 6px', font: "600 10px/1 'IBM Plex Mono', monospace", whiteSpace: 'nowrap' },
+      scrubT: 'эп ' + this.fmt(ep) + ' · д' + (33 + Math.floor(s.scrub * 4)) + ' ' + this.hhmmss(s.scrub * 86400),
+      jLegend: [['✕', 'смерть', 'alarm'], ['▲', 'всплеск ошибки', 'alarm'], ['◆', 'смена цели', 'agent'], ['✋', 'перехват', 'human'], ['◗', 'границы сна', 'sigma'], ['│', 'смена профиля', 'profile']]
+        .map(([g, n, k]) => ({ g, n, st: { color: col(k), font: "11px/1 'IBM Plex Mono', monospace" } })),
+      stepBack: () => this.setState(st => ({ scrub: Math.max(0, st.scrub - .002), knew: false })),
+      stepFwd: () => this.setState(st => ({ scrub: Math.min(1, st.scrub + .002), knew: false })),
+      strip: Array.from({ length: 15 }, (_, i) => ({ n: (i === 7 ? '▶ ' : '') + this.fmt(ep * 34 + (i - 7) * 3),
+        st: { flex: '1 1 0', minWidth: 0, display: 'flex', flexDirection: 'column', height: '76px', border: '1px solid ' + (i === 7 ? 'var(--driver)' : 'var(--line2)'), opacity: i === 7 ? 1 : .62 } })),
+      sawRows: [['слоёв активно', '4 из 4'], ['окон внимания', '2 · 1.1 запр/с'], ['сущностей отмечено', '3'], ['звук', 'ЗВУК_B7 слева, 246°'], ['ошибка предсказания', '1.24']].map(([n, v]) => ({ n, v })),
+      busyRows: [['действие', 'ВЫХ_2C нажата 120 мс'], ['кто действовал', 'агент'], ['потрачено из бюджета', '118 / 240 с'], ['размыкатель', 'делать'], ['эмоция', 'досада']]
+        .map(([n, v]) => ({ n, v, st: { font: "500 11px/1 'IBM Plex Mono', monospace", color: v === 'агент' ? 'var(--agent)' : v === 'досада' ? 'var(--human)' : 'var(--ink2)' } })),
+      toggleKnew: () => this.setState(st => ({ knew: !st.knew })), knewOn: s.knew, knewOff: !s.knew,
+      knewSt: { padding: '6px 10px', background: s.knew ? 'var(--agentf)' : 'transparent', border: '1px solid ' + (s.knew ? 'var(--agent)' : 'var(--line)'), color: s.knew ? 'var(--agent)' : 'var(--ink2)', font: "600 9.5px/1 Archivo", letterSpacing: '.08em', textTransform: 'uppercase' },
+      knewRows: [
+        { t: 'ПРЕДМЕТ_1C90 гасит свет', mu: '0.64', sg: '0.19', n: '5', d: 'позже вырастет до 0.91' },
+        { t: 'Путь 0C4B → 12A0 занимает 12 с', mu: '0.51', sg: '0.34', n: '3', d: 'позже уточнится до 14.2 с' },
+        { t: 'СИМВОЛ_7A3F ещё не заведён', mu: '—', sg: '—', n: '0', d: 'появится через 26 эпизодов' },
+        { t: 'Смерть возвращает в МЕСТО_0C4B', mu: '0.98', sg: '0.02', n: '6', d: 'не менялось' },
+        { t: 'ПРЕДМЕТ_77E1 обратим', mu: '0.55', sg: '0.29', n: '1', d: 'будет опровергнуто ценой смерти' }
+      ].map(r => ({ ...r, dSt: { color: 'var(--ink3)' } })),
+      moodRows: [['валентность', '−0.31', .345, 'sigma'], ['возбуждение', '+0.72', .86, 'sigma'], ['целостность', '0.42', .42, 'alarm'], ['энергия', '0.55', .55, 'human'], ['любопытство', '0.88', .88, 'agent'], ['компетентность', '0.49', .49, 'agent']]
+        .map(([n, v, r, k]) => ({ n, v, bar: { position: 'absolute', left: 0, top: 0, bottom: 0, width: (r * 100) + '%', background: col(k) } }))
+    };
+  }
+  dKeys() {
+    const CL = { move: ['→', 'перемещение'], axis: ['↔', 'ось'], mode: ['▣', 'режим'], imp: ['↯', 'импульс'], mod: ['⇧', 'модификатор'], ctx: ['◇', 'контекстное'] };
+    const known = { W: ['move', .94, 'высокая'], A: ['move', .91, 'высокая'], S: ['move', .93, 'высокая'], D: ['move', .90, 'высокая'], E: ['mode', .66, 'средняя'], Q: ['ctx', .38, 'низкая'], F: ['imp', .44, 'низкая'], R: ['imp', .29, 'неизвестна'], '1': ['ctx', .61, 'высокая'], '2': ['ctx', .58, 'высокая'], '3': ['ctx', .55, 'высокая'], Esc: ['mode', .88, 'высокая'], Tab: ['mode', .71, 'высокая'], 'Пробел': ['imp', .81, 'средняя'] };
+    const mods = { Shift: .77, Ctrl: .52, Alt: .21 };
+    const silent = ['J', 'K', 'L', 'P', '[', ']', '\\', '7', '8', '9', '0', 'F5', 'F6', 'N', 'M', 'Z', 'H', ';', "'", '/', '-', '='];
+    const rows = [
+      ['Esc', 'F1', 'F2', 'F3', 'F4', 'F5', 'F6', 'F7', 'F8', 'F9', 'F10', 'F11', 'F12'],
+      ['`', '1', '2', '3', '4', '5', '6', '7', '8', '9', '0', '-', '='],
+      ['Tab', 'Q', 'W', 'E', 'R', 'T', 'Y', 'U', 'I', 'O', 'P', '[', ']', '\\'],
+      ['Caps', 'A', 'S', 'D', 'F', 'G', 'H', 'J', 'K', 'L', ';', "'"],
+      ['Shift', 'Z', 'X', 'C', 'V', 'B', 'N', 'M', ',', '.', '/'],
+      ['Ctrl', 'Alt', 'Пробел', 'Alt', 'Ctrl']
+    ];
+    let hi = 0;
+    const hashOf = g => 'ВЫХ_' + (g.charCodeAt(0) * 7 % 200 + 44).toString(16).toUpperCase().padStart(2, '0');
+    const kbRows = rows.map(r => ({
+      keys: r.map(g => {
+        const k = known[g], m = mods[g];
+        const st = m !== undefined ? 'mod' : k ? 'live' : silent.indexOf(g) >= 0 ? 'silent' : 'untried';
+        const box = { flex: g === 'Пробел' ? '6 1 0' : (g.length > 2 || g === 'Caps' ? '1.6 1 0' : '1 1 0'), minWidth: 0, height: '40px', padding: '4px 5px', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', border: '1px ' + (st === 'untried' ? 'dashed' : 'solid') + ' ' + (st === 'live' ? 'var(--agent)' : st === 'mod' ? 'var(--sigma)' : st === 'silent' ? 'var(--line)' : 'var(--line2)'), background: st === 'live' ? 'var(--agentf)' : st === 'mod' ? 'var(--sigmaf)' : 'var(--bg)', opacity: st === 'untried' ? .5 : 1 };
+        return { g, st: box,
+          title: st === 'live' ? 'открыта · ' + CL[k[0]][1] + ' · уверенность ' + k[1].toFixed(2) + ' · обратимость ' + k[2] : st === 'mod' ? 'модификатор · уверенность ' + m.toFixed(2) : st === 'silent' ? 'пробована, эффекта нет' : 'не пробована',
+          glyphSt: { font: "600 12px/1 'IBM Plex Mono', monospace", color: st === 'live' ? 'var(--ink)' : st === 'mod' ? 'var(--ink)' : 'var(--ink3)' },
+          cls: st === 'live' ? CL[k[0]][0] : st === 'mod' ? CL.mod[0] : '',
+          classSt: { font: "11px/1 'IBM Plex Mono', monospace", color: st === 'mod' ? 'var(--sigma)' : 'var(--agent)' },
+          hash: st === 'live' ? k[1].toFixed(2) : st === 'mod' ? m.toFixed(2) : st === 'silent' ? '—' : '',
+          hashSt: { font: "400 8.5px/1 'IBM Plex Mono', monospace", color: 'var(--ink3)', whiteSpace: 'nowrap', overflow: 'hidden' } };
+      })
+    }));
+    const msty = c => ({ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRight: '1px solid var(--line)', borderBottom: '1px solid var(--line)', background: c, font: "500 9px/1 'IBM Plex Mono', monospace", color: 'var(--ink)' });
+    return {
+      kbRows,
+      mouseL: msty('var(--agentf)'), mouseR: msty('var(--agentf)'),
+      mouseRows: [['ЛКМ', 'импульс', '0.89', 'средняя'], ['ПКМ', 'контекстное', '0.62', 'высокая'], ['колесо', 'ось', '0.74', 'высокая'], ['движение', 'ось ×2', '0.96', 'высокая']]
+        .map(([n, cls, conf, rev]) => ({ n, cls, conf, rev, clsSt: { padding: '2px 5px', border: '1px solid var(--agent)', color: 'var(--agent)', font: "400 9px/1 Archivo" } })),
+      kbLegend: [['не пробована', '394', { border: '1px dashed var(--line2)', background: 'var(--bg)' }],
+        ['пробована, эффекта нет — молчащая', '81', { border: '1px solid var(--line)', background: 'var(--bg)' }],
+        ['эффект есть, класс определён', '14', { border: '1px solid var(--agent)', background: 'var(--agentf)' }],
+        ['модификатор', '3', { border: '1px solid var(--sigma)', background: 'var(--sigmaf)' }]]
+        .map(([n, c, sw]) => ({ n, c, sw: { ...sw, width: '22px', height: '15px', flex: '0 0 auto', display: 'block' } })),
+      clsLegend: Object.keys(CL).map(k => ({ g: CL[k][0], n: CL[k][1], c: { move: '4', axis: '3', mode: '3', imp: '3', mod: '3', ctx: '4' }[k] })),
+      combos: [
+        { k: 'Shift + W', w: 'перебором', eff: 'перемещение ускоряется примерно вдвое, энергия падает быстрее', conf: '0.84', n: '31' },
+        { k: 'Ctrl + Пробел', w: 'раскопками в журнале', eff: 'ничего не делает в этом месте, но делает в МЕСТО_12A0 — контекстное', conf: '0.41', n: '7' },
+        { k: 'Shift + ЛКМ', w: 'раскопками в журнале', eff: 'кадр меняется целиком, назад вернулось не полностью', conf: '0.57', n: '4' },
+        { k: 'Ctrl + 1', w: 'перебором', eff: 'режим переключается и держится до повторного нажатия', conf: '0.69', n: '12' },
+        { k: 'Alt + Tab', w: 'перебором', eff: 'весь кадр подменяется другим. Единственный выход обратно — то же сочетание', conf: '0.73', n: '9' }
+      ].map(c => ({ ...c, wSt: { padding: '2px 6px', border: '1px solid ' + (c.w === 'перебором' ? 'var(--line)' : 'var(--sigma)'), color: c.w === 'перебором' ? 'var(--ink3)' : 'var(--sigma)', font: "400 9px/1 Archivo" } })),
+      holds: [
+        { k: 'ВЫХ_2C', t: '< 120 мс', eff: 'шаг: кадр смещается один раз' },
+        { k: 'ВЫХ_2C', t: '120–400 мс', eff: 'то же, но кадр смещается непрерывно' },
+        { k: 'ВЫХ_2C', t: '> 400 мс', eff: 'меняется класс: включается режим, отпускание его не снимает' },
+        { k: 'ВЫХ_5A', t: '> 900 мс', eff: 'необратимое: кадр меняется и не возвращается. Порог 0.72 запрещает без цели' }
+      ]
+    };
+  }
+  dSleep() {
+    const mono = (c) => ({ font: "600 14px/1 'IBM Plex Mono', monospace", color: c });
+    return {
+      staleReality: true,
+      sleeps: [
+        { n: 'Прогон 45', when: 'д37 03:40', dur: '4 мин 12 с', kind: 'только синтетика',
+          stats: [['слито', '14', 'ink'], ['расщеплено', '3', 'ink'], ['скриптов добыто', '2', 'proof'], ['понижено', '61', 'ink3']],
+          notes: ['Слиты ПРЕДМЕТ_5512 и ПРЕДМЕТ_1C90: один и тот же выключатель при разном свете.', 'Добыт СКРИПТ_44A «подойти → нажать → отступить», 26 запусков уже в журнале.'] },
+        { n: 'Прогон 44', when: 'д37 03:00', dur: '3 мин 51 с', kind: 'только синтетика',
+          stats: [['слито', '9', 'ink'], ['расщеплено', '1', 'ink'], ['скриптов добыто', '0', 'ink3'], ['понижено', '48', 'ink3']],
+          notes: ['Расщеплён ЗВУК_D2 на щелчок и скрип: предсказание ошибалось ровно на границе.'] },
+        { n: 'Прогон 43', when: 'д37 02:20', dur: '5 мин 06 с', kind: 'сверка с реальностью',
+          stats: [['слито', '21', 'ink'], ['расщеплено', '4', 'ink'], ['скриптов добыто', '1', 'proof'], ['понижено', '77', 'ink3']],
+          notes: ['После сверки σ по карте сузилась с 0.27 до 0.19. Три убеждения о звуке пришлось опровергнуть.'] },
+        { n: 'Прогон 42', when: 'д37 01:40', dur: '3 мин 22 с', kind: 'только синтетика',
+          stats: [['слито', '6', 'ink'], ['расщеплено', '0', 'ink3'], ['скриптов добыто', '1', 'proof'], ['понижено', '39', 'ink3']],
+          notes: ['Понижен ранг 39 карточек, к которым не обращались 40 ч.'] },
+        { n: 'Прогон 41', when: 'д37 01:00', dur: '4 мин 44 с', kind: 'только синтетика',
+          stats: [['слито', '11', 'ink'], ['расщеплено', '2', 'ink'], ['скриптов добыто', '3', 'proof'], ['понижено', '52', 'ink3']],
+          notes: ['Рефлекс «уклонение на ЗВУК_B7» переучен на синтетике и с тех пор в реальности не проверялся.'] }
+      ].map(s => ({ ...s,
+        kindSt: { padding: '3px 7px', border: '1px solid ' + (s.kind === 'сверка с реальностью' ? 'var(--proof)' : 'var(--alarm)'), color: s.kind === 'сверка с реальностью' ? 'var(--proof)' : 'var(--alarm)', font: "400 9px/1 Archivo", letterSpacing: '.1em', textTransform: 'uppercase' },
+        stats: s.stats.map(([n, v, t]) => ({ n, v, st: mono({ ink: 'var(--ink)', ink3: 'var(--ink3)', proof: 'var(--proof)' }[t]) })) })),
+      dreamStats: [
+        { n: 'Синтетических эпизодов', v: '18 402', sub: 'за 45 прогонов', st: mono('var(--ink)') },
+        { n: 'Доля синтетики в обучении', v: '78 %', sub: 'опасно высоко', st: mono('var(--alarm)') },
+        { n: 'Расхождение сон / мир', v: '0.24', sub: 'растёт 4 прогона подряд', st: mono('var(--alarm)') }
+      ],
+      curveLegend: [['ошибка на реальных эпизодах', 'var(--agent)'], ['ошибка на синтетике', 'var(--sigma)'], ['расхождение между ними', 'var(--alarm)']]
+        .map(([n, c]) => ({ n, sw: { width: '14px', height: '2px', background: c, display: 'block' } })),
+      reflexVers: [
+        { id: 'R-45', note: 'уклонение на ЗВУК_B7, переучено на синтетике', date: 'д37 03:44', metric: '0.31', good: false, cur: true },
+        { id: 'R-44', note: 'то же + подавление лишних нажатий', date: 'д37 03:04', metric: '0.28', good: true },
+        { id: 'R-43', note: 'после сверки с реальностью', date: 'д37 02:25', metric: '0.19', good: true, best: true },
+        { id: 'R-42', note: 'первая версия с длительностями', date: 'д37 01:43', metric: '0.34', good: false },
+        { id: 'R-41', note: 'базовая, только WASD', date: 'д37 01:05', metric: '0.52', good: false }
+      ].map(v => ({ id: v.id, note: v.note, date: v.date, metric: v.metric,
+        idSt: { font: "600 12px/1 'IBM Plex Mono', monospace", color: v.cur ? 'var(--agent)' : 'var(--ink2)' },
+        mSt: { font: "600 13px/1 'IBM Plex Mono', monospace", color: v.best ? 'var(--proof)' : +v.metric > .3 ? 'var(--alarm)' : 'var(--ink)', textAlign: 'right' },
+        btn: v.cur ? 'сейчас' : 'откатить',
+        btnSt: { padding: '5px 9px', background: v.cur ? 'var(--agentf)' : 'transparent', border: '1px solid ' + (v.cur ? 'var(--agent)' : 'var(--line)'), color: v.cur ? 'var(--agent)' : 'var(--ink2)', font: "600 9.5px/1 Archivo", letterSpacing: '.08em', textTransform: 'uppercase' } }))
+    };
+  }
+  drawCurves(c, p) {
+    if (!c) return; const { x, w, h } = c;
+    x.strokeStyle = p.grid; x.lineWidth = 1;
+    for (let i = 1; i < 4; i++) { const y = Math.round(h * i / 4) + .5; x.beginPath(); x.moveTo(0, y); x.lineTo(w, y); x.stroke(); }
+    const N = 45;
+    const series = [
+      { c: p.agent, f: i => .62 * Math.exp(-i / 14) + .17 + Math.sin(i / 3) * .012 },
+      { c: p.sigma, f: i => .60 * Math.exp(-i / 9) + .06 + Math.sin(i / 4) * .01 },
+      { c: p.alarm, f: i => Math.max(0, (.62 * Math.exp(-i / 14) + .17) - (.60 * Math.exp(-i / 9) + .06)) }
+    ];
+    series.forEach(s => {
+      x.beginPath();
+      for (let i = 0; i < N; i++) { const px = i / (N - 1) * (w - 6) + 3, py = h - 4 - Math.min(1, s.f(i) / .7) * (h - 12); i ? x.lineTo(px, py) : x.moveTo(px, py); }
+      x.strokeStyle = s.c; x.lineWidth = 1.3; x.stroke();
+    });
+  }
+  runsData = [
+    { id: 'R-16', prof: 'ЛЕПЕТ-К7 #4F2A9C', seed: '8 471 220 913', dur: '412 ч', m: ['0.71', '0.62', '38 с', '0.19', '0.04', '9.1 ц'], cur: true },
+    { id: 'R-15', prof: 'ЛЕПЕТ-К7 #4F2A9C', seed: '2 004 771 002', dur: '380 ч', m: ['0.69', '0.58', '41 с', '0.21', '0.05', '8.4 ц'] },
+    { id: 'R-14', prof: 'ЛЕПЕТ-К6 #91B0D4', seed: '8 471 220 913', dur: '404 ч', m: ['0.66', '0.51', '77 с', '0.24', '0.06', '7.2 ц'] },
+    { id: 'R-12', prof: 'СМЕЛЫЙ-Б2 #C41F08', seed: '8 471 220 913', dur: '291 ч', m: ['0.63', '0.66', '22 с', '0.31', '0.09', '6.0 ц'] },
+    { id: 'R-11', prof: 'ТИХИЙ-А9 #7712FF', seed: '5 990 004 118', dur: '360 ч', m: ['0.74', '0.44', '120 с', '0.17', '0.03', '10.4 ц'] },
+    { id: 'R-09', prof: 'ЛЕПЕТ-К5 #0A77E2', seed: '8 471 220 913', dur: '402 ч', m: ['0.58', '0.49', '86 с', '0.29', '0.41', '5.1 ц'], dirty: true },
+    { id: 'R-07', prof: 'БЕЗ-СНА-Д1 #33AA10', seed: '8 471 220 913', dur: '388 ч', m: ['0.44', '0.31', '210 с', '0.44', '0.07', '2.2 ц'] },
+    { id: 'R-04', prof: 'БЕЗ-ЭМОЦИЙ-Э0 #FF9900', seed: '8 471 220 913', dur: '396 ч', m: ['0.68', '0.39', '188 с', '0.22', '0.05', '6.6 ц'] }
+  ];
+  dExp() {
+    const s = this.state;
+    const A = this.runsData.find(r => r.id === s.runA) || this.runsData[0];
+    const B = this.runsData.find(r => r.id === s.runB) || this.runsData[1];
+    const names = ['точность предсказания', 'цели с пройденным тестом', 'время до отказа от цели', 'средняя σ по карте', 'детектор загрязнения', 'горизонт воображения'];
+    const lowerBetter = [false, false, true, true, true, false];
+    const num = v => parseFloat(String(v).replace(',', '.'));
+    const pick = (id) => this.setState(st => st.runA === id ? {} : { runB: st.runA, runA: id });
+    const diffPairs = [
+      ['Порог необратимости', '0.55', '0.72'],
+      ['Вес любопытства', '0.51', '0.38'],
+      ['Частота сна', '25 мин', '40 мин'],
+      ['Рандомизация рецептов', 'выключена', 'включена']
+    ];
+    const clean = A.prof.slice(0, 6) === B.prof.slice(0, 6);
+    return {
+      runAName: A.id, runBName: B.id,
+      runs: this.runsData.map(r => {
+        const sel = r.id === A.id ? 'a' : r.id === B.id ? 'b' : null;
+        return { id: r.id, prof: r.prof, seed: r.seed, dur: r.dur, go: () => pick(r.id),
+          st: { display: 'grid', width: '100%', gridTemplateColumns: '78px 132px 92px 84px repeat(6,1fr)', gap: '8px', alignItems: 'center', textAlign: 'left', padding: '10px 16px', background: sel ? 'var(--panel)' : 'transparent', border: 0, borderLeft: '3px solid ' + (sel === 'a' ? 'var(--driver)' : sel === 'b' ? 'var(--ink3)' : 'transparent'), borderBottom: '1px solid var(--line2)' },
+          idSt: { font: "600 12px/1 'IBM Plex Mono', monospace", color: sel ? 'var(--ink)' : 'var(--ink2)', textAlign: 'left' },
+          metrics: r.m.map((v, i) => ({ v, st: { font: "500 12px/1 'IBM Plex Mono', monospace", textAlign: 'right', color: i === 4 && num(v) > .2 ? 'var(--alarm)' : i === 3 ? 'var(--sigma)' : 'var(--ink)' } })) };
+      }),
+      runDiff: diffPairs.map(([n, a, b], i) => ({ n, a, b,
+        st: { display: 'grid', gridTemplateColumns: '1fr 100px 100px', gap: '10px', alignItems: 'baseline', padding: '8px 14px', borderBottom: '1px solid var(--line2)', background: i === 3 ? 'var(--alarmf)' : 'transparent' } })),
+      cleanSt: { padding: '3px 8px', border: '1px solid ' + (clean ? 'var(--proof)' : 'var(--alarm)'), color: clean ? 'var(--proof)' : 'var(--alarm)', font: "600 9px/1 Archivo", letterSpacing: '.1em', textTransform: 'uppercase' },
+      cleanLabel: clean ? 'чистая абляция · вес выше' : 'не абляция · различий больше одного',
+      cleanNote: clean
+        ? 'Профили различаются ровно одним параметром. Разница метрик приписывается ему; результат весит больше остальных сравнений.'
+        : 'Профили различаются больше чем одним параметром, и один из них структурный. Дельты ниже показаны, но приписать их какому-то одному изменению нельзя.',
+      metricDelta: names.map((n, i) => {
+        const a = num(A.m[i]), b = num(B.m[i]);
+        const d = b - a, better = lowerBetter[i] ? d < 0 : d > 0;
+        return { n, a: A.m[i], b: B.m[i], d: (d > 0 ? '+' : '') + d.toFixed(2),
+          dSt: { font: "600 12px/1 'IBM Plex Mono', monospace", textAlign: 'right', color: Math.abs(d) < 0.005 ? 'var(--ink3)' : better ? 'var(--proof)' : 'var(--alarm)' } };
+      })
+    };
+  }
+  dInst() {
+    const col = { 'живёт': 'var(--agent)', 'спит': 'var(--sigma)', 'остановлен': 'var(--alarm)', 'свободен': 'var(--ink3)' };
+    const list = [
+      { id: 'ЭКЗ-01', status: 'живёт', age: '412 ч', world: 'песочница · блоки', seed: '8 471 220 913', busy: 'Ищет, чем гасится свет в МЕСТО_0C4B', found: 'СКРИПТ_44A: подойти → нажать → отступить', err: '0.34', sg: '0.19', cards: '18 412' },
+      { id: 'ЭКЗ-02', status: 'живёт', age: '388 ч', world: 'песочница · пещеры', seed: '2 004 771 002', busy: 'Третий час перебирает сочетания с модификаторами', found: 'Alt+Tab подменяет весь кадр', err: '0.51', sg: '0.28', cards: '14 907' },
+      { id: 'ЭКЗ-03', status: 'живёт', age: '96 ч', world: 'стелс · этаж 2', seed: '5 990 004 118', busy: 'Замирает на ЗВУК_B7 и ждёт', found: 'Замереть дешевле, чем убегать', err: '0.29', sg: '0.22', cards: '6 004' },
+      { id: 'ЭКЗ-04', status: 'спит', age: '402 ч', world: 'песочница · блоки', seed: '8 471 220 913', busy: 'Прогон сна 45, слияние карточек', found: '—', err: '—', sg: '0.24', cards: '17 220' },
+      { id: 'ЭКЗ-05', status: 'спит', age: '360 ч', world: 'браузер · формы', seed: '1 200 448 771', busy: 'Прогон сна 38, добыча скриптов', found: '—', err: '—', sg: '0.31', cards: '9 118' },
+      { id: 'ЭКЗ-06', status: 'остановлен', age: '291 ч', world: 'песочница · блоки', seed: '8 471 220 913', busy: 'Остановлен исследователем после серии необратимых действий', found: 'Необратимое ВЫХ_5A ценой смерти', err: '0.88', sg: '0.44', cards: '11 002' },
+      { id: 'ЭКЗ-07', status: 'свободен', age: '—', world: 'слот свободен', seed: '—', busy: 'Ждёт назначения профиля и сида', found: '—', err: '—', sg: '—', cards: '—' },
+      { id: 'ЭКЗ-08', status: 'свободен', age: '—', world: 'слот свободен', seed: '—', busy: 'Ждёт назначения профиля и сида', found: '—', err: '—', sg: '—', cards: '—' }
+    ];
+    return {
+      instances: list.map(i => ({ ...i,
+        wrap: { background: 'var(--bg)', padding: '12px', display: 'flex', flexDirection: 'column', gap: '9px', opacity: i.status === 'свободен' ? .45 : 1 },
+        dot: { width: '8px', height: '8px', borderRadius: '50%', background: col[i.status], display: 'block', flex: '0 0 auto' },
+        stSt: { padding: '2px 6px', border: '1px solid ' + col[i.status], color: col[i.status], font: "400 9px/1 Archivo", letterSpacing: '.1em', textTransform: 'uppercase' },
+        newSt: { font: "400 11.5px/1.35 Archivo", color: i.found === '—' ? 'var(--ink3)' : 'var(--proof)', textWrap: 'pretty' } })),
+      mergeQueue: [
+        { from: 'ЭКЗ-02', t: 'Alt+Tab подменяет весь кадр, обратно — то же сочетание', orig: 'свидетельство', trust: '0.55', sg: '0.14', conflict: false, b1: 'В перепроверку' },
+        { from: 'ЭКЗ-03', t: 'Замереть на звук дешевле, чем убегать', orig: 'свидетельство', trust: '0.55', sg: '0.19', conflict: false, b1: 'В перепроверку' },
+        { from: 'ЭКЗ-02', t: 'ПРЕДМЕТ_1C90 обратим всегда', orig: 'свидетельство', trust: '0.55', sg: '0.26', conflict: true, mine: '0.93 обратим только в МЕСТО_0C4B, n 14', b1: 'Решить конфликт' },
+        { from: 'ЭКЗ-06', t: 'Смерть не возвращает в МЕСТО_0C4B', orig: 'свидетельство', trust: '0.31', sg: '0.38', conflict: true, mine: '0.98 возвращает, n 6 · у них другой сид', b1: 'Решить конфликт' },
+        { from: 'ЭКЗ-05', t: 'Поля ввода принимают текст только после нажатия по ним', orig: 'свидетельство', trust: '0.55', sg: '0.11', conflict: false, b1: 'В перепроверку' },
+        { from: 'человек', t: 'Рычаг у двери — это то же, что рычаг в мастерской', orig: 'свидетельство', trust: '0.80', sg: '0.22', conflict: false, b1: 'В перепроверку' }
+      ].map(m => ({ ...m,
+        st: { display: 'grid', gridTemplateColumns: '96px 1fr 108px 84px 92px 132px', gap: '10px', alignItems: 'center', padding: '10px 16px', borderBottom: '1px solid var(--line2)', background: m.conflict ? 'var(--alarmf)' : 'transparent' },
+        origSt: { padding: '2px 6px', border: '1px solid var(--human)', color: 'var(--human)', font: "400 9px/1 Archivo", letterSpacing: '.06em', justifySelf: 'start' },
+        b1st: { padding: '5px 8px', background: m.conflict ? 'var(--alarm)' : 'var(--panel)', border: '1px solid ' + (m.conflict ? 'var(--alarm)' : 'var(--line)'), color: m.conflict ? 'var(--bg)' : 'var(--ink2)', font: "600 9px/1 Archivo", letterSpacing: '.08em', textTransform: 'uppercase', whiteSpace: 'nowrap' } }))
+    };
+  }
+  dObs() {
+    const s = this.state, human = s.driver !== 'agent';
+    return {
+      obsBanner: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '18px', flexWrap: 'wrap', padding: '18px 16px', background: human ? 'var(--humanf)' : 'var(--panel)', borderBottom: '2px solid ' + (human ? 'var(--human)' : 'var(--line)') },
+      obsWord: { font: "700 40px/1 'IBM Plex Mono', monospace", letterSpacing: '.04em', color: human ? 'var(--human)' : 'var(--ink3)' },
+      obsMode: human ? 'ЧЕЛОВЕК ЗА РУЛЁМ' : 'АГЕНТ ЗА РУЛЁМ',
+      obsNote: human
+        ? 'Играешь ты, агент смотрит. Всё, что он здесь получит, войдёт в журнал как свидетельство, а не как собственный опыт.'
+        : 'Экран наблюдения открыт, но за рулём агент. Переключи режим, чтобы начать сессию наблюдения.',
+      obsSwap: () => this.setState({ driver: human ? 'agent' : 'human' }),
+      obsSwapLabel: human ? 'Вернуть управление агенту' : 'Взять управление',
+      obsSwapSt: { padding: '12px 18px', background: human ? 'transparent' : 'var(--human)', border: '1px solid var(--human)', color: human ? 'var(--human)' : 'var(--bg)', font: "700 12px/1 Archivo", letterSpacing: '.14em', textTransform: 'uppercase' },
+      hitPct: '62 %', hitRaw: '41 из 66 · растёт 0.4 %/мин',
+      predRows: [
+        { act: 'ВЫХ_2C · шаг вперёд', p: '0.44', r: .44, why: 'после трёх шагов подряд обычно идёт четвёртый' },
+        { act: 'ЛКМ по ПРЕДМЕТ_1C90', p: '0.31', r: .31, why: 'ты подвёл курсор и остановился' },
+        { act: 'Shift + ВЫХ_2C', p: '0.14', r: .14, why: 'редко, но встречалось при длинных переходах' },
+        { act: 'ничего · пауза дольше 2 с', p: '0.11', r: .11, why: 'ты часто замираешь перед новым местом' }
+      ].map(p => ({ ...p, bar: { position: 'absolute', left: 0, top: 0, bottom: 0, width: (p.r * 100) + '%', background: 'var(--human)' } })),
+      intercepts: [
+        { t: 'д37 04:31:12', agent: 'нажать ВЫХ_5A · необратимое, порог не пройден', human: 'отвёл курсор и ушёл влево', d: '0.82' },
+        { t: 'д37 04:12:40', agent: 'идти к МЕСТО_12A0', human: 'остался и открыл ПРЕДМЕТ_77E1', d: '0.61' },
+        { t: 'д37 03:58:02', agent: 'замереть на ЗВУК_B7', human: 'пошёл на звук', d: '0.74' },
+        { t: 'д37 03:31:55', agent: 'нажать ВЫХ_2C', human: 'нажал ВЫХ_2C', d: '0.04' },
+        { t: 'д37 02:47:19', agent: 'ждать окончания СИМВОЛ_7A3F', human: 'закрыл его нажатием', d: '0.55' }
+      ].map(i => ({ ...i, dSt: { font: "600 12px/1 'IBM Plex Mono', monospace", textAlign: 'right', color: +i.d > .6 ? 'var(--alarm)' : +i.d > .3 ? 'var(--human)' : 'var(--proof)' } })),
+      keypressOpts: [['выключено — выводит из следствий', false], ['включено — видит напрямую', true]].map(([n, v]) => ({ n,
+        go: () => this.setState({ keypress: v }),
+        st: { flex: 1, padding: '9px 10px', textAlign: 'left', background: s.keypress === v ? (v ? 'var(--humanf)' : 'var(--panel2)') : 'transparent', border: '1px solid ' + (s.keypress === v ? (v ? 'var(--human)' : 'var(--line)') : 'var(--line2)'), color: s.keypress === v ? (v ? 'var(--human)' : 'var(--ink)') : 'var(--ink3)', font: "500 10.5px/1.3 Archivo" } })),
+      keypressNote: s.keypress
+        ? 'Нажатия видны агенту напрямую. Каждое помечается в журнале как свидетельство: он не выводил это сам. Метрика «детектор загрязнения» перестаёт быть чистой.'
+        : 'Агент не видит твоих нажатий и восстанавливает их из следствий на экране. Это дороже и медленнее, но остаётся его собственным опытом.',
+      keypressNoteSt: { font: "400 10.5px/1.45 Archivo", color: s.keypress ? 'var(--human)' : 'var(--ink3)', textWrap: 'pretty' },
+      obsQuestions: [
+        { q: 'Ты нажал по рычагу, но свет не погас. Значит, он гасит свет не всегда?', sg: '0.48', gain: '0.36', t: '12 с назад' },
+        { q: 'Куда ты идёшь, когда звук приходит слева?', sg: '0.41', gain: '0.29', t: '3 мин назад' },
+        { q: 'То, что появилось в углу, — это про меня или про мир?', sg: '0.55', gain: '0.31', t: '9 мин назад' }
+      ]
+    };
+  }
+
+  renderVals() {
+    const s = this.state, S = this;
+    const mono = "500 11px/1 'IBM Plex Mono', monospace";
+    const tabBase = { display: 'flex', alignItems: 'center', gap: '7px', padding: '9px 13px', background: 'transparent', border: 0, borderRight: '1px solid var(--line2)', borderBottom: '2px solid transparent', color: 'var(--ink3)', font: "600 10.5px/1 Archivo", letterSpacing: '.1em', textTransform: 'uppercase', whiteSpace: 'nowrap' };
+    const tabOn = { color: 'var(--ink)', background: 'var(--panel2)', borderBottom: '2px solid var(--driver)' };
+    const ids = [['live', '1', 'Живое'], ['profile', '2', 'Профиль'], ['memory', '3', 'Память'], ['journal', '4', 'Журнал'], ['body', '5', 'Тело действий'], ['learn', '6', 'Обучение'], ['exp', '7', 'Эксперименты'], ['inst', '8', 'Экземпляры'], ['observe', '9', 'Наблюдение']];
+
+    const clockBox = { display: 'flex', flexDirection: 'column', gap: '3px', justifyContent: 'center', padding: '8px 11px', borderRight: '1px solid var(--line)', minWidth: '104px' };
+    const clockVal = { font: "600 15px/1 'IBM Plex Mono', monospace", color: 'var(--ink)' };
+    const clockDim = { font: "600 15px/1 'IBM Plex Mono', monospace", color: 'var(--ink3)', opacity: .45 };
+    const contentOn = s.driver === 'agent' && !s.stopped;
+
+    const drives = [
+      { n: 'Целостность', v: .86, lo: .70, hi: 1, f: .79, c: 'var(--proof)' },
+      { n: 'Энергия', v: .41, lo: .35, hi: .90, f: .27, c: 'var(--human)' },
+      { n: 'Любопытство', v: .72, lo: .40, hi: .80, f: .81, c: 'var(--agent)' },
+      { n: 'Компетентность', v: .55, lo: .50, hi: 1, f: .58, c: 'var(--agent)' },
+      { n: 'Порядок', v: .33, lo: .30, hi: .70, f: .31, c: 'var(--ink2)' },
+      { n: 'Социальность', v: .18, lo: .10, hi: .60, f: .24, c: 'var(--ink2)' }
+    ].map(d => ({
+      n: d.n, vt: d.v.toFixed(2), ft: (d.f > d.v ? '↗ ' : '↘ ') + d.f.toFixed(2),
+      fst: { font: "500 10px/1 'IBM Plex Mono', monospace", color: (d.f < d.lo || d.f > d.hi) ? 'var(--alarm)' : 'var(--ink3)' },
+      corr: { position: 'absolute', left: (d.lo * 100) + '%', width: ((d.hi - d.lo) * 100) + '%', top: 0, bottom: 0, background: 'var(--panel2)' },
+      fill: { position: 'absolute', left: 0, top: '2px', bottom: '2px', width: (d.v * 100) + '%', background: d.c, opacity: .85 },
+      fore: { position: 'absolute', left: 'calc(' + (d.f * 100) + '% - 1px)', top: '-2px', bottom: '-2px', width: '2px', background: (d.f < d.lo || d.f > d.hi) ? 'var(--alarm)' : 'var(--ink2)' }
+    }));
+
+    const emoNames = ['страх', 'любопытство', 'досада', 'удовлетворение', 'скука'];
+    const active = 'досада';
+    const emotions = emoNames.map(n => ({
+      n, st: n === active
+        ? { padding: '4px 8px', background: 'var(--humanf)', border: '1px solid var(--human)', color: 'var(--human)', font: "600 10px/1 Archivo", letterSpacing: '.08em', textTransform: 'uppercase' }
+        : { padding: '4px 8px', background: 'transparent', border: '1px solid var(--line2)', color: 'var(--ink3)', font: "400 10px/1 Archivo", letterSpacing: '.08em', textTransform: 'uppercase' }
+    }));
+
+    const body = [
+      { n: 'Загрузка вычислений', v: '71 %', c: 'var(--ink)' },
+      { n: 'Задержка планировщика', v: '84 мс · p95 210', c: 'var(--ink)' },
+      { n: 'Заполненность памяти', v: '62 % · 18 412 карточек', c: 'var(--ink)' },
+      { n: 'Средняя ширина σ', v: '0.19', c: 'var(--sigma)' },
+      { n: 'Кадров пропущено', v: '3 за 5 мин', c: 'var(--alarm)' }
+    ].map(b => ({ n: b.n, v: b.v, st: { font: "500 11px/1 'IBM Plex Mono', monospace", color: b.c } }));
+
+    const goalsRaw = [
+      { id: 'g1', st: 'активна', src: 'любопытство', text: 'Открыть, чем гасится свет в МЕСТО_0C4B', test: 'щёлкнуть и увидеть падение средней яркости кадра ≥ 30 %', budget: 240, spent: 118, left: '96 с', sigma: '41 с', exp: 'ещё 11 мин' },
+      { id: 'g2', st: 'отложена', src: 'драйв', text: 'Вернуться к МЕСТО_12A0, не потеряв ЗВУК_B7', test: 'отпечаток места совпал ≥ 0.90', budget: 600, spent: 410, left: '230 с', sigma: '150 с', exp: 'ещё 2 ч', ctx: 'на ребре 0C4B→12A0, шаг 3 из 5, слышал ЗВУК_B7 слева' },
+      { id: 'g3', st: 'отложена', src: 'свидетельство', text: 'Понять, что значит СИМВОЛ_7A3F', test: 'предсказать следующий кадр после появления символа с σ < 0.15', budget: 900, spent: 260, left: '520 с', sigma: '410 с', exp: 'ещё 6 ч', ctx: 'на сравнении с СИМВОЛ_2B01, 4 из 9 встреч разобраны' },
+      { id: 'g4', st: 'предложена', src: 'любопытство', text: 'Проверить, обратимо ли ДЕЙСТВИЕ_5C', test: 'вернуть кадр к исходному за ≤ 3 действия', budget: 180, spent: 0, left: '180 с', sigma: '95 с', exp: 'ещё 40 мин' }
+    ];
+    const badge = (st) => {
+      const m = { 'активна': ['var(--agent)', 'var(--agentf)'], 'отложена': ['var(--ink3)', 'transparent'], 'предложена': ['var(--sigma)', 'var(--sigmaf)'], 'брошена': ['var(--alarm)', 'var(--alarmf)'] }[st];
+      return { padding: '3px 7px', border: '1px solid ' + m[0], background: m[1], color: m[0], font: "600 9px/1 Archivo", letterSpacing: '.12em', textTransform: 'uppercase' };
+    };
+    const goals = goalsRaw.map(g => {
+      const dead = s.rejected[g.id];
+      const dim = g.st !== 'активна' || dead;
+      return {
+        state: dead ? 'брошена' : g.st, src: g.src, text: g.text, test: g.test,
+        badge: badge(dead ? 'брошена' : g.st),
+        wrap: { padding: '11px 12px', borderBottom: '1px solid var(--line2)', opacity: dead ? .45 : dim ? .62 : 1, background: g.st === 'активна' && !dead ? 'var(--panel)' : 'transparent' },
+        title: { font: (g.st === 'активна' ? '600' : '500') + " 13px/1.35 Archivo", color: 'var(--ink)', marginBottom: '7px', textWrap: 'pretty', textDecoration: dead ? 'line-through' : 'none' },
+        spent: { position: 'absolute', left: 0, top: 0, bottom: 0, width: (g.spent / g.budget * 100) + '%', background: g.st === 'активна' ? 'var(--agent)' : 'var(--ink3)' },
+        spentT: g.spent + '/' + g.budget + ' с', leftT: g.left, sigma: g.sigma, exp: g.exp,
+        hasCtx: !!g.ctx, ctx: g.ctx || '',
+        reject: () => this.setState(p => ({ rejected: { ...p.rejected, [g.id]: !p.rejected[g.id] } }))
+      };
+    });
+
+    const tag = (k) => ({ padding: '2px 6px', border: '1px solid ' + (k === 'удивление' ? 'var(--sigma)' : 'var(--proof)'), color: k === 'удивление' ? 'var(--sigma)' : 'var(--proof)', font: "600 9px/1 'IBM Plex Mono', monospace", letterSpacing: '.06em' });
+    const speech = [
+      { k: 'удивление', t: 'ц 1 284 861', heard: false, text: 'этот прямоугольник потемнел сам, я его не трогал' },
+      { k: 'решение', t: 'ц 1 284 802', heard: true, text: 'нажму ВЫХ_2C ещё раз и досчитаю до трёх' },
+      { k: 'удивление', t: 'ц 1 284 744', heard: false, text: 'звук пришёл раньше, чем изменилась картинка' },
+      { k: 'решение', t: 'ц 1 284 690', heard: false, text: 'откладываю дорогу к 12A0, здесь дешевле узнать новое' },
+      { k: 'удивление', t: 'ц 1 284 512', heard: true, text: 'СИМВОЛ_7A3F опять там же, где и в прошлый раз' }
+    ].map(x => ({
+      k: '[' + x.k + ']', t: x.t, text: x.text, tag: tag(x.k),
+      heard: x.heard ? 'слышит мир' : 'внутренняя',
+      heardSt: { padding: '2px 6px', border: '1px dashed ' + (x.heard ? 'var(--human)' : 'var(--line)'), color: x.heard ? 'var(--human)' : 'var(--ink3)', font: "400 9px/1 Archivo", letterSpacing: '.06em' }
+    }));
+
+    const questions = [
+      { q: 'Рычаг у двери гасит свет всегда или только в этом месте?', sigma: '0.42', gain: '0.31', wait: '2 мин' },
+      { q: 'То, что появляется в углу перед темнотой, — это предупреждение или следствие?', sigma: '0.55', gain: '0.28', wait: '19 мин' }
+    ];
+
+    const chipDefs = [['layers', 'слои'], ['att', 'внимание'], ['ent', 'сущности'], ['snd', 'пеленг звука'], ['pred', 'предсказание']];
+    const chips = chipDefs.map(([k, n]) => ({
+      n, go: () => this.setState(p => ({ ov: { ...p.ov, [k]: !p.ov[k] } })),
+      st: s.ov[k]
+        ? { padding: '5px 9px', background: 'var(--agentf)', border: '1px solid var(--agent)', color: 'var(--agent)', font: "600 9.5px/1 Archivo", letterSpacing: '.1em', textTransform: 'uppercase', whiteSpace: 'nowrap' }
+        : { padding: '5px 9px', background: 'transparent', border: '1px solid var(--line)', color: 'var(--ink3)', font: "600 9.5px/1 Archivo", letterSpacing: '.1em', textTransform: 'uppercase', whiteSpace: 'nowrap' }
+    }));
+
+    const spikes = [['1.42', 'ц 1 284 612', 'свет погас'], ['1.08', 'ц 1 284 190', 'новый звук'], ['0.94', 'ц 1 283 744', 'дверь'], ['1.61', 'ц 1 283 002', 'смерть']]
+      .map(([v, t, why]) => ({ v, t, why: '· ' + why, go: () => this.go('journal') }));
+
+    const debugVals = [
+      { n: 'координата x', v: '−214.62' }, { n: 'координата y', v: '71.00' }, { n: 'координата z', v: '338.19' },
+      { n: 'рыскание', v: '112.4°' }, { n: 'сид мира', v: '8 471 220 913' }, { n: 'тик сервера', v: this.fmt(s.world) }
+    ];
+
+    return {
+      driverWord: s.stopped ? 'ОСТАНОВЛЕН' : s.driver === 'human' ? 'ЧЕЛОВЕК' : s.driver === 'observe' ? 'НАБЛЮДЕНИЕ' : 'АГЕНТ',
+      driverBtns: [['agent', 'агент'], ['human', 'человек'], ['observe', 'набл.']].map(([id, n]) => ({
+        n, go: () => this.setState({ driver: id, screen: id === 'observe' ? 'observe' : s.screen }),
+        st: { padding: '3px 7px', background: s.driver === id ? 'var(--panel2)' : 'transparent', border: '1px solid ' + (s.driver === id ? 'var(--driver)' : 'var(--line)'), color: s.driver === id ? 'var(--ink)' : 'var(--ink3)', font: "500 9px/1 Archivo", letterSpacing: '.08em', textTransform: 'uppercase', width: '68px', textAlign: 'left' }
+      })),
+      clocks: [
+        { n: 'Мои циклы', v: this.fmt(s.cycles), sub: s.paused ? 'замер' : '14.2 Гц', st: clockBox, vst: s.paused ? clockDim : clockVal },
+        { n: 'Время мира', v: 'д37 ' + this.hhmmss(s.world / 4.2), sub: 'тик ' + this.fmt(s.world), st: clockBox, vst: clockVal },
+        { n: 'Время содержимого', v: contentOn ? this.mmss(s.content) + '/31:05' : '—:—', sub: contentOn ? 'обучающее видео' : 'неактуально', st: clockBox, vst: contentOn ? clockVal : clockDim }
+      ],
+      spend: s.spend.toFixed(2) + ' $', spendRate: '6.2 ¢/мин',
+      goProfile: () => this.go('profile'), goInst: () => this.go('inst'), goJournal: () => this.go('journal'),
+      togglePause: () => this.setState(p => ({ paused: !p.paused })),
+      pauseLabel: s.paused ? 'ПРОДОЛЖИТЬ' : 'ПАУЗА АГЕНТА',
+      pauseSt: { padding: '9px 12px', background: s.paused ? 'var(--humanf)' : 'transparent', border: '1px solid ' + (s.paused ? 'var(--human)' : 'var(--line)'), color: s.paused ? 'var(--human)' : 'var(--ink2)', font: "600 10px/1 Archivo", letterSpacing: '.12em' },
+      toggleTheme: () => this.toggleTheme(), themeLabel: s.theme === 'dark' ? 'Свет' : 'Тьма',
+      hitStop: () => this.setState(p => ({ stopped: !p.stopped })),
+      releaseStop: () => this.setState({ stopped: false }),
+      stopSt: { padding: '9px 18px', background: s.stopped ? 'var(--alarm)' : 'var(--alarmf)', border: '1px solid var(--alarm)', color: s.stopped ? 'var(--bg)' : 'var(--alarm)', font: "700 13px/1 Archivo", letterSpacing: '.16em' },
+      stopped: s.stopped,
+      tabs: ids.map(([id, k, n]) => ({
+        n, k, go: () => this.go(id),
+        st: { ...tabBase, ...(s.screen === id ? tabOn : null) },
+        kst: { font: "500 10px/1 'IBM Plex Mono', monospace", color: s.screen === id ? 'var(--driver)' : 'var(--ink3)' }
+      })),
+      isLive: s.screen === 'live', isProfile: s.screen === 'profile', isMemory: s.screen === 'memory',
+      isJournal: s.screen === 'journal', isBody: s.screen === 'body', isLearn: s.screen === 'learn',
+      isExp: s.screen === 'exp', isInst: s.screen === 'inst', isObserve: s.screen === 'observe',
+      nerveRef: this.nerveRef, ribbonRef: this.ribbonRef, moodRef: this.moodRef, curveRef: this.curveRef,
+      errVal: s.err.toFixed(2), errSigma: '0.11', spikeCount: s.spikeN, lastSpike: '41 с назад',
+      errSt: { font: "600 19px/1 'IBM Plex Mono', monospace", color: s.err > .78 ? 'var(--alarm)' : 'var(--ink)' },
+      drives, emotions, emoEffects: ['горизонт планирования сокращён до 8 с', 'порог необратимости поднят 0.55 → 0.72', 'темп лепета снижен на 40 %'],
+      breaker: s.paused ? 'ДУМАТЬ · эффекторы отключены' : 'ДЕЛАТЬ · эффекторы включены',
+      breakerSt: { padding: '3px 8px', border: '1px solid ' + (s.paused ? 'var(--sigma)' : 'var(--agent)'), color: s.paused ? 'var(--sigma)' : 'var(--agent)', font: "600 9.5px/1 'IBM Plex Mono', monospace", letterSpacing: '.06em' },
+      body, goals, goalCount: '1 активна · 2 отложены · 1 предложена',
+      speech, questions, chips, spikes, debugVals, debugOn: this.props.debugChannel !== false,
+      ovLayers: s.ov.layers, ovAtt: s.ov.att, ovEnt: s.ov.ent, ovSnd: s.ov.snd, ovPred: s.ov.pred,
+      answer: s.answer, setAnswer: e => this.setState({ answer: e.target.value }),
+      keyHints: [['1–9', 'экраны'], ['Esc', 'СТОП'], ['Пробел', 'приостановить агента'], ['T', 'тема'], ['←→', 'скруббер журнала'], ['F', 'фокус на кадре'], ['?', 'все клавиши']].map(([k, n]) => ({ k, n })),
+      ...this.dProfile(), ...this.dMemory(), ...this.dJournal(), ...this.dKeys(), ...this.dSleep(), ...this.dExp(), ...this.dInst(), ...this.dObs()
+    };
+  }
+}
+</script>
+</body>
+</html>
