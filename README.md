@@ -20,6 +20,7 @@ python -m harness.cli selfworld /tmp/s     # разделение экранно
 python -m harness.cli profile --schema     # все настройки таблицей, с единицами
 python -m harness.cli devices              # что агент видит и чем управляет
 python -m harness.cli babble /tmp/b --compare-truth   # агент открывает своё тело
+python3 tools/make_figures.py docs/figures # перерисовать картинки по свежим прогонам
 ```
 
 Без установки: `PYTHONPATH=src python -m harness.cli ...`
@@ -34,6 +35,7 @@ python -m harness.cli babble /tmp/b --compare-truth   # агент открыв�
 | `tests/` | 179 тестов: по одному на каждый инвариант, на каждый критерий вехи и на каждый механизм |
 | `docs/ARCHITECTURE-HARNESS.md` | харнесс: решения, замеры, честный список непроверенного |
 | `docs/ARCHITECTURE-AGENT.md` | агент: настройки, ресурсы, устройства, модель мира, лепет, файрвол |
+| `docs/figures/` | шесть картинок по настоящим прогонам, включая карту состояния проекта |
 | `docs/design-draft/console/` | выгрузка «Пульт агента» из Claude Design, 12 экранов |
 | `docs/DESIGN-REVIEW-CONSOLE.md` | разбор пульта против инвариантов |
 | `docs/PROMPT-EXPORT-DESIGN.md` | промт для выгрузки текстового проектного документа |
