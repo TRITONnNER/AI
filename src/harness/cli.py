@@ -36,8 +36,29 @@ def cmd_backends(_: argparse.Namespace) -> int:
     return 0
 
 
-def cmd_profile(_: argparse.Namespace) -> int:
+def cmd_profile(args: argparse.Namespace) -> int:
+    from .core import settings as sch
     from .core.profile import MILESTONE_0, short
+
+    if getattr(args, "schema", False):
+        rows = sch.table(getattr(args, "group", None))
+        if not rows:
+            print(f"нет группы {args.group!r}; есть: {', '.join(sch.GROUPS)}",
+                  file=sys.stderr)
+            return 2
+        widths = {k: max(len(str(r[k])) for r in rows) for k in
+                  ("key", "unit", "default", "range")}
+        group = None
+        for r in rows:
+            if r["group"] != group:
+                group = r["group"]
+                print(f"\n=== {group} ===")
+            print(f"  [{r['block']}] {r['key']:<{widths['key']}}  "
+                  f"{str(r['default']):>{widths['default']}} {r['unit']:<{widths['unit']}}  "
+                  f"{r['range']:<{widths['range']}}  {r['note']}")
+        print(f"\nвсего настроек: {len(rows)}; [А] крутится на ходу, "
+              "[Б] форкает журнал")
+        return 0
 
     p = MILESTONE_0
     print(f"профиль {p.name}")
@@ -73,6 +94,69 @@ def cmd_gen_corpus(args: argparse.Namespace) -> int:
     with Session.open(path) as s:
         print(f"  кадров {len(s)}, записей журнала {len(s.journal)}, "
               f"кадры на диске {s.frames.bytes_on_disk() / 1024:.0f} КиБ")
+    return 0
+
+
+def cmd_devices(_: argparse.Namespace) -> int:
+    from .core.profile import MILESTONE_0
+    from .devices import default_registry
+
+    reg = default_registry(MILESTONE_0)
+    _print_json(reg.summary())
+    print("\nчто из этого видит агент:")
+    _print_json(reg.for_agent())
+    return 0
+
+
+def cmd_resources(_: argparse.Namespace) -> int:
+    from .core.clocks import Stamp
+    from .core.profile import MILESTONE_0
+    from .core.resources import ProcMeasurer, ResourceGovernor
+
+    m = ProcMeasurer()
+    gov = ResourceGovernor(MILESTONE_0, measurer=m)
+    breaches = gov.check(Stamp(0, 0))
+    _print_json(gov.report())
+    if m.is_peak_only:
+        print("\nвнимание: /proc/self/statm недоступен, потребление измеряется "
+              "пиковым getrusage — по нему не видно, помогло ли вытеснение")
+    if breaches:
+        print("\nупоры:")
+        _print_json([b.as_dict() for b in breaches])
+    return 0
+
+
+def cmd_babble(args: argparse.Namespace) -> int:
+    """Лепет по интерактивному миру: агент открывает своё тело с нуля."""
+    from .behaviour.babbling import Babbler, run_babbling
+    from .core.profile import BABBLE
+    from .corpus.world import InteractiveWorld
+    from .session import Recorder
+    from .vision.predict import PredictionError
+
+    profile = BABBLE
+    world = InteractiveWorld(profile, seed=args.seed)
+    with Recorder(args.path, profile=profile, source=f"babble:seed={args.seed}",
+                  synthetic=True, note=args.note) as rec:
+        babbler = Babbler(profile, world.outputs, journal=rec.journal,
+                          rng_seed=args.seed)
+        result = run_babbling(world, babbler, steps=args.steps, clocks=rec.clocks,
+                              error=PredictionError(profile))
+    print("итог лепета:")
+    _print_json(result)
+
+    if args.compare_truth:
+        truth = world.truth()
+        live_true = set(truth["live_outputs"])
+        found = set(babbler.body.by_state("live"))
+        pairs = babbler.body.undoable()
+        print("\nсверка с истиной мира (только для исследователя):")
+        print(f"  живых по истине     {len(live_true)}")
+        print(f"  найдено живыми      {len(found)}, верно {len(found & live_true)}, "
+              f"ложно {len(found - live_true)}")
+        print(f"  обратных пар найдено {len(pairs)}")
+        print(f"  необратимо по истине {[o for o in truth['irreversible_outputs']]}")
+        print(f"  не умеет откатить    {result['not_undoable']}")
     return 0
 
 
@@ -209,7 +293,22 @@ def main(argv: list[str] | None = None) -> int:
     sub = ap.add_subparsers(dest="cmd", required=True)
 
     sub.add_parser("backends", help="что доступно на этой машине").set_defaults(fn=cmd_backends)
-    sub.add_parser("profile", help="профиль вехи 0 и его хеши").set_defaults(fn=cmd_profile)
+    pr = sub.add_parser("profile", help="профиль и схема настроек")
+    pr.add_argument("--schema", action="store_true", help="вся схема настроек таблицей")
+    pr.add_argument("--group", default=None, help="только одна группа настроек")
+    pr.set_defaults(fn=cmd_profile)
+
+    sub.add_parser("devices", help="устройства ввода-вывода").set_defaults(fn=cmd_devices)
+    sub.add_parser("resources", help="ресурсы и пределы").set_defaults(fn=cmd_resources)
+
+    bb = sub.add_parser("babble", help="лепет: агент открывает своё тело")
+    bb.add_argument("path", type=Path)
+    bb.add_argument("--seed", type=int, default=0)
+    bb.add_argument("--steps", type=int, default=1500)
+    bb.add_argument("--note", default=None)
+    bb.add_argument("--compare-truth", action="store_true",
+                    help="сверить с истиной мира из отладочного потока")
+    bb.set_defaults(fn=cmd_babble)
 
     g = sub.add_parser("gen-corpus", help="записать синтетическую сессию")
     g.add_argument("path", type=Path)

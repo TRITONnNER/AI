@@ -27,7 +27,7 @@ import platform
 import time
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Callable, Iterator
+from typing import TYPE_CHECKING, Any, Callable, Iterator
 
 import numpy as np
 
@@ -36,6 +36,9 @@ from .core.blobstore import AudioStore, BlobRef, FrameStore
 from .core.clocks import Clocks, Stamp
 from .core.journal import Actor, Entry, Journal, Kind as EntryKind, branch_chain
 from .core.profile import Profile, short
+
+if TYPE_CHECKING:  # только для аннотации: ограничитель необязателен
+    from .core.resources import ResourceGovernor
 
 SESSION_META = "session.json"
 
@@ -76,7 +79,9 @@ class Recorder:
     """Запись сессии. Всё, что пишется, проходит через журнал."""
 
     def __init__(self, root: str | Path, *, profile: Profile, source: str,
-                 synthetic: bool, note: str | None = None) -> None:
+                 synthetic: bool, note: str | None = None,
+                 governor: "ResourceGovernor | None" = None,
+                 devices: Any = None, check_resources_every: int = 30) -> None:
         from . import __version__
 
         self.root = Path(root)
@@ -104,6 +109,16 @@ class Recorder:
                                 compress_level=int(p.get("frame_compress_level", 6)))
         self.clocks = Clocks()
         self._audio_channels = int(profile.structural.get("audio_channels", 2))
+        self.governor = governor
+        self._check_every = max(1, int(check_resources_every))
+        self._frames_written = 0
+        self._frames_refused = 0
+
+        if devices is not None:
+            # Состав устройств пишется в журнал, а не только в session.json:
+            # журнал — источник истины, и «чем это было записано» — часть опыта.
+            self.journal.append(EntryKind.DEVICE, self.clocks.stamp(), Actor.HUMAN,
+                                event={"code": "registry", **devices.summary()})
 
     # --- запись -------------------------------------------------------------
 
@@ -111,8 +126,26 @@ class Recorder:
                      t_content: float | None = None,
                      audio: np.ndarray | None = None,
                      audio_offset_ms: float = 0.0,
-                     actor: Actor = Actor.NONE) -> Entry:
-        """Кадр (и, если есть, синхронный блок звука) как одна запись журнала."""
+                     actor: Actor = Actor.NONE) -> Entry | None:
+        """Кадр (и, если есть, синхронный блок звука) как одна запись журнала.
+
+        Возвращает `None`, если ограничитель ресурсов отказал в записи: место или
+        память кончились. Кадр при этом теряется, и об этом пишется запись — но
+        уже записанное остаётся целым. Обратный порядок (выкинуть старое, чтобы
+        записать новое) сделал бы журнал невоспроизводимым.
+        """
+        if self.governor is not None:
+            if self._frames_written % self._check_every == 0:
+                self.governor.check(self.clocks.stamp())
+            from .core.resources import OP_FRAME
+            admission = self.governor.admit(OP_FRAME)
+            if not admission:
+                self._frames_refused += 1
+                self.record_gap("resource_refused",
+                                {"reason": admission.reason,
+                                 "frames_refused": self._frames_refused})
+                return None
+
         self.clocks.tick_self()
         self.clocks.set_world(self.clocks.t_world + 1 if t_world is None else t_world)
         self.clocks.set_content(t_content)
@@ -126,6 +159,7 @@ class Recorder:
         event: dict[str, Any] = {"code": "frame"}
         if audio_ref is not None:
             event["audio_offset_ms"] = round(float(audio_offset_ms), 3)
+        self._frames_written += 1
         return self.journal.append(EntryKind.FRAME, stamp, actor,
                                    frame=frame_ref, audio=audio_ref, event=event)
 

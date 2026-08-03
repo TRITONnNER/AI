@@ -55,12 +55,18 @@ class Kind(StrEnum):
 
     FRAME = "frame"                  # кадр захвата (+ звук, если есть)
     ACTION = "action"                # попытка действия, в том числе заглушённая
+    THOUGHT = "thought"              # действие с отключёнными эффекторами
     PERCEPTION = "perception"        # результат границы восприятия, уже в символах
     PROFILE_CHANGE = "profile_change"  # повернули ручку в parameters
     BRANCH_START = "branch_start"    # первая запись ветки
     STOP = "stop"                    # СТОП: инъекция оборвана
     RESUME = "resume"                # снятие стопа
     WATCHDOG = "watchdog"            # сторожевой таймер сработал
+    RESOURCE = "resource"            # упор в предел памяти, диска, бюджета
+    DEVICE = "device"                # смена набора источников или прав
+    GOAL = "goal"                    # цель поставлена, пройдена, брошена
+    TESTIMONY = "testimony"          # свидетельство: человек, другой экземпляр, вики
+    SLEEP = "sleep"                  # прогон консолидации
     INTERVENTION = "intervention"    # вмешательство исследователя
     CAPTURE_GAP = "capture_gap"      # пропуск кадров, рассинхрон, отвал источника
     NOTE = "note"                    # пометка исследователя, ни на что не влияет
@@ -307,8 +313,11 @@ class Journal:
         if perception is not None:
             # Инвариант 5: то, что уйдёт агенту, проходит границу без читаемого текста.
             assert_no_plain_text(perception, path="perception")
-        if action is not None and kind is not Kind.ACTION:
-            raise JournalError("действие пишется записью вида ACTION")
+        if action is not None and kind not in (Kind.ACTION, Kind.THOUGHT):
+            raise JournalError(
+                "действие пишется записью вида ACTION, а воображаемое — THOUGHT. "
+                "Смешивать их в одном виде записи нельзя: тогда из журнала не "
+                "отличить сделанное от продуманного")
 
         e = Entry(seq=self._seq, kind=kind, stamp=stamp, actor=actor,
                   profile_hash=self._profile.profile_hash,

@@ -196,6 +196,13 @@ class Action:
         return Action(self.kind, self.duration_ms, self.output, self.modifiers,
                       self.dx, self.dy, self.reversibility, masked=True, mask_reason=reason)
 
+    def outputs_touched(self) -> tuple[str, ...]:
+        """Все выходы, которые действие задействует: модификаторы и сам выход.
+
+        Порядок значим: модификаторы зажимаются первыми и отпускаются последними.
+        """
+        return (*self.modifiers, *((self.output,) if self.output else ()))
+
     @property
     def caution(self) -> float:
         return self.reversibility.caution

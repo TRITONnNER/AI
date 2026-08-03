@@ -163,7 +163,7 @@ class Injector:
         self.actor = actor
 
     def submit(self, action: Action, stamp: Stamp, *, scope: str = "window") -> Outcome:
-        outputs = list(action.modifiers) + ([action.output] if action.output else [])
+        outputs = list(action.outputs_touched())
 
         # 1. СТОП. Проверяется первым: он важнее всего остального.
         if self.stop is not None and self.stop.is_engaged:

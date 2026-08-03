@@ -199,48 +199,49 @@ class Profile:
 
 
 # ---------------------------------------------------------------------------
-# Профиль вехи 0. Всё, что здесь есть, — настройки харнесса; поведения агента в
-# этой вехе нет вообще, поэтому и настроек поведения нет.
+# Профили собираются из схемы (`harness.core.settings`), а не набираются руками:
+# так ни одна ручка не потеряется и ни одна не окажется не в своей группе.
 # ---------------------------------------------------------------------------
 
-MILESTONE_0 = Profile(
-    name="ХАРНЕСС-0",
-    parameters={
-        # захват
-        "capture_fps": 30.0,
-        "capture_width": 1280,
-        "capture_height": 720,
-        # звук
-        "audio_rate": 48000,
-        "audio_block_ms": 20.0,
-        "audio_sync_tolerance_ms": 50.0,   # из 0.1: рассинхрон больше — брак
-        # инъекция ввода
-        "watchdog_still_seconds": 20.0,    # экран не менялся столько — стоп
-        "watchdog_still_threshold": 0.002,  # доля изменившихся пикселей
-        "stop_max_latency_frames": 1.0,    # из 0.2: СТОП за один кадр
-        # разделение себя и мира (0.6)
-        # Окно поддержки для попиксельной классификации, в пикселях, нечётное.
-        # Должно быть меньше самого мелкого элемента интерфейса: окно крупнее
-        # элемента смешивает слои внутри себя (замер — в ARCHITECTURE-HARNESS.md).
-        "flow_window": 7,
-        "flow_min_global_shift": 1.5,      # ниже этого сдвига кадр неинформативен
-        "screen_layer_tolerance": 0.5,     # насколько пиксель может отличаться от нуля
-        "world_layer_tolerance": 0.5,      # ...и от глобального сдвига
-        "selfworld_min_votes": 3,          # пиксель судится минимум по столько кадров
-        # хранение
-        "frame_shard_bytes": 64 * 1024 * 1024,
-        "frame_compress_level": 6,
-        # Через сколько кадров ставить опорный. Он же ограничивает цену промотки:
-        # произвольный кадр собирается не больше чем из этого числа блоков.
-        "frame_keyframe_interval": 30,
-    },
-    structural={
-        # Меняешь — форкаешь журнал. Всё, что здесь, меняет форму данных или
-        # смысл опыта, а не его количество.
-        "frame_format": "gray8",       # gray8 | rgb8 — меняет форму кадра
-        "audio_channels": 2,           # стерео обязательно: из разницы каналов пеленг
-        "symbol_salt_id": "s0",        # смена соли меняет все символы разом
-        "text_symbolized": True,       # False дало бы агенту читаемый текст
-        "debug_channel_enabled": True,  # поток исследователя, агенту недоступен
-    },
-)
+
+def from_schema(name: str, **overrides: Scalar) -> Profile:
+    """Профиль со значениями по умолчанию и точечными изменениями.
+
+    Куда попадёт изменённая ручка — в `parameters` или в `structural`, — решает
+    схема, а не вызывающий. Ошибиться в эту сторону слишком дорого: настройка,
+    меняющая форму опыта, обязана форкать журнал.
+    """
+    from . import settings as sch
+
+    parameters = sch.defaults(structural=False)
+    structural = sch.defaults(structural=True)
+    for key, value in overrides.items():
+        setting = sch.BY_KEY.get(key)
+        if setting is None:
+            raise ProfileError(f"неизвестная настройка {key!r}: её нет в схеме")
+        checked = setting.check(value)
+        (structural if setting.structural else parameters)[key] = checked
+    sch.validate(parameters, structural)
+    return Profile(name, parameters, structural)
+
+
+def validate_against_schema(profile: Profile) -> None:
+    """Проверить готовый профиль. Отдельно от конструктора: загруженный из файла
+    профиль может быть от другой версии схемы, и об этом надо сказать прямо."""
+    from . import settings as sch
+
+    sch.validate(profile.parameters, profile.structural)
+
+
+# Полный профиль по умолчанию: все настройки схемы со значениями по умолчанию.
+DEFAULT = from_schema("ПОЛНЫЙ-0")
+
+# Профиль вехи 0: то же, но с кадром 320×180 — размер синтетического корпуса и
+# рабочий размер для офлайн-прогонов. Частота захвата и формат кадра прежние.
+MILESTONE_0 = from_schema("ХАРНЕСС-0", capture_width=320, capture_height=180)
+
+# Профиль лепета: агент открывает своё тело. Отличается от вехи 0 двумя ручками,
+# то есть чистой абляцией не является — и `is_clean_ablation` это скажет. Для
+# сравнения прогонов нужна пара, различающаяся ровно одной ручкой.
+BABBLE = from_schema("ЛЕПЕТ-К7", capture_width=320, capture_height=180,
+                     babble_rate=0.9, babble_repeats=4)
