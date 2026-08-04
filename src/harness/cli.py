@@ -337,6 +337,61 @@ def cmd_selfworld(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_describers(args: argparse.Namespace) -> int:
+    """Что из бесплатных сервисов описания настроено на этой машине.
+
+    Показывает не «что бывает вообще», а что реально доступно здесь и сейчас, и по
+    какой причине недоступно остальное. Ни одного запроса к сервису при этом не
+    делается: у сетевых проверяется ключ, у локальных — что узел отвечает.
+    """
+    from .perception.describers import PROVIDERS, probe_all
+
+    rows = probe_all()
+    width = max(len(r["name"]) for r in rows)
+    print(f"{'сервис'.ljust(width)}  готов  лимиты        модель")
+    print(f"{'-' * width}  -----  ------------  ------")
+    for r in rows:
+        limits = ("локально" if r["key_env"] is None else
+                  f"{r['rpm'] or '?'}/мин {r['rpd'] or '?'}/сут")
+        mark = " да  " if r["configured"] else " нет "
+        print(f"{r['name'].ljust(width)}  {mark}  {limits:<12}  {r['model']}")
+    print()
+    for r in rows:
+        if not r["configured"]:
+            print(f"{r['name']}: {r['why']}")
+    print("\nчисла лимитов справочные (август 2026) и требуют перепроверки: "
+          "тарифы меняются чаще, чем код.")
+    if args.verbose:
+        print()
+        for p in PROVIDERS:
+            print(f"{p.name}: {p.note}")
+    return 0
+
+
+def cmd_bench(args: argparse.Namespace) -> int:
+    """Кросс-доменный замер: одни и те же модули по четырём разным мирам.
+
+    Главная проверка требования «если решение работает только в Minecraft, оно
+    неправильное». Ничего не записывает: это замер, а не сессия.
+    """
+    from .benchmark import EXPECTATION, run_all
+
+    rep = run_all(seed=args.seed, frames=args.frames,
+                  babble_steps=args.babble_steps, motion_px=args.motion,
+                  domains=args.domains or None)
+    print(rep.table())
+    print()
+    for r in rep.results:
+        print(f"{'OK ' if rep.passed(r) else 'НЕТ'} {r.domain}: {r.verdict}")
+        print(f"      ожидаемо: {EXPECTATION.get(r.domain, '—')}")
+        print(f"      признак:  {r.signal_reason}")
+    ok = rep.as_dict()["ok"]
+    print("\nитог:", "все домены прошли" if ok else "есть домены с провалом")
+    if args.json:
+        _print_json(rep.as_dict())
+    return 0 if ok else 1
+
+
 def cmd_record(args: argparse.Namespace) -> int:
     from .capture.base import BackendUnavailable
     from .capture.screen import ScreenCapture
@@ -431,6 +486,23 @@ def main(argv: list[str] | None = None) -> int:
     sw.add_argument("path", type=Path)
     sw.add_argument("--dump-mask", type=Path, default=None)
     sw.set_defaults(fn=cmd_selfworld)
+
+    ds = sub.add_parser("describers",
+                        help="бесплатные сервисы описания: что настроено")
+    ds.add_argument("--verbose", action="store_true", help="с пояснениями по каждому")
+    ds.set_defaults(fn=cmd_describers)
+
+    bn = sub.add_parser("bench", help="кросс-доменный замер: игра, документ, "
+                                     "рабочий стол, видео")
+    bn.add_argument("--seed", type=int, default=3)
+    bn.add_argument("--frames", type=int, default=140)
+    bn.add_argument("--babble-steps", type=int, default=700)
+    bn.add_argument("--motion", type=int, default=40,
+                    help="размах движения мыши за шаг, px")
+    bn.add_argument("--domains", nargs="*", default=None,
+                    help="только эти домены")
+    bn.add_argument("--json", action="store_true", help="ещё и машинно читаемо")
+    bn.set_defaults(fn=cmd_bench)
 
     rec = sub.add_parser("record", help="запись с живого экрана")
     rec.add_argument("path", type=Path)

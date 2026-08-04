@@ -339,6 +339,203 @@ def separate(frames: Iterable[np.ndarray], profile: Profile) -> SeparationResult
     return sep.result()
 
 
+# --- второй признак: неподвижность ------------------------------------------
+#
+# Зачем он нужен. Параллакс требует глобального сдвига: он сравнивает «сместился
+# как весь кадр» с «не сместился». Там, где кадр не смещается целиком, сравнивать
+# нечего, и параллакс обязан молчать — на рабочем столе двигаются отдельные окна,
+# в проигрывателе содержимое меняется само, не съезжая. Кросс-доменный замер это и
+# показал: два домена из четырёх — 100% «не знаю». Отказ честный, но бесполезный.
+#
+# Признак здесь другой и выводится из тех же пикселей: **что не меняется, когда
+# меняется остальное**. Обои рабочего стола, полоса управления проигрывателя,
+# рамка панели — не меняются вовсе, а окна и содержимое меняются.
+#
+# Чего этот признак не может, и почему он остаётся вторым, а не заменяет первый:
+# он не различает «прибито к экрану» и «стоит на месте». Неподвижный камень в
+# неподвижной сцене он объявит экранным слоем, и это будет неправдой. Параллакс
+# такое различает. Поэтому арбитр предпочитает параллакс, когда тот применим, и
+# честно сообщает, каким признаком получен ответ: ответы двух признаков значат
+# разное, и складывать их в одну кучу нельзя.
+
+
+PARALLAX = "parallax"
+STILLNESS = "stillness"
+NO_SIGNAL = "none"
+
+
+@dataclass(slots=True)
+class StillnessResult:
+    """Результат по второму признаку. Те же три состояния."""
+
+    labels: np.ndarray
+    change_rate: np.ndarray            # доля кадров, в которых пиксель менялся
+    seen: np.ndarray                   # в скольких кадрах пиксель был информативен
+    shape: tuple[int, int]
+    voting_frames: int = 0
+    skipped_frames: int = 0
+
+    @property
+    def decided_fraction(self) -> float:
+        return float((self.labels != UNDECIDED).mean())
+
+    def pixel_mask(self, label: int = SCREEN) -> np.ndarray:
+        return self.labels == label
+
+    def summary(self) -> dict[str, object]:
+        return {
+            "pixels": int(self.labels.size),
+            "screen": int((self.labels == SCREEN).sum()),
+            "world": int((self.labels == WORLD).sum()),
+            "undecided": int((self.labels == UNDECIDED).sum()),
+            "decided_fraction": round(self.decided_fraction, 4),
+            "voting_frames": self.voting_frames,
+            "skipped_frames": self.skipped_frames,
+        }
+
+
+class StillnessSeparator:
+    """Накопитель по второму признаку: как часто пиксель менялся."""
+
+    def __init__(self, profile: Profile) -> None:
+        p = profile.parameters
+        self.delta = int(p["stillness_pixel_delta"])
+        self.min_frame_change = float(p["stillness_min_frame_change"])
+        self.static_rate = float(p["stillness_static_rate"])
+        self.moving_rate = float(p["stillness_moving_rate"])
+        if self.static_rate > self.moving_rate:
+            raise ValueError(
+                f"stillness_static_rate {self.static_rate} выше "
+                f"stillness_moving_rate {self.moving_rate}: пороги перекрыты, "
+                "пиксель попал бы в оба состояния сразу")
+        self.min_votes = int(p["stillness_min_votes"])
+        self.radius = int(p["flow_window"]) // 2
+        self._prev: np.ndarray | None = None
+        self._changes: np.ndarray | None = None
+        self._seen: np.ndarray | None = None
+        self._shape: tuple[int, int] | None = None
+        self._voting = 0
+        self._skipped = 0
+
+    def feed(self, frame: np.ndarray) -> float | None:
+        """Дать кадр. Возвращает долю изменившихся пикселей или None."""
+        cur = frame[:, :, :3].mean(axis=2).astype(np.uint8) if frame.ndim == 3 else frame
+        if self._shape is None:
+            self._shape = (cur.shape[0], cur.shape[1])
+            self._changes = np.zeros(self._shape, dtype=np.int32)
+            self._seen = np.zeros(self._shape, dtype=np.int32)
+        elif (cur.shape[0], cur.shape[1]) != self._shape:
+            raise ValueError(f"форма кадра изменилась: {self._shape} → {cur.shape}")
+
+        prev, self._prev = self._prev, cur
+        if prev is None:
+            return None
+        changed = np.abs(cur.astype(np.int16) - prev.astype(np.int16)) > self.delta
+        share = float(changed.mean())
+        if share < self.min_frame_change:
+            # Ничего не меняется: неподвижно всё, и признак ничего не выделяет.
+            self._skipped += 1
+            return share
+
+        # Тот же честный запрет, что и у параллакса: где нет текстуры, там
+        # «не изменился» ничего не значит — гладкое небо не меняется и при
+        # движении камеры. Без этого запрета однородные области мира уехали бы в
+        # экранный слой, и точность упала бы там, где картинка гладкая.
+        var = _local_variance(cur, self.radius)
+        informative = var > max(1.0, float(np.median(var)) * 0.15)
+        assert self._changes is not None and self._seen is not None
+        self._changes += (changed & informative).astype(np.int32)
+        self._seen += informative.astype(np.int32)
+        self._voting += 1
+        return share
+
+    def result(self) -> StillnessResult:
+        if self._changes is None or self._seen is None or self._shape is None:
+            raise ValueError("не подано ни одного кадра")
+        seen = self._seen
+        with np.errstate(invalid="ignore", divide="ignore"):
+            rate = np.where(seen > 0, self._changes / np.maximum(seen, 1), np.nan)
+        labels = np.full(self._shape, UNDECIDED, dtype=np.int8)
+        enough = seen >= self.min_votes
+        labels[enough & (rate <= self.static_rate)] = SCREEN
+        labels[enough & (rate >= self.moving_rate)] = WORLD
+        return StillnessResult(labels, rate, seen.copy(), self._shape,
+                               self._voting, self._skipped)
+
+
+@dataclass(slots=True)
+class LayerVerdict:
+    """Чем именно получен ответ. Признак называется, а не подразумевается."""
+
+    signal: str                        # PARALLAX | STILLNESS | NO_SIGNAL
+    labels: np.ndarray
+    reason: str
+    parallax: SeparationResult
+    stillness: StillnessResult
+
+    @property
+    def decided_fraction(self) -> float:
+        return float((self.labels != UNDECIDED).mean())
+
+    def pixel_mask(self, label: int = SCREEN) -> np.ndarray:
+        return self.labels == label
+
+    def summary(self) -> dict[str, object]:
+        return {"signal": self.signal, "reason": self.reason,
+                "decided_fraction": round(self.decided_fraction, 4),
+                "parallax": self.parallax.summary(),
+                "stillness": self.stillness.summary()}
+
+
+class LayerArbiter:
+    """Оба признака сразу и явный выбор между ними.
+
+    Выбор, а не смесь. Смесь была бы удобнее в таблице и хуже по смыслу: пиксель,
+    названный экранным по неподвижности, и пиксель, названный экранным по
+    параллаксу, обоснованы по-разному, и второй обоснован сильнее. Сложив их, мы
+    получили бы одну цифру, в которой не видно, что именно мы знаем.
+    """
+
+    def __init__(self, profile: Profile) -> None:
+        self.mode = str(profile.structural.get("layer_signal", "auto"))
+        self.min_parallax_frames = int(
+            profile.parameters["arbiter_min_parallax_frames"])
+        self.parallax = SelfWorldSeparator(profile)
+        self.stillness = StillnessSeparator(profile)
+
+    def feed(self, frame: np.ndarray) -> None:
+        self.parallax.feed(frame)
+        self.stillness.feed(frame)
+
+    def result(self) -> LayerVerdict:
+        par = self.parallax.result()
+        still = self.stillness.result()
+        if self.mode == PARALLAX:
+            return LayerVerdict(PARALLAX, par.labels, "признак задан профилем",
+                                par, still)
+        if self.mode == STILLNESS:
+            return LayerVerdict(STILLNESS, still.labels, "признак задан профилем",
+                                par, still)
+
+        par_ok = (par.voting_frames >= self.min_parallax_frames
+                  and par.decided_fraction > 0.0)
+        if par_ok:
+            return LayerVerdict(
+                PARALLAX, par.labels,
+                f"параллакс применим: {par.voting_frames} кадров со сдвигом",
+                par, still)
+        if still.voting_frames > 0 and still.decided_fraction > 0.0:
+            return LayerVerdict(
+                STILLNESS, still.labels,
+                f"глобального сдвига нет ({par.voting_frames} кадров со сдвигом), "
+                f"разделено по неподвижности на {still.voting_frames} кадрах",
+                par, still)
+        empty = np.full(par.labels.shape, UNDECIDED, dtype=np.int8)
+        return LayerVerdict(
+            NO_SIGNAL, empty,
+            "ни сдвига, ни различия в изменчивости: разделять нечем", par, still)
+
+
 # --- фон и превышение над фоном (первые два пункта 0.6) ---------------------
 
 
@@ -375,6 +572,25 @@ def frame_change(prev: np.ndarray, cur: np.ndarray, pixel_delta: int = 8) -> flo
     if d.ndim == 3:
         d = d.max(axis=2)
     return float((d > pixel_delta).mean())
+
+
+def frame_energy(prev: np.ndarray, cur: np.ndarray) -> float:
+    """Средняя величина изменения кадра, 0…1. Не доля пикселей, а насколько.
+
+    Зачем нужна вторая мера рядом с `frame_change`. Доля изменившихся пикселей
+    насыщается: там, где картинка меняется целиком — видео, чужой стрим, панорама
+    камеры, — она уже равна почти единице, и последствие действия в неё не влезает.
+    Замер по домену «видео»: холостой ход даёт долю 0.636 ± 0.009, а перемотка —
+    0.646, то есть превышение в один сигму, ниже любого разумного порога. По средней
+    величине те же данные дают 0.0557 ± 0.0021 против 0.0698 — почти семь сигм.
+
+    Поэтому: `frame_change` остаётся у сторожевого таймера, где вопрос именно «сколько
+    пикселей шевелится» (замер против зависшей картинки), а последствие действия
+    измеряется этой мерой.
+    """
+    a = prev.astype(np.int16)
+    b = cur.astype(np.int16)
+    return float(np.abs(b - a).mean()) / 255.0
 
 
 def background_level(pairs: Iterable[tuple[np.ndarray, np.ndarray, bool]],

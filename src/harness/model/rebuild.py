@@ -57,16 +57,74 @@ class OutputFacts:
     no_change_streak: int = 0
     first_seq: int = 0
     last_seq: int = 0
+    # Порог повторяемости: со скольких ответов вывод «этот выход отвечает»
+    # считается сделанным, и со скольких доставленных попыток — вывод «молчит».
+    # Живут здесь, а не в глобальной константе, потому что карта тела пересобирается
+    # из журнала и должна пересобираться одинаково при тех же порогах.
+    live_min_responses: int = 2
+    silent_min_deliveries: int = 3
+    # Доля ложных срабатываний порога «кадр изменился» на холостом ходу. Измеряется
+    # там же, где и фон, и тем же тестом: по паре кадров без действия. Ноль значит
+    # «ложных срабатываний не замечено», а не «их не бывает».
+    background_rate: float = 0.0
+    response_sigmas: float = 2.0
+
+    @property
+    def excess_sigmas(self) -> float:
+        """Насколько ответов больше, чем даёт сам порог на холостом ходу.
+
+        Порог «кадр изменился сверх фона» не идеален: он иногда срабатывает и без
+        действия — от анимации интерфейса, от того, что в видео идёт картинка. Доля
+        таких срабатываний измерима (`background_rate`), значит измеримо и ожидаемое
+        число ложных ответов: `delivered × background_rate`. Разброс биномиальный,
+        поэтому превышение считается в сигмах этого разброса.
+
+        Пол сигмы в единицу нужен для случая, когда ложных срабатываний не
+        замечено вовсе: тогда разброс нулевой, и деление на него дало бы
+        бесконечную уверенность от одного-единственного ответа.
+        """
+        n, p = self.delivered, self.background_rate
+        if n == 0:
+            return 0.0
+        mu = n * p
+        sd = max(1.0, (n * p * (1.0 - p)) ** 0.5)
+        return (self.responded - mu) / sd
 
     @property
     def state(self) -> str:
-        """Живой, молчащий или ещё не пробованный. Третье состояние обязательно:
-        «не пробовал» — не то же, что «не работает»."""
+        """Живой, молчащий, ещё не пробованный или пока неясный.
+
+        Четыре состояния, и каждое отделено от остальных по делу:
+
+        - `untried` — не пробовал. Не то же, что «не работает».
+        - `live` — ответил повторяемо (`live_min_responses`) и заметно чаще, чем
+          порог врёт сам по себе (`excess_sigmas`).
+        - `silent` — попыток хватило, а превышения над ложными срабатываниями нет.
+        - `unclear` — попыток было мало. Не «наверное молчит», а «не знаю».
+
+        Четвёртое состояние и статистика появились не из аккуратности, а по замеру.
+        Пока живым считался выход, ответивший хотя бы раз, кросс-доменный прогон
+        давал по два-четыре ложно живых выхода в каждом домене: ровно один ответ на
+        26–37 попыток, то есть одно совпадение. В домене, где картинка меняется сама
+        (проигрыватель), таких совпадений больше всего — и это ожидаемо, потому что
+        фон там выше. Один раз совпало — не то же, что «отвечает»: если это принять,
+        карта тела наполняется выходами, которые ничего не делают, и дальше на них
+        строятся навыки.
+
+        Обратный перекос так же вреден: требование «ни одного ответа» для вывода
+        «молчит» означает, что одно случайное совпадение навсегда оставляет выход
+        неопределённым. На том же замере это давало пятнадцать вечно неясных
+        выходов из двадцати четырёх. Поэтому порог «молчит» сравнивается не с
+        нулём, а с тем, сколько ложных ответов ожидается.
+        """
         if self.delivered == 0:
             return "untried"
-        if self.responded == 0:
+        confident = self.excess_sigmas >= self.response_sigmas
+        if self.responded >= self.live_min_responses and confident:
+            return "live"
+        if self.delivered >= self.silent_min_deliveries and not confident:
             return "silent"
-        return "live"
+        return "unclear"
 
     @property
     def response_rate(self) -> float:
@@ -77,6 +135,8 @@ class OutputFacts:
                 "delivered": self.delivered, "masked": self.masked,
                 "responded": self.responded,
                 "response_rate": round(self.response_rate, 4),
+                "background_rate": round(self.background_rate, 4),
+                "excess_sigmas": round(self.excess_sigmas, 3),
                 "hold_ms": {"min": min(self.durations_ms) if self.durations_ms else None,
                             "max": max(self.durations_ms) if self.durations_ms else None},
                 "reversibility": self.reversibility.as_dict(),
@@ -91,11 +151,30 @@ class BodyMap:
     """Карта тела: сколько выходов, какие отвечают, какие опасны."""
 
     outputs: dict[str, OutputFacts] = field(default_factory=dict)
+    live_min_responses: int = 2
+    silent_min_deliveries: int = 3
+    background_rate: float = 0.0
+    response_sigmas: float = 2.0
+
+    def set_background_rate(self, rate: float) -> None:
+        """Обновить измеренную долю ложных срабатываний — сразу у всех выходов.
+
+        Величина одна на всё тело: врёт не выход, а порог. Держать её копию у
+        каждого выхода нужно только для того, чтобы карточка выхода была
+        самодостаточной при пересборке.
+        """
+        self.background_rate = float(rate)
+        for f in self.outputs.values():
+            f.background_rate = float(rate)
 
     def fact(self, output: str, seq: int) -> OutputFacts:
         f = self.outputs.get(output)
         if f is None:
-            f = OutputFacts(output, first_seq=seq, last_seq=seq)
+            f = OutputFacts(output, first_seq=seq, last_seq=seq,
+                            live_min_responses=self.live_min_responses,
+                            silent_min_deliveries=self.silent_min_deliveries,
+                            background_rate=self.background_rate,
+                            response_sigmas=self.response_sigmas)
             self.outputs[output] = f
         else:
             f.last_seq = max(f.last_seq, seq)
@@ -124,6 +203,7 @@ class BodyMap:
         return {"known_outputs": len(self.outputs),
                 "live": len(self.by_state("live")),
                 "silent": len(self.by_state("silent")),
+                "unclear": len(self.by_state("unclear")),
                 "untried": len(self.by_state("untried")),
                 "unknown_reversibility": sum(
                     1 for f in self.outputs.values() if not f.reversibility.is_known)}
@@ -150,17 +230,24 @@ class Rebuilt:
 
 
 def rebuild_from_journal(journal: Journal, *, response_field: str = "responded",
-                         trust_human: float = 0.8) -> Rebuilt:
+                         trust_human: float = 0.8,
+                         live_min_responses: int = 2,
+                         silent_min_deliveries: int = 3) -> Rebuilt:
     """Собрать убеждения и карту тела из журнала. Только из журнала.
 
     `response_field` — имя поля в событии записи действия, куда пишущая сторона
     положила «изменился ли мир после этой попытки». Если поля нет, вывод по этой
     попытке не делается: догадываться о последствии по соседним записям значило бы
     придумывать данные.
+
+    Пороги повторяемости передаются снаружи (из профиля), а не берутся глобально:
+    пересборка обязана быть воспроизводимой, значит всё, что влияет на итог, должно
+    быть в аргументах.
     """
     branch = journal.meta.branch_id
     store = BeliefStore(branch)
-    body = BodyMap()
+    body = BodyMap(live_min_responses=live_min_responses,
+                   silent_min_deliveries=silent_min_deliveries)
     out = Rebuilt(store, body)
 
     for e in journal:

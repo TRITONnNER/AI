@@ -111,6 +111,7 @@ class InteractiveWorld:
         self.t_world = 0
         self._audio_t = 0.0
         self._steps = 0
+        self.last_action_changed: bool | None = None
 
     # --- проводка тела ------------------------------------------------------
 
@@ -146,8 +147,14 @@ class InteractiveWorld:
         превратилось бы в дискретное событие (инвариант 8).
         """
         before = self.state.snapshot()
-        if action is not None and not action.masked:
+        acted = action is not None and not action.masked
+        if acted:
             self._apply(action)
+        # Истина исследователя: подействовало ли именно действие. Здесь она
+        # совпадает с общим изменением, потому что этот мир сам ничего не делает,
+        # — но у миров, которые идут сами, не совпадёт, поэтому величина отдельная.
+        self.last_action_changed = ((self.state.snapshot() != before) if acted
+                                    else None)
         self.t_world += 1
         self._steps += 1
         frame = self._render()
@@ -266,6 +273,21 @@ class InteractiveWorld:
         m = np.zeros((self.height, self.width), dtype=bool)
         for i, r in enumerate(self.scene.hud):
             if i in self.state.broken:
+                continue
+            m[r.top:r.top + r.height, r.left:r.left + r.width] = True
+        return m
+
+    def animated_mask(self) -> np.ndarray:
+        """Часть интерфейса, которая меняется, не двигаясь: ползущие заполнения.
+
+        Нужна замеру отдельно, потому что такая часть не отделяется ни по
+        параллаксу (она не смещается вместе с миром, но и не совпадает с собой),
+        ни по неподвижности (она меняется). Это известный пробел, и он должен быть
+        виден в таблице отдельной графой, а не растворяться в общей полноте.
+        """
+        m = np.zeros((self.height, self.width), dtype=bool)
+        for i, r in enumerate(self.scene.hud):
+            if i in self.state.broken or not r.animated:
                 continue
             m[r.top:r.top + r.height, r.left:r.left + r.width] = True
         return m

@@ -428,6 +428,103 @@ def fig_loop(base: Path) -> Path:
     return _out(base, "6-zamknutyy-krug.png", fig)
 
 
+# --- 8. Четыре домена и два признака разделения слоёв -----------------------
+
+
+def fig_domains(base: Path) -> Path:
+    """Один и тот же код по четырём разным мирам, и чем именно он там справился."""
+    from harness.benchmark import bench_domain
+    from harness.core.action import Action as _Action
+    from harness.core.profile import from_schema
+    from harness.corpus.domains import make_domain
+    from harness.vision.selfworld import LayerArbiter, PARALLAX, SCREEN as _SCREEN
+
+    names = ("game", "document", "desktop", "video")
+    titles = {"game": "игра: камера панорамирует",
+              "document": "документ: прокрутка по вертикали",
+              "desktop": "рабочий стол: едут отдельные окна",
+              "video": "видео: содержимое идёт само"}
+    profile = from_schema("ФИГУРА-домены", capture_width=320, capture_height=180)
+
+    fig, axes = plt.subplots(3, 4, figsize=(13.5, 7.6),
+                             gridspec_kw={"height_ratios": [1.0, 1.0, 0.75],
+                                          "wspace": 0.45, "hspace": 0.3})
+    results = []
+    for col, name in enumerate(names):
+        dom = make_domain(name, profile, seed=3)
+        arb = LayerArbiter(profile)
+        rng = np.random.default_rng(103)
+        frame = None
+        for i in range(120):
+            act = None
+            if i % 3 != 0:
+                dx = int(rng.integers(-40, 41))
+                dy = int(rng.integers(-26, 27))
+                if dx or dy:
+                    act = _Action.mouse(dx, dy, duration_ms=33)
+            frame = dom.step(act, with_audio=False).frame
+            arb.feed(frame)
+        verdict = arb.result()
+        res = bench_domain(name, seed=3, frames=120, babble_steps=500)
+        results.append(res)
+
+        ax = axes[0][col]
+        ax.imshow(frame, cmap="gray", vmin=0, vmax=255)
+        ax.set_title(titles[name], fontsize=9)
+        ax.set_xticks([])
+        ax.set_yticks([])
+
+        # Что нашёл выбранный признак, поверх истины.
+        ax = axes[1][col]
+        truth = dom.screen_mask()
+        found = verdict.pixel_mask(_SCREEN)
+        # Кадр остаётся видимым под разметкой: без него панель из одних цветных
+        # пятен не даёт понять, о каком месте кадра идёт речь.
+        rgb = np.dstack([frame.astype(np.float32) / 255.0] * 3) * 0.35
+        rgb[truth & found] = (0.37, 0.79, 0.54)      # верно найдено
+        rgb[truth & ~found] = (0.55, 0.60, 0.68)     # пропущено
+        rgb[~truth & found] = (0.88, 0.35, 0.29)     # ложно
+        ax.imshow(np.clip(rgb, 0, 1))
+        sig = {"parallax": "параллакс", "stillness": "неподвижность",
+               "none": "оба промолчали"}[verdict.signal]
+        ax.set_title(f"{sig}: IoU {res.iou if res.iou is None else round(res.iou, 2)}, "
+                     f"точность {res.precision if res.precision is None else round(res.precision, 2)}",
+                     fontsize=8.5,
+                     color=AGENT if verdict.signal == PARALLAX else HUMAN)
+        ax.set_xticks([])
+        ax.set_yticks([])
+
+        ax = axes[2][col]
+        vals = [res.parallax_decided, res.stillness_decided]
+        ax.barh([1, 0], vals, color=[AGENT, HUMAN], height=0.55)
+        ax.set_yticks([1, 0])
+        ax.set_yticklabels(["параллакс", "неподвижн."], fontsize=8)
+        ax.set_xlim(0, 1)
+        ax.set_xlabel("доля решённых пикселей", fontsize=8)
+        for i, v in enumerate(vals):
+            inside = v > 0.2
+            ax.text(v - 0.04 if inside else v + 0.04, 1 - i, f"{v:.0%}",
+                    va="center", ha="right" if inside else "left", fontsize=7.5,
+                    color="#14181d" if inside else "#9aa4b2")
+        ax.grid(axis="x", alpha=0.2)
+        for spine in ("top", "right", "left"):
+            ax.spines[spine].set_visible(False)
+
+    fig.suptitle("Один и тот же код по четырём мирам. Зелёное — обрамление найдено, "
+                 "светло-серое — пропущено, красное — ложно принято за обрамление.",
+                 fontsize=10.5, y=0.98)
+    body = "; ".join(f"{r.domain} {r.live_found}/{r.live_true} живых" for r in results)
+    fig.text(0.5, -0.015,
+             "Нижний ряд: какой признак вообще смог высказаться. Где нет глобального "
+             "сдвига, параллакс молчит — и отвечает неподвижность.\n"
+             f"Тело по доменам: {body}. "
+             "Пропущенное обрамление — однородная заливка внутри панелей: там обе "
+             "гипотезы дают одно и то же, и оба признака честно оставляют пиксель "
+             "нерешённым.",
+             ha="center", fontsize=8.5, color="#9aa4b2")
+    return _out(base, "8-chetyre-domena.png", fig)
+
+
 # --- 7. Что сделано и что нет ----------------------------------------------
 
 
@@ -435,19 +532,24 @@ def fig_status(base: Path) -> Path:
     rows = [
         ("Журнал: дозапись, цепочка хешей", 1.0, "правка любой строки обнаруживается"),
         ("Воспроизведение с промоткой", 1.0, "произвольный кадр за 7.6 мс"),
-        ("Профиль: 85 настроек, два хеша", 1.0, "единицы, границы, форк журнала"),
+        ("Профиль: 104 настройки, два хеша", 1.0, "единицы, границы, форк журнала"),
         ("Ресурсы: память, диск, расход", 1.0, "упор действует, журнал не режется"),
         ("Устройства: видеть ≠ управлять", 1.0, "склейка, задержки, переключение"),
         ("Разделение себя и мира (0.6)", 1.0, "IoU 0.97, точность 0.99"),
+        ("Второй признак: неподвижность", 1.0, "отвечает там, где параллакса нет"),
+        ("Кросс-доменный замер", 1.0, "4 мира × 6 сидов, проходят все"),
         ("Интерактивный мир", 1.0, "движение, свет, необратимая поломка"),
         ("Ошибка предсказания", 1.0, "всплески на смене режима"),
         ("Карточки и происхождение", 1.0, "свидетельство ≠ опыт, пересборка"),
         ("Граф мест", 1.0, "без координат, маршрут по времени"),
         ("Драйвы, настроение, эмоция", 1.0, "из объективных величин"),
         ("Лепет: открытие тела", 1.0, "9/9 живых, 8/8 пар, необратимый найден"),
+        ("Карта тела: 4 состояния", 1.0, "одно совпадение — не открытие"),
         ("Контуры и субсумпция", 1.0, "прерываемо, лучший ответ всегда"),
         ("Размыкатель эффекторов", 1.0, "мысль не может стать поступком"),
         ("Файрвол восприятия", 0.7, "прибор готов, модели нет"),
+        ("Бесплатные сервисы описания", 0.6, "6 адаптеров, ни один не настроен здесь"),
+        ("Третий признак слоёв", 0.0, "меняется, но не смещается — не найдено"),
         ("Сон и консолидация", 1.0, "не выдумывает, предупреждает"),
         ("Экземпляры", 1.0, "обмен только свидетельствами"),
         ("Захват экрана на живой машине", 0.25, "нет дисплея — не проверено"),
@@ -464,7 +566,7 @@ def fig_status(base: Path) -> Path:
     notes = [r[2] for r in rows]
     colors = [PROOF if v >= 0.99 else (HUMAN if v >= 0.5 else ALARM) for v in vals]
 
-    fig, ax = plt.subplots(figsize=(11.5, 8.2))
+    fig, ax = plt.subplots(figsize=(11.5, 9.4))
     y = np.arange(len(rows))
     ax.barh(y, vals, color=colors, height=0.62)
     ax.set_yticks(y)
@@ -499,6 +601,7 @@ def main(argv: list[str]) -> int:
     fig_babbling(base)
     fig_places(base)
     fig_loop(base)
+    fig_domains(base)
     fig_status(base)
     return 0
 

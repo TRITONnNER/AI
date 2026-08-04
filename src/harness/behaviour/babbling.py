@@ -90,7 +90,16 @@ class Babbler:
         self.outputs = tuple(dict.fromkeys(outputs))
         if not self.outputs:
             raise ValueError("нечего пробовать: тело без выходов")
-        self.body = body or BodyMap()
+        self.body = body or BodyMap(
+            live_min_responses=int(p["body_live_min_responses"]),
+            # Порог «молчит» — это и есть `babble_repeats`: столько раз лепет
+            # пробует выход, прежде чем считать его молчащим. Отдельная ручка на то
+            # же самое разошлась бы с ней при первой же настройке, и вывод «молчит»
+            # стал бы недостижим — на замере так и было: пробовалось два раза,
+            # требовалось три, и пятнадцать молчащих выходов из двадцати четырёх
+            # навсегда остались неясными.
+            silent_min_deliveries=int(p["babble_repeats"]),
+            response_sigmas=float(p["body_excess_sigmas"]))
         self.journal = journal
         self.hold_min = int(p["babble_hold_min_ms"])
         self.hold_max = int(p["babble_hold_max_ms"])
@@ -303,7 +312,9 @@ class Babbler:
             "outputs_total": len(self.outputs),
             "outputs_touched": st["known_outputs"],
             "live": st["live"], "silent": st["silent"],
+            "unclear": st["unclear"],
             "untried": len(self.outputs) - st["known_outputs"],
+            "background_rate": round(self.body.background_rate, 4),
             "probes_done": self.probes_done,
             "irreversible_hits": self.irreversible_hits,
             "unknown_reversibility": st["unknown_reversibility"],
@@ -318,14 +329,61 @@ def run_babbling(world: Any, babbler: Babbler, *, steps: int,
                  clocks: Any, journal: Journal | None = None,
                  undo_with: Callable[[str], str | None] | None = None,
                  error: Any = None) -> dict[str, Any]:
-    """Прогон лепета по интерактивному миру. Проверяемо офлайн, без игры.
+    """Прогон лепета по миру. Проверяемо офлайн, без игры и без устройства.
 
     `undo_with` — чем агент пытается откатить последствие. По умолчанию он
     пробует тот же выход ещё раз: это самая простая догадка «нажму опять, вдруг
     вернётся», и для переключателя она верна, а для необратимого — нет. Именно
     так обратимость и выясняется: попыткой, а не таблицей.
+
+    ## Последствие определяется по пикселям, а не по состоянию мира
+
+    Раньше здесь читалось `Observation.changed` — то есть изменилось ли внутреннее
+    состояние мира. Это истина, которой у агента нет: он видит только пиксели.
+    В игре ошибка не проявлялась, потому что там изменение состояния всегда видно
+    в кадре, — ровно такие ошибки и живут годами.
+
+    И сравнивать надо не с нулём, а с тем, как мир меняется **сам**. В видео
+    картинка идёт без всяких действий; в браузере крутится анимация. Сравнение с
+    нулём объявило бы живыми все выходы подряд — что на замере и произошло: в
+    домене «видео» из двенадцати молчащих выходов не нашлось ни одного.
+
+    Поэтому фон измеряется на шагах без действия, и последствием считается
+    превышение над фоном на `babble_response_sigmas` сигм.
     """
     from ..core.action import Action as _Action
+    from ..vision.selfworld import frame_energy
+
+    sigmas = float(babbler.profile.parameters["babble_response_sigmas"])
+    floor = float(babbler.profile.parameters["babble_response_floor"])
+    idle: list[float] = []
+    # Порог врёт и сам по себе: анимация интерфейса или идущее видео иногда дают
+    # превышение над фоном без всякого действия. Насколько часто — измеримо тем же
+    # тестом по паре кадров без действия, и без этой величины нельзя отличить
+    # «ответил один раз» от «порог сработал один раз».
+    idle_tests = 0
+    false_alarms = 0
+
+    def background() -> tuple[float, float]:
+        if len(idle) < 3:
+            return 0.0, 0.0
+        arr = idle[-64:]
+        mean = sum(arr) / len(arr)
+        var = sum((x - mean) ** 2 for x in arr) / len(arr)
+        return mean, var ** 0.5
+
+    def differs(change: float) -> bool:
+        """Отличается ли изменение кадра от того, как мир меняется сам.
+
+        Проверка двусторонняя, и это не формальность. В видео нажатие «пауза»
+        *уменьшает* изменение кадра до нуля — последствие налицо, а односторонняя
+        проверка «стало больше фона» его не увидит. На замере из-за этого в домене
+        «видео» не находилось ни одного живого выхода из четырёх.
+        """
+        mean, sigma = background()
+        # Пол нужен: при побитово неподвижном фоне сигма равна нулю, и любое
+        # дрожание в один уровень яркости стало бы «последствием».
+        return abs(change - mean) > max(floor, sigmas * max(sigma, 1e-4))
 
     for _ in range(steps):
         babbler.tick_pause(1000.0 / float(babbler.profile.parameters["capture_fps"]))
@@ -336,15 +394,28 @@ def run_babbling(world: Any, babbler: Babbler, *, steps: int,
             clocks.set_world(clocks.t_world + 1)
             continue
 
+        idle_a = world.step(None, with_audio=False).frame
+        clocks.tick_self()
+        clocks.set_world(clocks.t_world + 1)
         before = world.step(None, with_audio=False).frame
         clocks.tick_self()
         clocks.set_world(clocks.t_world + 1)
+        # Два шага без действия подряд дают замер фона: столько мир меняется сам.
+        # Этот же замер проверяется тем же порогом — до того, как попадёт в фон,
+        # иначе проба проверяла бы саму себя.
+        sample_idle = frame_energy(idle_a, before)
+        if len(idle) >= 3:
+            idle_tests += 1
+            if differs(sample_idle):
+                false_alarms += 1
+            babbler.body.set_background_rate(false_alarms / idle_tests)
+        idle.append(sample_idle)
 
         action = probe.to_action(babbler.reversibility_of(probe.output))
         after = world.step(action, with_audio=False)
         clocks.tick_self()
         clocks.set_world(clocks.t_world + 1)
-        changed = after.changed
+        changed = differs(frame_energy(before, after.frame))
 
         err = None
         if error is not None:
@@ -368,10 +439,12 @@ def run_babbling(world: Any, babbler: Babbler, *, steps: int,
                 clocks.tick_self()
                 clocks.set_world(clocks.t_world + 1)
                 restored = world.step(None, with_audio=False).frame
-                # Откат удался, если мир вернулся к тому, что было до пробы.
-                # Порог не 1.0: интерфейс анимирован и меняется сам, поэтому
-                # побитового совпадения не будет никогда.
-                undone = bool((restored == before).mean() > 0.995)
+                clocks.tick_self()
+                clocks.set_world(clocks.t_world + 1)
+                # Откат удался, если расхождение с тем, что было до пробы, не
+                # больше того, как мир меняется сам. Побитового совпадения не
+                # будет никогда: интерфейс анимирован, а в видео картинка идёт.
+                undone = not differs(frame_energy(before, restored))
                 babbler.note_undo_attempt(probe.output, undo_output, undone)
 
         babbler.absorb(ProbeResult(probe, True, changed, undone, err,
