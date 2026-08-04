@@ -337,6 +337,127 @@ def cmd_selfworld(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_plan(args: argparse.Namespace) -> int:
+    """Весь стек до плана: лепет → разведка → модель → план → исполнение.
+
+    Ничего не записывает в сессию: это демонстрация и замер, а не запись.
+    """
+    import numpy as np
+
+    from .behaviour.babbling import Babbler, run_babbling
+    from .behaviour.goals import Goal
+    from .behaviour.planner import Planner, choose_probe, execute
+    from .core.action import Action, action_key
+    from .core.clocks import Clocks
+    from .core.profile import from_schema
+    from .corpus.world import InteractiveWorld
+    from .model.beliefs import Origin, Provenance
+    from .model.forward import ForwardModel
+    from .model.places import PlaceGraph
+
+    profile = from_schema("ПЛАН-CLI", capture_width=320, capture_height=180,
+                          babble_repeats=3)
+    min_n = int(profile.parameters["plan_min_step_n"])
+    hold = args.hold
+
+    print("1. Лепет: какие выходы что делают и чем откатываются")
+    babble_world = InteractiveWorld(profile, seed=args.seed, n_outputs=16)
+    babbler = Babbler(profile, babble_world.outputs, rng_seed=args.seed)
+    run_babbling(babble_world, babbler, steps=args.babble, clocks=Clocks())
+    inverse = dict(babbler.inverse_found)
+    prog = babbler.progress()
+    print(f"   живых {prog['live']}, молчащих {prog['silent']}, "
+          f"неясных {prog['unclear']}, обратных пар {len(inverse)}")
+
+    print("2. Разведка, которая подтверждает переходы")
+    world = InteractiveWorld(profile, seed=args.seed, n_outputs=16)
+    graph = PlaceGraph.from_profile(profile)
+    state: dict[str, Any] = {"seq": 0, "last": None}
+
+    def step(output: str, duration_ms: int = hold) -> str:
+        obs = world.step(Action.key(output, duration_ms), with_audio=False)
+        state["seq"] += 1
+        state["last"] = output
+        return graph.see(obs.frame, state["seq"], seconds_per_seq=1 / 30.0,
+                         mode=action_key(output, duration_ms))
+
+    graph.see(world.step(None, with_audio=False).frame, 0,
+              seconds_per_seq=1 / 30.0, mode="start")
+    # Карта тела из лепета передаётся модели: без неё осторожность у всех выходов
+    # максимальна, и любой план оказывается «опасным» — верно по букве инварианта 9,
+    # но бесполезно, потому что откатываемое от неоткатываемого уже отличимо.
+    body = babbler.body
+    model = ForwardModel.from_graph(graph, body)
+    for i in range(args.explore):
+        if i % 25 == 0:
+            model = ForwardModel.from_graph(graph, body)
+        out, ms = choose_probe(model, graph.current, world.outputs, hold_ms=hold,
+                               min_n=min_n, inverse=inverse,
+                               last_output=state["last"])
+        step(out, ms)
+    model = ForwardModel.from_graph(graph, body)
+    confirmed = sum(1 for outs in model.transitions.values()
+                    for o in outs if o.n >= min_n)
+    print(f"   мест {len(graph)}, пар (место, действие) {len(model.transitions)}, "
+          f"подтверждённых исходов {confirmed}")
+
+    def model_reach(src: str, max_depth: int = 4) -> dict[str, int]:
+        depth = {src: 0}
+        frontier = [src]
+        for d in range(max_depth):
+            nxt = []
+            for node in frontier:
+                for key in model.actions_from(node):
+                    pred = model.predict(node, key)
+                    if pred is None:
+                        continue
+                    for outcome, p in pred.outcomes():
+                        if p < 0.5 or outcome.n < min_n:
+                            continue
+                        if outcome.dst not in depth:
+                            depth[outcome.dst] = d + 1
+                            nxt.append(outcome.dst)
+            frontier = nxt
+        return {k: v for k, v in depth.items() if v > 0}
+
+    print("3. Планы до мест, куда модель знает дорогу")
+    found = arrived = 0
+    for _ in range(args.goals):
+        model = ForwardModel.from_graph(graph, body)
+        here = graph.current
+        reach = model_reach(here or "")
+        if not reach:
+            out, ms = choose_probe(model, here, world.outputs, hold_ms=hold,
+                                   min_n=min_n, inverse=inverse,
+                                   last_output=state["last"])
+            step(out, ms)
+            continue
+        target = sorted(reach)[-1]
+        goal = Goal(id=f"g{found}", kind="reach_place", target=target,
+                    test=lambda t=target: graph.current == t,
+                    test_text="я в этом месте", budget_ticks=40,
+                    provenance=Provenance(Origin.EXPERIENCE, branch="cli", seq=0),
+                    drive="curiosity", pressure=0.5)
+        plan = Planner(profile, model).plan(goal, here, target)
+        if plan is None:
+            continue
+        found += 1
+        ex = execute(plan, act=lambda a: step(a.outputs_touched()[0], a.duration_ms),
+                     goal=goal)
+        arrived += ex.goal_passed
+        if found <= args.show:
+            print(f"   план {plan.length} шагов, {plan.seconds:.2f} с, "
+                  f"слабое звено наблюдено {plan.min_step_n} раз, "
+                  f"опасный {plan.risky} → "
+                  f"{'дошёл' if ex.goal_passed else 'нет: ' + ex.reason[:50]}")
+    if found:
+        print(f"   планов {found}, дошли {arrived} ({arrived / found:.0%})")
+    else:
+        print("   ни одного плана: модель не знает ни одной подтверждённой дороги. "
+              "Это честный ответ, а не поломка — надо разведывать дольше")
+    return 0 if found and arrived == found else 1
+
+
 def cmd_describers(args: argparse.Namespace) -> int:
     """Что из бесплатных сервисов описания настроено на этой машине.
 
@@ -486,6 +607,16 @@ def main(argv: list[str] | None = None) -> int:
     sw.add_argument("path", type=Path)
     sw.add_argument("--dump-mask", type=Path, default=None)
     sw.set_defaults(fn=cmd_selfworld)
+
+    pn = sub.add_parser("plan", help="весь стек до плана: лепет, разведка, "
+                                     "модель, план, исполнение")
+    pn.add_argument("--seed", type=int, default=5)
+    pn.add_argument("--babble", type=int, default=1200, help="шагов лепета")
+    pn.add_argument("--explore", type=int, default=1500, help="шагов разведки")
+    pn.add_argument("--goals", type=int, default=20, help="сколько целей поставить")
+    pn.add_argument("--hold", type=int, default=200, help="удержание при пробе, мс")
+    pn.add_argument("--show", type=int, default=5, help="сколько планов напечатать")
+    pn.set_defaults(fn=cmd_plan)
 
     ds = sub.add_parser("describers",
                         help="бесплатные сервисы описания: что настроено")

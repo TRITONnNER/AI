@@ -29,7 +29,7 @@ from collections import Counter
 from dataclasses import dataclass
 from typing import Any, Callable, Sequence
 
-from ..core.action import Action, Reversibility
+from ..core.action import Action, Reversibility, action_key
 from ..core.clocks import Stamp
 from ..core.journal import Journal, Kind as EntryKind
 from ..model.beliefs import Origin, Provenance
@@ -52,9 +52,8 @@ class Step:
                           reversibility=reversibility)
 
     def key(self) -> str:
-        mods = "+".join(self.modifiers)
-        return f"{mods}>{self.output}@{self.duration_ms}" if mods else \
-            f"{self.output}@{self.duration_ms}"
+        """Ключ шага — общая для проекта форма ключа действия (`core.action`)."""
+        return action_key(self.output, self.duration_ms, self.modifiers)
 
     def as_dict(self) -> dict[str, Any]:
         return {"output": self.output, "duration_ms": self.duration_ms,

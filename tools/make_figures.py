@@ -526,6 +526,200 @@ def fig_domains(base: Path) -> Path:
     return _out(base, "8-chetyre-domena.png", fig)
 
 
+# --- 9. Планировщик: от лепета до дошедшего плана ---------------------------
+
+
+def fig_planner(base: Path) -> Path:
+    """Планировщик: от чего зависит, дойдёт план или нет. Всё из прогона."""
+    import collections
+
+    from harness.behaviour.babbling import Babbler as _Babbler, run_babbling as _run
+    from harness.behaviour.goals import Goal
+    from harness.behaviour.planner import Planner, choose_probe, execute
+    from harness.core.action import Action as _Action, action_key
+    from harness.core.profile import from_schema
+    from harness.model.beliefs import Origin, Provenance
+    from harness.model.forward import ForwardModel
+    from harness.model.places import PlaceGraph
+
+    hold = 200
+    base_profile = from_schema("ФИГУРА-план", capture_width=320,
+                              capture_height=180, babble_repeats=3)
+    babble_world = InteractiveWorld(base_profile, seed=5, n_outputs=16)
+    babbler = _Babbler(base_profile, babble_world.outputs, rng_seed=5)
+    _run(babble_world, babbler, steps=1200, clocks=Clocks())
+    inverse = dict(babbler.inverse_found)
+    body = babbler.body
+
+    plans: list[tuple[int, int, bool]] = []      # (слабейший шаг, длина, дошёл)
+    summary: dict[str, dict[str, int]] = {}
+
+    def trial(name, *, use_inverse, min_n, seed=5, steps=1500, goals=40,
+              random_walk=False):
+        profile = from_schema("ФИГУРА-план", capture_width=320, capture_height=180,
+                              babble_repeats=3, plan_min_step_n=min_n)
+        world = InteractiveWorld(profile, seed=seed, n_outputs=16)
+        graph = PlaceGraph.from_profile(profile)
+        rng = np.random.default_rng(seed)
+        st = {"seq": 0, "last": None}
+
+        def step(out, ms=hold):
+            obs = world.step(_Action.key(out, ms), with_audio=False)
+            st["seq"] += 1
+            st["last"] = out
+            return graph.see(obs.frame, st["seq"], seconds_per_seq=1 / 30.0,
+                             mode=action_key(out, ms))
+
+        def probe(model, here):
+            if random_walk:
+                return world.outputs[int(rng.integers(len(world.outputs)))], hold
+            return choose_probe(model, here, world.outputs, hold_ms=hold,
+                                min_n=min_n,
+                                inverse=inverse if use_inverse else None,
+                                last_output=st["last"])
+
+        graph.see(world.step(None, with_audio=False).frame, 0,
+                  seconds_per_seq=1 / 30.0, mode="start")
+        model = ForwardModel.from_graph(graph, body)
+        for i in range(steps):
+            if i % 25 == 0:
+                model = ForwardModel.from_graph(graph, body)
+            out, ms = probe(model, graph.current)
+            step(out, ms)
+
+        def reach(model, src, max_depth=4):
+            depth = {src: 0}
+            frontier = [src]
+            for d in range(max_depth):
+                nxt = []
+                for node in frontier:
+                    for key in model.actions_from(node):
+                        pred = model.predict(node, key)
+                        if pred is None:
+                            continue
+                        for outcome, p in pred.outcomes():
+                            if p < 0.5 or outcome.n < min_n:
+                                continue
+                            if outcome.dst not in depth:
+                                depth[outcome.dst] = d + 1
+                                nxt.append(outcome.dst)
+                frontier = nxt
+            return {k: v for k, v in depth.items() if v > 0}
+
+        found = arrived = 0
+        for i in range(goals):
+            model = ForwardModel.from_graph(graph, body)
+            here = graph.current
+            targets = reach(model, here or "")
+            if not targets:
+                out, ms = probe(model, here)
+                step(out, ms)
+                continue
+            target = sorted(targets, key=lambda k: (-targets[k], k))[0]
+            goal = Goal(id=f"g{i}", kind="reach_place", target=target,
+                        test=lambda t=target: graph.current == t,
+                        test_text="я в этом месте", budget_ticks=40,
+                        provenance=Provenance(Origin.EXPERIENCE, branch="fig", seq=0),
+                        drive="curiosity", pressure=0.5)
+            plan = Planner(profile, model).plan(goal, here, target)
+            if plan is None:
+                continue
+            found += 1
+            ex = execute(plan,
+                         act=lambda a: step(a.outputs_touched()[0], a.duration_ms),
+                         goal=goal)
+            arrived += ex.goal_passed
+            plans.append((plan.min_step_n, plan.length, bool(ex.goal_passed)))
+        confirmed = sum(1 for outs in ForwardModel.from_graph(graph, body)
+                        .transitions.values() for o in outs if o.n >= 2)
+        summary[name] = {"places": len(graph), "confirmed": confirmed,
+                         "found": found, "arrived": arrived}
+
+    trial("возврат +\nподтверждение", use_inverse=True, min_n=2)
+    trial("возврат,\nбез порога", use_inverse=True, min_n=1)
+    trial("случайная,\nбез порога", use_inverse=False, min_n=1, random_walk=True)
+
+    by_n: dict[int, list[int]] = collections.defaultdict(lambda: [0, 0])
+    by_len: dict[int, list[int]] = collections.defaultdict(lambda: [0, 0])
+    for weak, length, ok in plans:
+        k = 1 if weak < 2 else (2 if weak < 5 else (5 if weak < 15 else 15))
+        by_n[k][0] += 1
+        by_n[k][1] += ok
+        j = min(length, 3)
+        by_len[j][0] += 1
+        by_len[j][1] += ok
+
+    fig, axes = plt.subplots(1, 3, figsize=(13.5, 3.8),
+                             gridspec_kw={"wspace": 0.34})
+
+    ax = axes[0]
+    names = list(summary)
+    x = np.arange(len(names))
+    ax.bar(x - 0.2, [summary[n]["confirmed"] for n in names], width=0.4,
+           color=PROOF, label="подтверждённых переходов")
+    ax.bar(x + 0.2, [summary[n]["arrived"] for n in names], width=0.4,
+           color=AGENT, label="дошедших планов")
+    ax.set_xticks(x)
+    ax.set_xticklabels(names, fontsize=7.5)
+    for i, n in enumerate(names):
+        ax.text(i - 0.2, summary[n]["confirmed"] + 0.4,
+                str(summary[n]["confirmed"]), ha="center", fontsize=8)
+        ax.text(i + 0.2, summary[n]["arrived"] + 0.4,
+                f"{summary[n]['arrived']}/{summary[n]['found']}", ha="center",
+                fontsize=8)
+    ax.set_title("Три способа разведать и что из них выходит", fontsize=9)
+    ax.legend(fontsize=7.5, facecolor="#1b2027", edgecolor="#39424f",
+              loc="upper center", bbox_to_anchor=(0.5, 1.0))
+    ax.grid(axis="y", alpha=0.2)
+
+    labels_n = {1: "1 раз", 2: "2–4", 5: "5–14", 15: "15+"}
+    ax = axes[1]
+    keys = sorted(by_n)
+    rates = [by_n[k][1] / by_n[k][0] for k in keys]
+    colors = [ALARM if r < 0.9 else PROOF for r in rates]
+    ax.bar([labels_n[k] for k in keys], rates, color=colors, width=0.55)
+    for i, k in enumerate(keys):
+        ax.text(i, rates[i] + 0.03, f"{by_n[k][1]}/{by_n[k][0]}", ha="center",
+                fontsize=8)
+    ax.set_ylim(0, 1.18)
+    ax.set_ylabel("доля дошедших")
+    ax.set_xlabel("слабейший шаг наблюдён")
+    ax.set_title("Шаг, увиденный один раз, врёт;\nподтверждённый — нет", fontsize=9)
+    ax.grid(axis="y", alpha=0.2)
+
+    ax = axes[2]
+    keys = sorted(by_len)
+    rates = [by_len[k][1] / by_len[k][0] for k in keys]
+    colors = [ALARM if r < 0.9 else PROOF for r in rates]
+    ax.bar([f"{k}{'+' if k == 3 else ''}" for k in keys], rates, color=colors,
+           width=0.55)
+    for i, k in enumerate(keys):
+        ax.text(i, rates[i] + 0.03, f"{by_len[k][1]}/{by_len[k][0]}", ha="center",
+                fontsize=8)
+    ax.set_ylim(0, 1.18)
+    ax.set_ylabel("доля дошедших")
+    ax.set_xlabel("шагов в плане")
+    ax.set_title("Две ступени складываются, три — нет:\nпредел самого понятия «место»",
+                 fontsize=9)
+    ax.grid(axis="y", alpha=0.2)
+
+    for ax in axes:
+        for spine in ("top", "right"):
+            ax.spines[spine].set_visible(False)
+
+    fig.suptitle("Планировщик: цель «добраться до места» закрывается цепочкой, "
+                 "выбранной по модели из журнала.", fontsize=10.5, y=1.05)
+    fig.text(0.5, -0.2,
+             "Модель перехода строится только из наблюдённых «(место, действие) → "
+             "место», и «не знаю» для неё — законный ответ. Слева: без возврата "
+             "обратной парой\nразведка уходит всё дальше и не подтверждает ничего. "
+             "В середине: порог «наблюдено дважды» взят не из осторожности, а отсюда. "
+             "Справа: планы длиной три и больше\nне доходят никогда — это предел не "
+             "планировщика, а отпечатка вида как представления места.",
+             ha="center", fontsize=8.5, color="#9aa4b2")
+    return _out(base, "9-planirovshchik.png", fig)
+
+
 # --- 7. Что сделано и что нет ----------------------------------------------
 
 
@@ -546,6 +740,9 @@ def fig_status(base: Path) -> Path:
         ("Драйвы, настроение, эмоция", 1.0, "из объективных величин"),
         ("Лепет: открытие тела", 1.0, "9/9 живых, 8/8 пар, необратимый найден"),
         ("Карта тела: 4 состояния", 1.0, "одно совпадение — не открытие"),
+        ("Модель перехода из журнала", 1.0, "«не знаю» — законный ответ"),
+        ("Планировщик по модели", 1.0, "40 из 40 планов доходят"),
+        ("Разведка, которая подтверждает", 1.0, "без возврата не подтверждается ничто"),
         ("Контуры и субсумпция", 1.0, "прерываемо, лучший ответ всегда"),
         ("Размыкатель эффекторов", 1.0, "мысль не может стать поступком"),
         ("Файрвол восприятия", 0.7, "прибор готов, модели нет"),
@@ -567,7 +764,7 @@ def fig_status(base: Path) -> Path:
     notes = [r[2] for r in rows]
     colors = [PROOF if v >= 0.99 else (HUMAN if v >= 0.5 else ALARM) for v in vals]
 
-    fig, ax = plt.subplots(figsize=(11.5, 9.4))
+    fig, ax = plt.subplots(figsize=(11.5, 10.4))
     y = np.arange(len(rows))
     ax.barh(y, vals, color=colors, height=0.62)
     ax.set_yticks(y)
@@ -603,6 +800,7 @@ def main(argv: list[str]) -> int:
     fig_places(base)
     fig_loop(base)
     fig_domains(base)
+    fig_planner(base)
     fig_status(base)
     return 0
 

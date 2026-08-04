@@ -27,6 +27,9 @@ from typing import Any, Iterator
 
 import numpy as np
 
+# Значения по умолчанию — те же, что в схеме настроек (`place_grid`, `place_levels`).
+# Держать их здесь нужно только для вызовов без профиля: в рабочем пути параметры
+# приходят из `Profile`, потому что это настройки поведения, а не свойства кода.
 GRID = 8                  # сторона сетки отпечатка
 LEVELS = 4                # на сколько уровней квантуется ячейка
 
@@ -158,9 +161,12 @@ class PlaceGraph:
     """Граф мест. Строится по записи офлайн и живёт в среднем слое (2 Гц)."""
 
     def __init__(self, *, same_place_similarity: float = 0.82,
-                 variant_similarity: float = 0.6) -> None:
+                 variant_similarity: float = 0.6,
+                 grid: int = GRID, levels: int = LEVELS) -> None:
         if not 0.0 < variant_similarity < same_place_similarity <= 1.0:
             raise ValueError("порог варианта должен быть ниже порога того же места")
+        self.grid = int(grid)
+        self.levels = int(levels)
         self.same = same_place_similarity
         self.variant = variant_similarity
         self.places: dict[str, Place] = {}
@@ -168,6 +174,25 @@ class PlaceGraph:
         self.current: str | None = None
         self._since_seq: int = 0
         self._lost = 0
+
+    @classmethod
+    def from_profile(cls, profile: Any) -> "PlaceGraph":
+        """Граф с параметрами из профиля. Рабочий путь — этот, а не конструктор."""
+        p = profile.parameters
+        return cls(same_place_similarity=float(p["place_same_similarity"]),
+                   variant_similarity=float(p["place_variant_similarity"]),
+                   grid=int(profile.structural["place_grid"]),
+                   levels=int(profile.structural["place_levels"]))
+
+    def see(self, frame: Any, seq: int, *, seconds_per_seq: float = 1.0,
+            mode: str = "unknown", exclude: Any = None) -> str:
+        """Отпечаток снять и сразу учесть — с сеткой этого графа, а не глобальной.
+
+        Нужно затем, чтобы сетка не разъезжалась: отпечаток, снятый с одной сеткой,
+        и граф, построенный на другой, дают места, которых нет.
+        """
+        fp = fingerprint(frame, exclude=exclude, grid=self.grid, levels=self.levels)
+        return self.observe(fp, seq, seconds_per_seq=seconds_per_seq, mode=mode)
 
     # --- узлы ---------------------------------------------------------------
 

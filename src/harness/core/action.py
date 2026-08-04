@@ -25,6 +25,35 @@ from typing import Any, Mapping
 
 OUTPUT_RE = re.compile(r"^(OUT|MOD|BTN)_[0-9A-F]{2,4}$")
 
+# Ключ действия: выход вместе с удержанием и модификаторами. Одна форма на весь
+# проект, потому что «одно и то же нажатие» — это нажатие той же длительности:
+# действие невыразимо без длительности (инвариант 8). Ребро графа мест, шаг навыка и
+# переход модели пользуются этой формой, иначе они говорили бы о разном.
+ACTION_KEY_RE = re.compile(
+    r"^(?:(?P<mods>(?:OUT|MOD|BTN)_[0-9A-F]{2,4}(?:\+(?:OUT|MOD|BTN)_[0-9A-F]{2,4})*)>)?"
+    r"(?P<out>(?:OUT|MOD|BTN)_[0-9A-F]{2,4})@(?P<ms>\d+)$")
+
+
+def action_key(output: str, duration_ms: int, modifiers: tuple[str, ...] = ()) -> str:
+    """Ключ действия: `OUT_xx@200` или `MOD_yy>OUT_xx@200`."""
+    mods = "+".join(modifiers)
+    return f"{mods}>{output}@{int(duration_ms)}" if mods else f"{output}@{int(duration_ms)}"
+
+
+def parse_action_key(key: str) -> tuple[str, int, tuple[str, ...]] | None:
+    """Разобрать ключ действия. `None`, если это не ключ действия.
+
+    `None`, а не догадка о длительности: подставить длительность «по умолчанию»
+    значило бы предсказывать последствие другого действия. Нажатие на 40 мс и на 200
+    мс — разные действия, и в замере это стоило целого плана: модель обещала место,
+    наблюдённое при 200 мс, а планировщик жал 40 мс и попадал не туда.
+    """
+    m = ACTION_KEY_RE.match(key)
+    if not m:
+        return None
+    mods = tuple(m.group("mods").split("+")) if m.group("mods") else ()
+    return m.group("out"), int(m.group("ms")), mods
+
 
 class ActionError(ValueError):
     """Действие собрано так, что его нельзя ни выполнить, ни записать."""
