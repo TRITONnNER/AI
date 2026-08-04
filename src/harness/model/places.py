@@ -44,7 +44,7 @@ from __future__ import annotations
 
 import hashlib
 from dataclasses import dataclass, field
-from typing import Any, Iterator
+from typing import Any, Iterator, Sequence
 
 import numpy as np
 
@@ -246,7 +246,8 @@ class PlaceGraph:
     def __init__(self, *, same_place_similarity: float = 0.82,
                  variant_similarity: float = 0.6,
                  refine_margin: float = 6.0, refine_min_n: int = 2,
-                 refine_cell_min_n: int = 4, record_loops: bool = True,
+                 refine_cell_min_n: int = 4, refine_max_tests: int = 3,
+                 record_loops: bool = True,
                  grid: int = GRID, levels: int = LEVELS) -> None:
         if not 0.0 < variant_similarity < same_place_similarity <= 1.0:
             raise ValueError("порог варианта должен быть ниже порога того же места")
@@ -262,7 +263,7 @@ class PlaceGraph:
         self._lost = 0
         # Деления: основа → (признак, порог). Признак — «level» или «contrast», то
         # есть ровно то, что нормировка выбросила.
-        self.splits: dict[str, tuple[str, float]] = {}
+        self.splits: dict[str, list[tuple[str, float]]] = {}
         self._refinements = 0
         self._dropped_edges = 0
         self._level: float | None = None
@@ -271,6 +272,7 @@ class PlaceGraph:
         self.refine_margin = float(refine_margin)
         self.refine_min_n = int(refine_min_n)
         self.refine_cell_min_n = int(refine_cell_min_n)
+        self.refine_max_tests = int(refine_max_tests)
         self.record_loops = bool(record_loops)
 
     @classmethod
@@ -282,6 +284,7 @@ class PlaceGraph:
                    refine_margin=float(p["place_refine_margin"]),
                    refine_min_n=int(p["place_refine_min_n"]),
                    refine_cell_min_n=int(p["place_refine_cell_min_n"]),
+                   refine_max_tests=int(p["place_refine_max_tests"]),
                    record_loops=bool(profile.structural["place_record_loops"]),
                    grid=int(profile.structural["place_grid"]),
                    levels=int(profile.structural["place_levels"]))
@@ -313,34 +316,60 @@ class PlaceGraph:
                 best, score = (p.base or p.id), s
         return best, score
 
+    def _feature_value(self, feature: str, fp: tuple[int, ...],
+                       level: float | None, contrast: float | None) -> float | None:
+        if feature == "level":
+            return level
+        if feature == "contrast":
+            return contrast
+        k = int(feature.split(":")[1])
+        return float(fp[k]) if k < len(fp) else None
+
     def _band_of(self, base: str, fp: tuple[int, ...], level: float | None,
                  contrast: float | None) -> int:
-        """В какой полосе разделённого места мы находимся. Ноль — деления нет."""
-        split = self.splits.get(base)
-        if split is None:
+        """В какой полосе разделённого места мы находимся. Ноль — делений нет.
+
+        Признаков у места может быть несколько, и полоса — это их комбинация,
+        разряд на признак. Один порог на место был первой версией, и он упирался в
+        измеримое: состояние мира, различимое двумя признаками сразу, делилось
+        только по первому, а второе расхождение оставалось неразделённым навсегда.
+        """
+        tests = self.splits.get(base)
+        if not tests:
             return 0
-        feature, threshold = split
-        if feature == "level":
-            value: float | None = level
-        elif feature == "contrast":
-            value = contrast
-        else:
-            k = int(feature.split(":")[1])
-            value = float(fp[k]) if k < len(fp) else None
-        if value is None:
-            # Величина неизвестна — полоса неизвестна. Возвращать нулевую значило бы
-            # утверждать «здесь темно», не измерив.
-            return 0
-        return 1 if value >= threshold else 0
+        band = 0
+        for i, (feature, threshold) in enumerate(tests):
+            value = self._feature_value(feature, fp, level, contrast)
+            if value is None:
+                # Величина неизвестна — разряд не ставится. Ставить ноль значило бы
+                # утверждать «здесь темно», не измерив.
+                continue
+            if value >= threshold:
+                band |= 1 << i
+        return band
 
     def _in_band(self, base: str, band: int, fp: tuple[int, ...], seq: int) -> Place:
+        """Место-полоса. Ключ — отпечаток **основы**, а не пришедший вид.
+
+        Разница не косметическая. Если ключевать полосу пришедшим отпечатком, то
+        каждый ракурс того же места — а их у основы до шестнадцати вариантов —
+        завёл бы свою полосу. Замер на синтетике: два вида, отличающиеся одной
+        ячейкой из 64 (похожесть 0.98, заведомо одно место), после деления по
+        яркости расходились в две разные полосы, и расхождение предсказаний между
+        ними уже не было видно — второе деление не срабатывало никогда.
+        """
         if band == 0:
             return self.places[base]
-        pid = place_id(fp, band)
+        anchor = self.places[base]
+        pid = place_id(anchor.fingerprint, band)
         place = self.places.get(pid)
         if place is None:
-            place = Place(pid, fp, first_seq=seq, last_seq=seq, band=band, base=base)
+            place = Place(pid, anchor.fingerprint, first_seq=seq, last_seq=seq,
+                          band=band, base=base)
             self.places[pid] = place
+        elif fp != place.fingerprint and len(place.variants) < 16 \
+                and similarity(fp, place.fingerprint) >= self.variant:
+            place.variants.append(fp)
         return place
 
     def observe(self, fp: tuple[int, ...], seq: int, *, seconds_per_seq: float = 1.0,
@@ -447,35 +476,58 @@ class PlaceGraph:
           выбрасываются целиком. Они собраны про узел, которого больше нет;
           разделить их пополам значило бы придумать данные. Разведка соберёт заново
           — это дорого и это честно.
+        - **Бесконечного дробления.** Признаков у места не больше
+          `refine_max_tests`: каждый удваивает число возможных узлов на один вид, и
+          без предела место превращается в таблицу по пикселям, а граф — в набор
+          одноразовых записей, по которому нельзя планировать.
         """
         report: list[dict[str, Any]] = []
         by_pair: dict[tuple[str, str], list[Traversal]] = {}
         for edge in self.edges.values():
             by_pair.setdefault((edge.src, edge.mode), []).append(edge)
 
+        touched: set[str] = set()
         for (src, mode), edges in sorted(by_pair.items()):
-            if len(edges) < 2 or src in self.splits:
+            if len(edges) < 2:
+                continue
+            place = self.places.get(src)
+            base = (place.base or src) if place is not None else src
+            if base in touched:
+                # Рёбра этой семьи только что выброшены: судить по ним больше нельзя,
+                # они описывают узел, которого нет. Следующее деление — в следующий
+                # вызов, по новым наблюдениям.
+                continue
+            tests = self.splits.get(base, [])
+            if len(tests) >= self.refine_max_tests:
                 continue
             strong = [e for e in edges if e.n >= self.refine_min_n]
             if len(strong) < 2:
                 continue
             strong.sort(key=lambda e: -e.n)
-            found = self._separating_threshold(strong[0], strong[1])
+            found = self._separating_threshold(strong[0], strong[1], existing=tests)
             if found is None:
                 continue
             feature, threshold, gap = found
-            self.splits[src] = (feature, threshold)
+            self.splits.setdefault(base, []).append((feature, threshold))
             self._refinements += 1
-            dropped = self._drop_edges_of(src)
-            report.append({"place": src, "mode": mode, "feature": feature,
+            dropped = self._drop_edges_of(base)
+            touched.add(base)
+            report.append({"place": src, "base": base, "mode": mode,
+                           "feature": feature, "test": len(self.splits[base]),
                            "threshold": round(threshold, 2), "gap": round(gap, 2),
                            "outcomes": [e.dst for e in strong[:2]],
                            "edges_dropped": dropped})
         return report
 
-    def _separating_threshold(self, a: Traversal, b: Traversal
+    def _separating_threshold(self, a: Traversal, b: Traversal, *,
+                              existing: Sequence[tuple[str, float]] = ()
                               ) -> tuple[str, float, float] | None:
         """Порог, разделяющий два исхода. `None` — разделить нечем.
+
+        `existing` — признаки, по которым это место уже поделено. Повторить один из
+        них нельзя: полоса по нему уже разделена, значит новый разряд не изменит
+        ничего, а рёбра будут выброшены зря. Дважды делить по одному и тому же —
+        самый дешёвый способ зациклить уточнение карты.
 
         Сначала пробуются величины, выброшенные нормировкой: уровень и контраст. Они
         дешёвые и осмысленные — «здесь было светлее». Если не разделяют, пробуется
@@ -488,8 +540,11 @@ class PlaceGraph:
         деление окажется по шуму. Замер прямо это показал: с порогом в два
         наблюдения деления пошли на сидах, где расхождений не было вовсе.
         """
+        used = {f for f, _ in existing}
         for feature, xs, ys in (("level", a.src_levels, b.src_levels),
                                 ("contrast", a.src_contrasts, b.src_contrasts)):
+            if feature in used:
+                continue
             if len(xs) < self.refine_min_n or len(ys) < self.refine_min_n:
                 continue
             lo, hi = (xs, ys) if max(xs) < max(ys) else (ys, xs)
@@ -501,6 +556,8 @@ class PlaceGraph:
                 and len(b.src_cells) >= self.refine_cell_min_n):
             width = min(len(c) for c in (*a.src_cells, *b.src_cells))
             for k in range(width):
+                if f"cell:{k}" in used:
+                    continue
                 xs = [c[k] for c in a.src_cells]
                 ys = [c[k] for c in b.src_cells]
                 if -1 in xs or -1 in ys:
@@ -596,6 +653,7 @@ class PlaceGraph:
                 "loops": len(loops), "leaving": len(edges) - len(loops),
                 "lost": self._lost, "current": self.current,
                 "refinements": self._refinements, "splits": len(self.splits),
+                "tests": sum(len(v) for v in self.splits.values()),
                 "bands": sum(1 for p in self.places.values() if p.band),
                 "edges_dropped": self._dropped_edges,
                 "mean_visits": round(

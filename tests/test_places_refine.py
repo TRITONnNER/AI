@@ -21,8 +21,8 @@ import numpy as np
 import pytest
 
 from harness.core.profile import from_schema
-from harness.model.places import (LEVELS_KEPT, PlaceGraph, fingerprint, place_id,
-                                  similarity, view)
+from harness.model.places import (LEVELS_KEPT, PlaceGraph, Traversal,
+                                  fingerprint, place_id, similarity, view)
 
 
 def _views(n: int, seed: int = 7, shape: tuple[int, int] = (64, 96)) -> list[np.ndarray]:
@@ -173,6 +173,117 @@ def test_split_needs_more_than_one_observation_of_each_outcome() -> None:
         g.see(dst if bright else _dark(dst), seq, seconds_per_seq=0.1,
               mode="OUT_1A@200")
     assert g.refine() == [], "разделилось по одному наблюдению на исход"
+
+
+def test_place_can_split_by_more_than_one_feature() -> None:
+    """Место делится столько раз, сколько разных признаков его склеивают.
+
+    Один порог на место был первой версией. Он упирался в измеримое: состояние
+    мира, различимое двумя признаками сразу, делилось только по первому, а второе
+    расхождение оставалось неразделённым навсегда. Здесь два действия из одного
+    места расходятся по разным признакам — по яркости и по одной ячейке.
+    """
+    rows = np.linspace(20, 235, 64, dtype=np.uint8)
+    here = np.repeat(rows[:, None], 96, axis=1)
+    marked = here.copy()
+    marked[:8, :12] = 235
+    dst = _views(4, seed=23)
+
+    g = PlaceGraph(refine_margin=6.0, refine_min_n=2, refine_cell_min_n=2,
+                   refine_max_tests=3)
+    seq = 0
+    for i in range(6):
+        # Действие A расходится по яркости: светло → dst[0], темно → dst[1].
+        for bright in (True, False):
+            src = here if bright else _dark(here)
+            seq += 1
+            g.see(src, seq, seconds_per_seq=0.1, mode="start")
+            seq += 1
+            target = dst[0] if bright else _dark(dst[1])
+            g.see(target, seq, seconds_per_seq=0.1, mode="OUT_1A@200")
+        # Действие B расходится по ячейке: угол светлее → dst[2], иначе → dst[3].
+        for corner in (True, False):
+            seq += 1
+            g.see(marked if corner else here, seq, seconds_per_seq=0.1, mode="start")
+            seq += 1
+            g.see(dst[2] if corner else dst[3], seq, seconds_per_seq=0.1,
+                  mode="OUT_2B@200")
+
+    tests: list[str] = []
+    for _ in range(6):
+        # Уточнение делает по одному делению на семью за вызов: рёбра выброшены, и
+        # судить по ним второй раз нельзя. Второй признак приходит следующим кругом.
+        for r in g.refine():
+            tests.append(r["feature"])
+        for i in range(6):
+            for bright in (True, False):
+                src = here if bright else _dark(here)
+                seq += 1
+                g.see(src, seq, seconds_per_seq=0.1, mode="start")
+                seq += 1
+                g.see(dst[0] if bright else _dark(dst[1]), seq, seconds_per_seq=0.1,
+                      mode="OUT_1A@200")
+            for corner in (True, False):
+                seq += 1
+                g.see(marked if corner else here, seq, seconds_per_seq=0.1, mode="start")
+                seq += 1
+                g.see(dst[2] if corner else dst[3], seq, seconds_per_seq=0.1,
+                      mode="OUT_2B@200")
+
+    assert len(tests) >= 2, f"признаков нашлось {tests}, а склейки две"
+    assert len({t for t in tests}) >= 2, f"оба деления по одному признаку: {tests}"
+    assert g.stats()["tests"] >= 2
+
+
+def test_refine_never_repeats_the_same_feature() -> None:
+    """Дважды делить по одному признаку нельзя: разряд уже есть, рёбра — зря."""
+    g, here, there, elsewhere = _split_setup()
+    seq = 0
+    for _ in range(4):
+        for bright, d in ((True, there), (False, elsewhere)):
+            src = here if bright else _dark(here)
+            seq += 1
+            g.see(src, seq, seconds_per_seq=0.1, mode="start")
+            seq += 1
+            g.see(d if bright else _dark(d), seq, seconds_per_seq=0.1,
+                  mode="OUT_1A@200")
+    first = g.refine()
+    assert first and first[0]["feature"] == "level"
+    base = first[0]["base"]
+    # Тот же признак второй раз не берётся, каким бы разрывом он ни разделял
+    a = Traversal("x", "y", "OUT_1A@200", n=5, src_levels=[10.0] * 5)
+    b = Traversal("x", "z", "OUT_1A@200", n=5, src_levels=[200.0] * 5)
+    assert g._separating_threshold(a, b, existing=g.splits[base]) is None
+
+
+def test_number_of_features_per_place_is_bounded() -> None:
+    """Предел признаков обязателен: иначе место превращается в таблицу по пикселям."""
+    g = PlaceGraph(refine_max_tests=1, refine_margin=6.0, refine_min_n=2,
+                   refine_cell_min_n=2)
+    here, there, elsewhere = _views(3, seed=29)
+    seq = 0
+    for _ in range(4):
+        for bright, d in ((True, there), (False, elsewhere)):
+            src = here if bright else _dark(here)
+            seq += 1
+            g.see(src, seq, seconds_per_seq=0.1, mode="start")
+            seq += 1
+            g.see(d if bright else _dark(d), seq, seconds_per_seq=0.1,
+                  mode="OUT_1A@200")
+    assert g.refine(), "первое деление не случилось — тест ничего не проверяет"
+    base = next(iter(g.splits))
+    assert len(g.splits[base]) == 1
+    # Сколько бы расхождений ни нашлось дальше, второго признака не будет
+    for _ in range(4):
+        for bright, d in ((True, there), (False, elsewhere)):
+            src = here if bright else _dark(here)
+            seq += 1
+            g.see(src, seq, seconds_per_seq=0.1, mode="start")
+            seq += 1
+            g.see(d if bright else _dark(d), seq, seconds_per_seq=0.1,
+                  mode="OUT_2B@200")
+        g.refine()
+    assert len(g.splits[base]) == 1, g.splits[base]
 
 
 def test_invariant_4_band_ids_stay_opaque() -> None:
