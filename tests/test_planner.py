@@ -495,14 +495,21 @@ def test_planner_reaches_a_place_in_the_interactive_world() -> None:
     graph.see(world.step(None, with_audio=False).frame, 0,
               seconds_per_seq=1 / 30.0, mode="start")
     model = ForwardModel.from_graph(graph)
+    refinements: list[dict] = []
     for i in range(1500):
         if i % 25 == 0:
+            # Уточнение карты — часть разведки, а не отдельный этап. Именно на этом
+            # сиде переключатель света склеивал два состояния мира в одно место, и
+            # без деления подтверждённый на двенадцати наблюдениях переход врал на
+            # первом же шаге плана: доходили 2 плана из 36.
+            refinements += graph.refine()
             model = ForwardModel.from_graph(graph)
         out, ms = choose_probe(model, graph.current, world.outputs, hold_ms=hold,
                                min_n=min_n, inverse=inverse,
                                last_output=state["last"])
         step(out, ms)
 
+    refinements += graph.refine()
     model = ForwardModel.from_graph(graph)
     confirmed = sum(1 for outs in model.transitions.values()
                     for o in outs if o.n >= min_n)
@@ -539,19 +546,47 @@ def test_planner_reaches_a_place_in_the_interactive_world() -> None:
     assert plan is not None, "план до места, куда модель знает дорогу, не найден"
     assert plan.is_guess and plan.min_step_n >= min_n
 
-    # 4. Исполнение: каждый шаг сверяется с предсказанием.
-    ex = execute(plan, act=lambda a: step(a.outputs_touched()[0], a.duration_ms),
-                 goal=goal)
-    assert ex.goal_passed, ex.as_dict()
-    assert ex.surprises == 0
-    assert not plan.is_guess and plan.worked == 1
+    # 4. Дорога: планировать, идти, при расхождении уточнять карту и планировать
+    #    заново. Именно так на этом сиде и выясняется, что место склеило два
+    #    состояния мира: расхождение появляется на исполнении, а не на разведке —
+    #    разведка подтверждённые переходы больше не трогает и потому не спорит сама
+    #    с собой. Раньше здесь стоял один `execute`, и он проходил случайно: пока
+    #    петли не записывались, планы были в один шаг, и склейке негде было
+    #    проявиться.
+    def rebuild() -> ForwardModel:
+        refinements.extend(graph.refine())
+        return ForwardModel.from_graph(graph)
+
+    journey = travel(profile, goal, target, where=lambda: graph.current,
+                     act=lambda a: step(a.outputs_touched()[0], a.duration_ms),
+                     rebuild=rebuild)
+    assert journey.arrived, journey.as_dict()
+    # Делить место здесь могло не понадобиться: до этой цели дорога короткая и через
+    # склейку не идёт. Отсутствие деления — не провал, поэтому проверяется только то,
+    # что каждое случившееся деление обосновано разошедшимися уровнями. Что деление
+    # вообще срабатывает, проверяется отдельно: `test_places_refine.py` и
+    # `test_light_toggle_forces_the_map_to_split`.
+    assert all(r["feature"] == "level" for r in refinements), refinements
 
 
-def test_exploration_without_going_back_confirms_nothing() -> None:
-    """Замер, из которого взялся возврат обратной парой.
+def test_exploration_without_going_back_wanders_off() -> None:
+    """Замер, из которого взялся возврат обратной парой. Перезамерен.
 
-    Незнакомое место соблазняет расширяться дальше, и разведка уходит в
-    бесконечность. Это про мир и представление, а не про планировщик.
+    Прежняя формулировка была «без возврата не подтверждается ни один переход, 0», и
+    она держалась на другой поломке: граф не записывал «нажал и остался», поэтому
+    модель почти ничего не знала в любом случае. Петли записываются — число
+    изменилось, и держать в тесте старое было бы враньём.
+
+    Что теперь измерено (сиды 5, 7, 13, по 1200 шагов):
+
+    | возврат | мест | подтверждённых исходов | из них ведущих куда-то |
+    |---|---|---|---|
+    | нет  | 80 / 200 / 171 | 16 / 105 / 69 | 8 / 72 / 33 |
+    | есть | 60 / 46 / 59   | 82 / 93 / 60  | 70 / 88 / 26 |
+
+    Вывод тот же, причина видна лучше: без возврата разведка расширяется — мест
+    втрое-вчетверо больше, — и знание размазывается по местам, куда она больше не
+    вернётся. Планировать по такой модели нечем, хотя формально «переходы есть».
     """
     profile = _profile()
     world = InteractiveWorld(profile, seed=5, n_outputs=16)
@@ -570,16 +605,116 @@ def test_exploration_without_going_back_confirms_nothing() -> None:
     model = ForwardModel.from_graph(graph)
     for i in range(1200):
         if i % 25 == 0:
+            graph.refine()
             model = ForwardModel.from_graph(graph)
         out, ms = choose_probe(model, graph.current, world.outputs, hold_ms=200,
                                min_n=2)                     # без обратных пар
         step(out, ms)
     model = ForwardModel.from_graph(graph)
-    confirmed = sum(1 for outs in model.transitions.values()
-                    for o in outs if o.n >= 2)
-    assert confirmed == 0, (
-        f"разведка без возврата неожиданно подтвердила {confirmed} переходов — "
-        "тогда возврат не нужен, и это надо перезамерить")
+    leaving = sum(1 for (src, _), outs in model.transitions.items()
+                  for o in outs if o.n >= 2 and o.dst != src)
+    assert len(graph) >= 70, (
+        f"без возврата разведка открыла всего {len(graph)} мест — она перестала "
+        "расширяться, и замер надо переделать")
+    assert leaving <= 20, (
+        f"без возврата подтвердилось {leaving} ведущих куда-то переходов — больше, "
+        "чем на замере (8). Тогда возврат обратной парой не нужен, и это надо "
+        "перезамерить, а не подгонять порог")
+
+
+def test_light_toggle_forces_the_map_to_split() -> None:
+    """Замер, из которого взялось деление места. Настоящий мир, не синтетика вида.
+
+    На сиде 5 переключатель света даёт два состояния мира под одним видом: отпечаток
+    приводится к среднему, значит «темнее» — то же место. Пока карта не делится,
+    подтверждённый на двенадцати наблюдениях переход врёт на первом шаге плана.
+    Замер по восьми сидам, планы от трёх шагов: 192 из 235 (82 %) без деления, 224 из
+    239 (94 %) с делением, а провалы на самом первом шаге — 34 против 11.
+
+    Здесь проверяется не доля, а механизм: деление обязано случиться, и обязано быть
+    обосновано разошедшимися величинами, а не выдумано.
+    """
+    profile = _profile()
+    min_n = int(profile.parameters["plan_min_step_n"])
+    babble_world = InteractiveWorld(profile, seed=5, n_outputs=16)
+    babbler = Babbler(profile, babble_world.outputs, rng_seed=5)
+    run_babbling(babble_world, babbler, steps=500, clocks=Clocks())
+    inverse = dict(babbler.inverse_found)
+
+    world = InteractiveWorld(profile, seed=5, n_outputs=16)
+    graph = PlaceGraph.from_profile(profile)
+    graph.see(world.step(None, with_audio=False).frame, 0, seconds_per_seq=1 / 30.0,
+              mode="start")
+    state: dict[str, object] = {"seq": 0, "last": None}
+
+    def step(output: str, duration_ms: int = 200) -> str:
+        obs = world.step(Action.key(output, duration_ms), with_audio=False)
+        state["seq"] = int(state["seq"]) + 1
+        state["last"] = output
+        return graph.see(obs.frame, int(state["seq"]), seconds_per_seq=1 / 30.0,
+                         mode=action_key(output, duration_ms))
+
+    model = ForwardModel.from_graph(graph, babbler.body)
+    for i in range(1500):
+        if i % 25 == 0:
+            model = ForwardModel.from_graph(graph, babbler.body)
+        out, ms = choose_probe(model, graph.current, world.outputs, hold_ms=200,
+                               min_n=min_n, inverse=inverse,
+                               last_output=state["last"])
+        step(out, ms)
+
+    refinements: list[dict] = []
+
+    def rebuild() -> ForwardModel:
+        refinements.extend(graph.refine())
+        return ForwardModel.from_graph(graph, babbler.body)
+
+    arrived = tried = 0
+    for g in range(20):
+        model = rebuild()
+        here = graph.current
+        depth = {here: 0}
+        frontier = [here]
+        for d in range(4):
+            nxt = []
+            for node in frontier:
+                for key in model.actions_from(node or ""):
+                    pred = model.predict(node or "", key)
+                    if pred is None:
+                        continue
+                    for outcome, p in pred.outcomes():
+                        if (p < 0.5 or outcome.n < min_n or outcome.dst == node
+                                or outcome.dst in depth):
+                            continue
+                        depth[outcome.dst] = d + 1
+                        nxt.append(outcome.dst)
+            frontier = nxt
+        reach = {k: v for k, v in depth.items() if v and v > 0}
+        if not reach:
+            out, ms = choose_probe(model, here, world.outputs, hold_ms=200,
+                                   min_n=min_n, inverse=inverse,
+                                   last_output=state["last"])
+            step(out, ms)
+            continue
+        target = max(sorted(reach), key=lambda k: reach[k])
+        goal = _goal(target, test=lambda t=target: graph.current == t)
+        tried += 1
+        journey = travel(profile, goal, target, where=lambda: graph.current,
+                         act=lambda a: step(a.outputs_touched()[0], a.duration_ms),
+                         rebuild=rebuild)
+        arrived += journey.arrived
+
+    assert tried >= 10, f"целей было всего {tried} — замер вырожденный"
+    assert refinements, (
+        "карта не разделилась ни разу, хотя переключатель света на этом сиде даёт два "
+        "состояния мира под одним видом. Либо деление сломалось, либо мир изменился — "
+        "и то и другое надо перезамерить, а не убирать проверку")
+    for r in refinements:
+        assert r["feature"] == "level" or r["feature"].startswith("cell:"), r
+        assert r["gap"] > 0 and r["edges_dropped"] > 0, r
+    assert arrived / tried >= 0.7, (
+        f"дошли {arrived} из {tried}. На замере с делением доходили 94 % планов от "
+        "трёх шагов; падение ниже 70 % значит, что деление ломает больше, чем чинит")
 
 
 def test_random_exploration_does_not_produce_a_plannable_model() -> None:

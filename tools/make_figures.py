@@ -543,21 +543,34 @@ def fig_planner(base: Path) -> Path:
     from harness.model.places import PlaceGraph
 
     hold = 200
-    base_profile = from_schema("ФИГУРА-план", capture_width=320,
-                              capture_height=180, babble_repeats=3)
-    babble_world = InteractiveWorld(base_profile, seed=5, n_outputs=16)
-    babbler = _Babbler(base_profile, babble_world.outputs, rng_seed=5)
-    _run(babble_world, babbler, steps=1200, clocks=Clocks())
-    inverse = dict(babbler.inverse_found)
-    body = babbler.body
+
+    def babble(seed):
+        """Лепет своим сидом на каждый мир.
+
+        Раньше карта тела и обратные пары брались из одного прогона на сиде 5 и
+        переиспользовались для остальных миров. Раскладка «выход → эффект»
+        выводится из сида, поэтому чужая карта тела — это чужая обратимость и
+        чужие обратные пары: на сиде 11 из-за этого не находилось ни одного плана,
+        и картинка показывала провал там, где его нет.
+        """
+        profile = from_schema("ФИГУРА-план", capture_width=320, capture_height=180,
+                              babble_repeats=3)
+        world = InteractiveWorld(profile, seed=seed, n_outputs=16)
+        b = _Babbler(profile, world.outputs, rng_seed=seed)
+        _run(world, b, steps=1200, clocks=Clocks())
+        return b.body, dict(b.inverse_found)
 
     plans: list[tuple[int, int, bool]] = []      # (слабейший шаг, длина, дошёл)
     summary: dict[str, dict[str, int]] = {}
+    long_plans: dict[str, list[int]] = collections.defaultdict(lambda: [0, 0])
 
     def trial(name, *, use_inverse, min_n, seed=5, steps=1500, goals=40,
-              random_walk=False):
+              random_walk=False, loops=True, refine=True, collect=True,
+              max_depth=6):
+        body, inverse = babble(seed)
         profile = from_schema("ФИГУРА-план", capture_width=320, capture_height=180,
-                              babble_repeats=3, plan_min_step_n=min_n)
+                              babble_repeats=3, plan_min_step_n=min_n,
+                              place_record_loops=loops)
         world = InteractiveWorld(profile, seed=seed, n_outputs=16)
         graph = PlaceGraph.from_profile(profile)
         rng = np.random.default_rng(seed)
@@ -581,13 +594,18 @@ def fig_planner(base: Path) -> Path:
         graph.see(world.step(None, with_audio=False).frame, 0,
                   seconds_per_seq=1 / 30.0, mode="start")
         model = ForwardModel.from_graph(graph, body)
+        refinements: list[dict] = []
         for i in range(steps):
             if i % 25 == 0:
+                # Уточнение карты — часть разведки: место, склеившее два состояния
+                # мира, делится по расхождению своих же предсказаний.
+                if refine:
+                    refinements += graph.refine()
                 model = ForwardModel.from_graph(graph, body)
             out, ms = probe(model, graph.current)
             step(out, ms)
 
-        def reach(model, src, max_depth=4):
+        def reach(model, src):
             depth = {src: 0}
             frontier = [src]
             for d in range(max_depth):
@@ -600,6 +618,8 @@ def fig_planner(base: Path) -> Path:
                         for outcome, p in pred.outcomes():
                             if p < 0.5 or outcome.n < min_n:
                                 continue
+                            if outcome.dst == node:
+                                continue      # петля никуда не ведёт
                             if outcome.dst not in depth:
                                 depth[outcome.dst] = d + 1
                                 nxt.append(outcome.dst)
@@ -608,6 +628,8 @@ def fig_planner(base: Path) -> Path:
 
         found = arrived = 0
         for i in range(goals):
+            if refine:
+                refinements += graph.refine()
             model = ForwardModel.from_graph(graph, body)
             here = graph.current
             targets = reach(model, here or "")
@@ -629,15 +651,31 @@ def fig_planner(base: Path) -> Path:
                          act=lambda a: step(a.outputs_touched()[0], a.duration_ms),
                          goal=goal)
             arrived += ex.goal_passed
-            plans.append((plan.min_step_n, plan.length, bool(ex.goal_passed)))
+            if collect:
+                plans.append((plan.min_step_n, plan.length, bool(ex.goal_passed)))
+            long_plans[name][0] += plan.length >= 3
+            long_plans[name][1] += plan.length >= 3 and bool(ex.goal_passed)
         confirmed = sum(1 for outs in ForwardModel.from_graph(graph, body)
                         .transitions.values() for o in outs if o.n >= 2)
-        summary[name] = {"places": len(graph), "confirmed": confirmed,
-                         "found": found, "arrived": arrived}
+        gs = graph.stats()
+        acc = summary.setdefault(name, {"places": 0, "confirmed": 0, "found": 0,
+                                        "arrived": 0, "splits": 0, "loops": 0,
+                                        "leaving": 0})
+        acc["places"] += len(graph)
+        acc["confirmed"] += confirmed
+        acc["found"] += found
+        acc["arrived"] += arrived
+        acc["splits"] += len(refinements)
+        acc["loops"] += gs["loops"]
+        acc["leaving"] += gs["leaving"]
 
-    trial("возврат +\nподтверждение", use_inverse=True, min_n=2)
-    trial("возврат,\nбез порога", use_inverse=True, min_n=1)
-    trial("случайная,\nбез порога", use_inverse=False, min_n=1, random_walk=True)
+    # Рабочая настройка на трёх сидах. Сравнение с отключёнными петлями и без
+    # деления карты здесь не рисуется намеренно: на двух-трёх сидах разница между
+    # ступенями тонет в разбросе, и картинка соврала бы. Это сравнение измерено на
+    # восьми сидах и лежит в docs/ARCHITECTURE-AGENT.md, «Карта, которая исправляет
+    # себя»: 192 из 235 без деления против 224 из 239 с ним.
+    for seed in (5, 11, 13):
+        trial(f"сид {seed}", use_inverse=True, min_n=2, seed=seed)
 
     by_n: dict[int, list[int]] = collections.defaultdict(lambda: [0, 0])
     by_len: dict[int, list[int]] = collections.defaultdict(lambda: [0, 0])
@@ -655,19 +693,18 @@ def fig_planner(base: Path) -> Path:
     ax = axes[0]
     names = list(summary)
     x = np.arange(len(names))
-    ax.bar(x - 0.2, [summary[n]["confirmed"] for n in names], width=0.4,
-           color=PROOF, label="подтверждённых переходов")
-    ax.bar(x + 0.2, [summary[n]["arrived"] for n in names], width=0.4,
-           color=AGENT, label="дошедших планов")
+    ax.bar(x - 0.2, [summary[n]["leaving"] for n in names], width=0.4,
+           color=PROOF, label="рёбер, ведущих куда-то")
+    ax.bar(x + 0.2, [summary[n]["loops"] for n in names], width=0.4,
+           color=AGENT, label="петель «нажал и остался»")
     ax.set_xticks(x)
     ax.set_xticklabels(names, fontsize=7.5)
     for i, n in enumerate(names):
-        ax.text(i - 0.2, summary[n]["confirmed"] + 0.4,
-                str(summary[n]["confirmed"]), ha="center", fontsize=8)
-        ax.text(i + 0.2, summary[n]["arrived"] + 0.4,
-                f"{summary[n]['arrived']}/{summary[n]['found']}", ha="center",
-                fontsize=8)
-    ax.set_title("Три способа разведать и что из них выходит", fontsize=9)
+        ax.text(i - 0.2, summary[n]["leaving"] + 0.4,
+                str(summary[n]["leaving"]), ha="center", fontsize=8)
+        ax.text(i + 0.2, summary[n]["loops"] + 0.4,
+                str(summary[n]["loops"]), ha="center", fontsize=8)
+    ax.set_title("Из чего состоит карта", fontsize=9)
     ax.legend(fontsize=7.5, facecolor="#1b2027", edgecolor="#39424f",
               loc="upper center", bbox_to_anchor=(0.5, 1.0))
     ax.grid(axis="y", alpha=0.2)
@@ -699,8 +736,7 @@ def fig_planner(base: Path) -> Path:
     ax.set_ylim(0, 1.18)
     ax.set_ylabel("доля дошедших")
     ax.set_xlabel("шагов в плане")
-    ax.set_title("Две ступени складываются, три — нет:\nпредел самого понятия «место»",
-                 fontsize=9)
+    ax.set_title("Длина плана: провал остался там,\nгде карта ещё склеена", fontsize=9)
     ax.grid(axis="y", alpha=0.2)
 
     for ax in axes:
@@ -711,11 +747,14 @@ def fig_planner(base: Path) -> Path:
                  "выбранной по модели из журнала.", fontsize=10.5, y=1.05)
     fig.text(0.5, -0.2,
              "Модель перехода строится только из наблюдённых «(место, действие) → "
-             "место», и «не знаю» для неё — законный ответ. Слева: без возврата "
-             "обратной парой\nразведка уходит всё дальше и не подтверждает ничего. "
-             "В середине: порог «наблюдено дважды» взят не из осторожности, а отсюда. "
-             "Справа: планы длиной три и больше\nне доходят никогда — это предел не "
-             "планировщика, а отпечатка вида как представления места.",
+             "место», и «не знаю» для неё — законный ответ. Слева: «нажал и остался» "
+             "— тоже ребро;\nбез этих петель модель не знает про бесполезное "
+             "действие ничего, и разведка запирается на одном нажатии. В середине: "
+             "порог «наблюдено дважды»\nвзят не из осторожности, а отсюда. Справа: "
+             "длинные планы доходят после того, как место научилось делиться по "
+             "расхождению своих же предсказаний;\nостаток провалов приходится на "
+             "планы в два шага — именно такой длины они и получаются там, где карта "
+             "всё ещё склеивает два состояния мира.",
              ha="center", fontsize=8.5, color="#9aa4b2")
     return _out(base, "9-planirovshchik.png", fig)
 

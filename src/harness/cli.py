@@ -485,18 +485,25 @@ def cmd_plan(args: argparse.Namespace) -> int:
     # но бесполезно, потому что откатываемое от неоткатываемого уже отличимо.
     body = babbler.body
     model = ForwardModel.from_graph(graph, body)
+    refinements: list[dict[str, Any]] = []
     for i in range(args.explore):
         if i % 25 == 0:
+            # Уточнение карты перед пересборкой модели: если место склеило два
+            # состояния мира, модель, собранная до деления, унаследует расхождение.
+            refinements += graph.refine()
             model = ForwardModel.from_graph(graph, body)
         out, ms = choose_probe(model, graph.current, world.outputs, hold_ms=hold,
                                min_n=min_n, inverse=inverse,
                                last_output=state["last"])
         step(out, ms)
+    refinements += graph.refine()
     model = ForwardModel.from_graph(graph, body)
     confirmed = sum(1 for outs in model.transitions.values()
                     for o in outs if o.n >= min_n)
+    gs = graph.stats()
     print(f"   мест {len(graph)}, пар (место, действие) {len(model.transitions)}, "
           f"подтверждённых исходов {confirmed}")
+    print(f"   рёбер {gs['edges']}, из них петель «нажал и остался» {gs['loops']}")
 
     def model_reach(src: str, max_depth: int = 4) -> dict[str, int]:
         depth = {src: 0}
@@ -511,6 +518,11 @@ def cmd_plan(args: argparse.Namespace) -> int:
                     for outcome, p in pred.outcomes():
                         if p < 0.5 or outcome.n < min_n:
                             continue
+                        if outcome.dst == node:
+                            # Петля никуда не ведёт: считать её шагом значит
+                            # обещать достижимость, которой нет. Пока петли не
+                            # записывались, этого случая не существовало.
+                            continue
                         if outcome.dst not in depth:
                             depth[outcome.dst] = d + 1
                             nxt.append(outcome.dst)
@@ -520,6 +532,7 @@ def cmd_plan(args: argparse.Namespace) -> int:
     print("3. Планы до мест, куда модель знает дорогу")
     found = arrived = 0
     for _ in range(args.goals):
+        refinements += graph.refine()
         model = ForwardModel.from_graph(graph, body)
         here = graph.current
         reach = model_reach(here or "")
@@ -552,6 +565,28 @@ def cmd_plan(args: argparse.Namespace) -> int:
     else:
         print("   ни одного плана: модель не знает ни одной подтверждённой дороги. "
               "Это честный ответ, а не поломка — надо разведывать дольше")
+
+    if refinements:
+        print(f"\n4. Карта уточнилась по расхождению предсказаний: разделено мест "
+              f"{len(refinements)}")
+        for r in refinements[:4]:
+            print(f"     {r['place']} по признаку {r['feature']} "
+                  f"(разрыв {r['gap']}), выброшено рёбер {r['edges_dropped']} — "
+                  f"место склеивало два состояния мира")
+        print("   Статистика склеенного места выброшена, а не поделена: она была "
+              "собрана про узел, которого больше нет")
+    else:
+        # «Не разделилось» и «нечего делить» — разные вещи, и путать их нельзя.
+        # Расхождение, случившееся один раз, — шум узнавания, и деления по нему не
+        # будет по построению (`place_refine_min_n`). Поэтому здесь печатается,
+        # сколько расхождений вообще видно.
+        diverging = sum(1 for outs in model.transitions.values() if len(outs) > 1)
+        twice = sum(1 for outs in model.transitions.values()
+                    if sum(1 for o in outs if o.n >= 2) > 1)
+        print(f"\n4. Карта не делилась. Пар с расходящимися исходами {diverging}, "
+              f"из них повторившихся дважды {twice}")
+        print("   Одно расхождение — шум узнавания, а не открытие: делить по нему "
+              "значило бы плодить места, которых нет")
     return 0 if found and arrived == found else 1
 
 
