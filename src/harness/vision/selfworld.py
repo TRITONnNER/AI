@@ -117,6 +117,11 @@ def _shift_into(prev: np.ndarray, dy: int, dx: int) -> tuple[np.ndarray, np.ndar
     h, w = prev.shape
     out = np.zeros((h, w), dtype=np.int16)
     valid = np.zeros((h, w), dtype=bool)
+    if abs(dy) >= h or abs(dx) >= w:
+        # Сдвиг больше кадра: перекрытия нет вообще, сравнивать нечего. Возвращается
+        # пустая маска достоверного, а не исключение: «эта гипотеза неприменима» —
+        # законный ответ, и вызывающему не нужно знать про размеры кадра.
+        return out, valid
     ys_src = slice(max(0, -dy), min(h, h - dy))
     ys_dst = slice(max(0, dy), min(h, h + dy))
     xs_src = slice(max(0, -dx), min(w, w - dx))

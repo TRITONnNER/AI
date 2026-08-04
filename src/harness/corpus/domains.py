@@ -570,11 +570,19 @@ class GameDomain:
         return self.world.last_action_changed
 
 
+def _depth_domain(profile: Profile, *, seed: int = 0) -> Any:
+    """Мир с настоящей глубиной. Импорт отложен: он тянет свой модуль."""
+    from .depth import DepthWorld
+
+    return DepthWorld(profile, seed=seed)
+
+
 DOMAINS: dict[str, Any] = {
     "game": GameDomain,
     "document": DocumentDomain,
     "desktop": DesktopDomain,
     "video": VideoDomain,
+    "depth": _depth_domain,
 }
 
 

@@ -46,6 +46,24 @@ EXPECTATION = {
                "Крупное едущее окно иногда даёт сдвиг по себе, и тогда добавляется "
                "параллакс",
     "video": "только неподвижность: камера не движется вовсе, содержимое идёт само",
+    "depth": "объявленный провал: разделение слоёв предполагает одно движение мира, "
+             "а здесь их три — по плану на каждую дальность",
+}
+
+# Домены, которые проваливаются **ожидаемо**, с названной причиной. Это не поблажка:
+# провал остаётся провалом и виден в таблице, но отличается от неожиданного. Без
+# такого различения либо приходится выкинуть домен (и потерять знание о том, где
+# стена), либо смириться с вечно красным замером (и перестать замечать настоящие
+# поломки).
+KNOWN_FAILURES: dict[str, str] = {
+    "depth": (
+        "разделение слоёв стоит на допущении «у мира одно движение»: пиксель либо "
+        "сместился как весь кадр, либо не сместился вовсе. В мире с настоящей "
+        "глубиной движений столько, сколько планов, и оба крайних случая ложны. "
+        "Признаки при этом расходятся между собой на 91 % решённых пикселей — то "
+        "есть встроенный сторож расхождений честно показывает, что кто-то врёт. "
+        "Чинится не порогом, а тем, чего пока нет: оценкой потока по слоям дальности "
+        "(см. harness.vision.layers, таблица четырёх измеренных попыток)"),
 }
 
 # Домены, в которых глобального сдвига по построению нет. Это пояснение к таблице, а
@@ -566,14 +584,26 @@ class Report:
     results: list[DomainResult] = field(default_factory=list)
 
     def as_dict(self) -> dict[str, Any]:
-        return {"domains": [r.as_dict() for r in self.results],
-                "ok": all(self.passed(r) for r in self.results)}
+        return {"domains": [{**r.as_dict(),
+                             "passed": self.passed(r),
+                             "expected_failure": self.expected_failure(r)}
+                            for r in self.results],
+                "ok": all(self.passed(r) or self.expected_failure(r)
+                          for r in self.results),
+                "unexpected_failures": [r.domain for r in self.results
+                                        if not self.passed(r)
+                                        and not self.expected_failure(r)]}
 
     @staticmethod
     def passed(res: DomainResult) -> bool:
         body_ok, _ = _body_ok(res)
         layers_ok, _ = _layers_ok(res)
         return body_ok and layers_ok
+
+    @staticmethod
+    def expected_failure(res: DomainResult) -> str:
+        """Объявленная причина провала, если он объявлен. Иначе пустая строка."""
+        return KNOWN_FAILURES.get(res.domain, "")
 
     def table(self) -> str:
         rows = [("домен", "признак", "IoU", "точн.", "полн. неподв.",

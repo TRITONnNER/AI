@@ -478,9 +478,16 @@ def test_cross_domain_benchmark_passes_everywhere() -> None:
     from harness.benchmark import run_all
 
     rep = run_all(seed=3, frames=120, babble_steps=600)
-    assert len(rep.results) == 4
+    assert len(rep.results) == 5
+    assert not rep.as_dict()["unexpected_failures"], (
+        "домен провалился без объявленной причины: "
+        f"{rep.as_dict()['unexpected_failures']}")
     for r in rep.results:
-        assert rep.passed(r), f"{r.domain}: {r.verdict}"
+        if rep.passed(r):
+            continue
+        # Провал допустим только объявленный, и причина обязана быть внятной.
+        why = rep.expected_failure(r)
+        assert len(why) > 80, f"{r.domain}: причина провала слишком короткая"
     assert "домен" in rep.table()
 
 

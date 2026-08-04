@@ -535,7 +535,11 @@ def cmd_bench(args: argparse.Namespace) -> int:
     print(rep.table())
     print()
     for r in rep.results:
-        print(f"{'OK ' if rep.passed(r) else 'НЕТ'} {r.domain}: {r.verdict}")
+        known = rep.expected_failure(r)
+        mark = "OK " if rep.passed(r) else ("НЕТ" if not known else "НЕТ*")
+        print(f"{mark} {r.domain}: {r.verdict}")
+        if known and not rep.passed(r):
+            print(f"      * провал объявлен: {known}")
         print(f"      ожидаемо: {EXPECTATION.get(r.domain, '—')}")
         print(f"      признак:  {r.signal_reason}")
     ok = rep.as_dict()["ok"]
