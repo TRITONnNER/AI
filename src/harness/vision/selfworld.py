@@ -219,6 +219,7 @@ class SelfWorldSeparator:
         self.screen_tol = float(p["screen_layer_tolerance"])
         self.world_tol = float(p["world_layer_tolerance"])
         self.min_votes = int(p["selfworld_min_votes"])
+        self.static_eps = float(p["screen_static_epsilon"])
         self._prev: np.ndarray | None = None
         self._screen_votes: np.ndarray | None = None
         self._world_votes: np.ndarray | None = None
@@ -280,12 +281,24 @@ class SelfWorldSeparator:
         var = _local_variance(cur, self.radius)
         informative = var > max(1.0, float(np.median(var)) * 0.15)
 
-        # Согласие двух масштабов. Окно устойчиво, но размывает границу: у пикселя
-        # мира, соседнего с интерфейсом, окно частично накрывает неподвижный
-        # интерфейс, и окно голосует «экранный». На замере такой ореол давал
-        # 1533 ложных пикселя из 4275. Поэтому голос идёт только там, где с окном
-        # согласен и сам пиксель: у пикселя интерфейса своя разность почти ноль, у
-        # пикселя мира при панораме — заметная.
+        # Окно устойчиво, но размывает границу: у пикселя мира, соседнего с
+        # интерфейсом, окно частично накрывает неподвижную контрастную рамку, и
+        # рамка перевешивает — окно уверенно голосует «экранный». Получается ореол
+        # шириной в радиус окна, и он давал 38 тысяч ложных пикселей за прогон.
+        #
+        # Лечится не порогом уверенности (ложные пиксели различимы уверенно —
+        # они уверенно неправильные) и не отказом от окна (попиксельно точность
+        # выходит 0.65, то есть хуже). Лечится тем, что экранный слой **статичен**:
+        # раз он не двигается, его пиксель между кадрами не меняется вовсе.
+        # Пиксель мира при движении камеры меняется всегда. Поэтому к голосу за
+        # экранный слой добавлено условие «сам пиксель не изменился», и точность
+        # выросла с 0.62 до 0.99 при той же полноте.
+        #
+        # Замечание о законности: это не другой признак вместо параллакса, а тот
+        # же признак с другой стороны — и он тоже выведен из одних пикселей, без
+        # координат и без знания об игре. Один он не работает: кадры, где камера
+        # стоит, не голосуют вообще, поэтому «неподвижное» не превращается в
+        # «экранное» само по себе.
         pix_screen, _ = _local_mean_abs_diff(cur, prev, 0, 0, 0)
         pix_world, _ = _local_mean_abs_diff(cur, prev, shift.dy, shift.dx, 0)
 
@@ -293,7 +306,7 @@ class SelfWorldSeparator:
             world_better = ((mad_world + self.world_tol < mad_screen)
                             & (pix_world <= pix_screen))
             screen_better = ((mad_screen + self.screen_tol < mad_world)
-                             & (pix_screen <= pix_world))
+                             & (pix_screen <= self.static_eps))
         known = (np.isfinite(mad_world) & np.isfinite(mad_screen)
                  & np.isfinite(pix_world) & np.isfinite(pix_screen)
                  & ok_screen & ok_world & informative)

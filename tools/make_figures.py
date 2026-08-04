@@ -152,8 +152,12 @@ def fig_selfworld(base: Path, session_root: Path) -> Path:
     fig.suptitle("0.6 — отделить «моё» от «мирского» по параллаксу. "
                  "Ни одной захардкоженной координаты, ни одного знания об игре.",
                  fontsize=10, y=1.1)
-    fig.text(0.5, -0.06, "зелёное — интерфейс найден верно · красное — принято за "
-             "интерфейс напрасно (ореол окна) · жёлтое — пропущено",
+    fig.text(0.5, -0.06,
+             f"зелёное — интерфейс найден верно ({inter} px) · красное — принято за "
+             f"интерфейс напрасно ({int((found & ~truth).sum())} px) · "
+             f"жёлтое — пропущено ({int(((~found) & truth).sum())} px). "
+             "Ореол вокруг панелей ушёл, когда к параллаксу добавилось условие "
+             "статичности экранного слоя.",
              ha="center", fontsize=8, color="#9aa4b2")
     return _out(base, "2-sebya-i-mira.png", fig)
 
@@ -354,7 +358,77 @@ def fig_places(base: Path) -> Path:
     return _out(base, "5-graf-mest.png", fig)
 
 
-# --- 6. Что сделано и что нет ----------------------------------------------
+# --- 6. Замкнутый круг: драйв → цель → пробы → тест ------------------------
+
+
+def fig_loop(base: Path) -> Path:
+    from harness.behaviour.goals import GoalStack, candidates_from_body, choose
+    from harness.core.profile import from_schema
+    from harness.model.drives import Motivation
+
+    profile = from_schema("КРУГ-1", capture_width=320, capture_height=180,
+                          babble_rate=0.9, babble_repeats=3, drive_horizon_s=60.0)
+    world = InteractiveWorld(profile, seed=23)
+    caution = float(profile.parameters["irreversibility_threshold"])
+    babbler = Babbler(profile, world.outputs, rng_seed=23)
+    motivation = Motivation(profile)
+    stack = GoalStack(profile)
+    error = PredictionError(profile)
+
+    rounds, passed, abandoned, pressure_hist, live_hist, goal_marks = [], [], [], [], [], []
+    clocks = Clocks()
+    for rnd in range(40):
+        s = error.summary()
+        motivation.update(error_mean=s["mean"], error_sigma=s["sigma"],
+                          error_now=s["last"],
+                          unknown_reversibility=babbler.progress()["unknown_reversibility"])
+        if stack.active is None:
+            cands = candidates_from_body(babbler.body, world.outputs,
+                                        caution_threshold=caution)
+            if cands:
+                stack.push(choose(cands, motivation, top=1)[0], motivation, rnd, "b0",
+                           budget_ticks=10)
+                goal_marks.append(rnd)
+        run_babbling(world, babbler, steps=40, clocks=clocks, error=error)
+        stack.tick()
+        st = stack.stats()
+        rounds.append(rnd)
+        passed.append(st["passed"])
+        abandoned.append(st["abandoned"])
+        pressure_hist.append(max(motivation.goal_pressure().values()))
+        live_hist.append(babbler.progress()["live"])
+
+    fig, (ax, ax2) = plt.subplots(2, 1, figsize=(12, 5.2), sharex=True,
+                                  gridspec_kw={"height_ratios": [1.25, 1]})
+    for r in goal_marks:
+        ax.axvline(r, color="#39424f", lw=0.8, zorder=0)
+    ax.plot(rounds, passed, color=PROOF, lw=1.8, label="целей прошло тест")
+    ax.plot(rounds, abandoned, color=ALARM, lw=1.8, label="целей брошено по бюджету")
+    ax.plot(rounds, live_hist, color=AGENT, lw=1.3, ls="--",
+            label="отвечающих выходов найдено")
+    ax.set_ylabel("штук")
+    ax.set_title("Замкнутый круг: давление драйва ставит цель, пробы её закрывают. "
+                 "Серые линии — момент постановки цели.")
+    ax.grid(alpha=0.25)
+    ax.legend(fontsize=8, framealpha=0.15, loc="center right")
+
+    ax2.plot(rounds, pressure_hist, color=HUMAN, lw=1.6)
+    ax2.fill_between(rounds, 0, pressure_hist, color=HUMAN, alpha=0.12)
+    ax2.set_ylabel("давление\nведущего драйва")
+    ax2.set_xlabel("раунд (40 проб в каждом)")
+    ax2.grid(alpha=0.25)
+
+    st = stack.stats()
+    fig.text(0.5, -0.05,
+             f"итог: целей {st['goals']}, прошло {st['passed']}, брошено "
+             f"{st['abandoned']} · до успеха в среднем {st['mean_ticks_to_pass']} такта, "
+             f"до отказа {st['mean_ticks_to_abandon']} · награды в этой схеме нет: "
+             "цель либо проходит свой тест, либо нет",
+             ha="center", fontsize=8.5, color="#9aa4b2")
+    return _out(base, "6-zamknutyy-krug.png", fig)
+
+
+# --- 7. Что сделано и что нет ----------------------------------------------
 
 
 def fig_status(base: Path) -> Path:
@@ -364,7 +438,7 @@ def fig_status(base: Path) -> Path:
         ("Профиль: 85 настроек, два хеша", 1.0, "единицы, границы, форк журнала"),
         ("Ресурсы: память, диск, расход", 1.0, "упор действует, журнал не режется"),
         ("Устройства: видеть ≠ управлять", 1.0, "склейка, задержки, переключение"),
-        ("Разделение себя и мира (0.6)", 0.85, "IoU 0.74 при полноте 0.99"),
+        ("Разделение себя и мира (0.6)", 1.0, "IoU 0.97, точность 0.99"),
         ("Интерактивный мир", 1.0, "движение, свет, необратимая поломка"),
         ("Ошибка предсказания", 1.0, "всплески на смене режима"),
         ("Карточки и происхождение", 1.0, "свидетельство ≠ опыт, пересборка"),
@@ -382,8 +456,8 @@ def fig_status(base: Path) -> Path:
         ("Видеокодек для кадров", 0.0, "нет ffmpeg; предел измерен"),
         ("Большая модель за файрволом", 0.0, "подключить нечем"),
         ("Обученные сети, weights/", 0.0, "не начато"),
-        ("Цели из давления драйвов", 0.15, "давление считается, целей нет"),
-        ("Библиотека навыков", 0.05, "контур объявлен, макросов нет"),
+        ("Цели: тест, бюджет, отказ", 1.0, "круг замкнут: 6 из 8 целей прошли"),
+        ("Библиотека навыков", 0.8, "макросы добыты, проверка применением есть"),
     ]
     labels = [r[0] for r in rows]
     vals = [r[1] for r in rows]
@@ -409,7 +483,7 @@ def fig_status(base: Path) -> Path:
     fig.text(0.5, -0.02, "Красное внизу — не забытое, а невыполнимое здесь: нет "
              "дисплея, звукового устройства, игры, ffmpeg и доступа к модели.",
              ha="center", fontsize=8.5, color="#9aa4b2")
-    return _out(base, "6-chto-sdelano.png", fig)
+    return _out(base, "7-chto-sdelano.png", fig)
 
 
 def main(argv: list[str]) -> int:
@@ -424,6 +498,7 @@ def main(argv: list[str]) -> int:
     fig_prediction(base)
     fig_babbling(base)
     fig_places(base)
+    fig_loop(base)
     fig_status(base)
     return 0
 

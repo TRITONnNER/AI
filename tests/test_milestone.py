@@ -414,9 +414,12 @@ def test_0_6_finds_interface_without_coordinates(corpus: Path) -> None:
     """Критерий: «стабильно выделяет область интерфейса без единой захардкоженной
     координаты и без знания, что это за игра».
 
-    Замеренные значения на пяти сидах: IoU 0.735…0.750, полнота 0.987…0.989,
-    точность 0.742…0.757. Порог поставлен ниже замеров, но не настолько, чтобы
+    Замеренные значения на шести сидах: IoU 0.969…0.976, полнота 0.979…0.981,
+    точность 0.989…0.995. Порог поставлен ниже замеров, но не настолько, чтобы
     проходить при поломке метода.
+
+    Раньше точность была 0.62: окно захватывало контрастную рамку интерфейса и
+    давало ореол вокруг него. Разбор — в ARCHITECTURE-AGENT.md.
     """
     from harness.corpus.synthetic import load_hud_mask
     from harness.vision.selfworld import SCREEN, SelfWorldSeparator
@@ -435,8 +438,39 @@ def test_0_6_finds_interface_without_coordinates(corpus: Path) -> None:
     precision = inter / max(1, int(found.sum()))
 
     assert recall >= 0.95, f"пропущено слишком много интерфейса: полнота {recall:.3f}"
-    assert precision >= 0.65, f"слишком много ложного интерфейса: точность {precision:.3f}"
-    assert inter / union >= 0.70, f"IoU {inter / union:.3f}"
+    assert precision >= 0.95, f"слишком много ложного интерфейса: точность {precision:.3f}"
+    assert inter / union >= 0.92, f"IoU {inter / union:.3f}"
+
+
+def test_0_6_static_screen_condition_is_what_gives_precision(corpus: Path) -> None:
+    """Точность держится на том, что экранный слой между кадрами не меняется.
+
+    Если ослабить это условие — как пришлось бы для источника, сжатого с потерями, —
+    точность падает. Проверяем, что падает именно она, а не что-то другое: иначе
+    настройка `screen_static_epsilon` окажется ручкой без смысла.
+    """
+    from harness.core.profile import from_schema
+    from harness.corpus.synthetic import load_hud_mask
+    from harness.vision.selfworld import SCREEN, SelfWorldSeparator
+
+    truth = load_hud_mask(corpus)
+    scores = {}
+    for eps in (0.5, 64.0):
+        with Session.open(corpus) as s:
+            profile = from_schema(
+                "тест", capture_width=int(s.profile.parameters["capture_width"]),
+                capture_height=int(s.profile.parameters["capture_height"]),
+                screen_static_epsilon=eps)
+            sep = SelfWorldSeparator(profile)
+            for _, img in s:
+                sep.feed(img)
+            found = sep.result().pixel_mask(SCREEN)
+        tp = int((found & truth).sum())
+        scores[eps] = tp / max(1, int(found.sum()))
+
+    assert scores[0.5] > scores[64.0] + 0.2, (
+        f"ослабление условия статичности не ухудшило точность: {scores}. "
+        "Значит точность держится на чём-то другом, и настройка вводит в заблуждение")
 
 
 def test_0_6_still_camera_gives_no_votes(profile) -> None:

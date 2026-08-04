@@ -160,6 +160,88 @@ def cmd_babble(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_loop(args: argparse.Namespace) -> int:
+    """Замкнутый круг: давление драйва → цель → пробы → тест цели.
+
+    Ни одна часть здесь не подыгрывает другой: цель ставится по давлению драйвов,
+    проверяется объективным тестом по карте тела, а карта тела заполняется
+    настоящими пробами в мире, который про цель ничего не знает.
+    """
+    from .behaviour.babbling import Babbler, run_babbling
+    from .behaviour.goals import GoalStack, candidates_from_body, choose
+    from .behaviour.skills import Library
+    from .core.profile import from_schema
+    from .corpus.world import InteractiveWorld
+    from .model.drives import Motivation
+    from .session import Recorder, Session
+    from .vision.predict import PredictionError
+
+    profile = from_schema("КРУГ-1", capture_width=320, capture_height=180,
+                          babble_rate=0.9, babble_repeats=3, drive_horizon_s=60.0)
+    world = InteractiveWorld(profile, seed=args.seed)
+    caution = float(profile.parameters["irreversibility_threshold"])
+
+    with Recorder(args.path, profile=profile, source=f"loop:seed={args.seed}",
+                  synthetic=True, note=args.note) as rec:
+        babbler = Babbler(profile, world.outputs, journal=rec.journal, rng_seed=args.seed)
+        motivation = Motivation(profile)
+        stack = GoalStack(profile, journal=rec.journal)
+        error = PredictionError(profile)
+        branch = rec.journal.meta.branch_id
+
+        for _ in range(args.rounds):
+            summary = error.summary()
+            motivation.update(
+                error_mean=summary["mean"], error_sigma=summary["sigma"],
+                error_now=summary["last"],
+                unknown_reversibility=babbler.progress()["unknown_reversibility"])
+            if stack.active is None:
+                cands = candidates_from_body(babbler.body, world.outputs,
+                                             caution_threshold=caution)
+                if cands:
+                    stack.push(choose(cands, motivation, top=1)[0], motivation,
+                               rec.journal.seq, branch, rec.clocks.stamp(),
+                               budget_ticks=args.budget)
+            run_babbling(world, babbler, steps=args.steps_per_round,
+                         clocks=rec.clocks, error=error)
+            stack.tick(rec.clocks.stamp())
+
+        goal_stats = stack.stats()
+        body_stats = babbler.progress()
+
+    print("цели:")
+    _print_json(goal_stats)
+    print("\nмотивация:")
+    _print_json({"mood": motivation.mood.as_dict(),
+                 "ведущий драйв": motivation.dominant().name,
+                 "давление": motivation.goal_pressure(),
+                 "модуляция порогов": motivation.modulation().as_dict()})
+    print("\nтело:")
+    _print_json({k: body_stats[k] for k in
+                 ("outputs_total", "live", "silent", "untried", "probes_done",
+                  "inverse_pairs", "not_undoable")})
+
+    with Session.open(args.path) as s:
+        library = Library()
+        library.from_journal(s.journal, min_repeats=args.min_repeats)
+        print("\nнавыки, найденные в журнале:")
+        _print_json(library.stats())
+        for skill in library.best_for()[:5]:
+            mark = "догадка" if skill.is_guess else "проверен"
+            print(f"  {skill.id}  n={skill.n:<3} {mark:<8} {skill.signature()}")
+
+    if args.compare_truth:
+        truth = world.truth()
+        live = set(truth["live_outputs"])
+        found = set(babbler.body.by_state("live"))
+        print("\nсверка с истиной мира (только для исследователя):")
+        print(f"  живых верно {len(found & live)} из {len(live)}, "
+              f"ложных {len(found - live)}")
+        print(f"  необратимо по истине {truth['irreversible_outputs']}")
+        print(f"  не умеет откатить    {body_stats['not_undoable']}")
+    return 0
+
+
 def cmd_verify(args: argparse.Namespace) -> int:
     from .session import Session
 
@@ -319,6 +401,18 @@ def main(argv: list[str] | None = None) -> int:
     g.add_argument("--no-audio", action="store_true")
     g.add_argument("--note", default=None)
     g.set_defaults(fn=cmd_gen_corpus)
+
+    lp = sub.add_parser("loop", help="замкнутый круг: драйв → цель → пробы → тест")
+    lp.add_argument("path", type=Path)
+    lp.add_argument("--seed", type=int, default=23)
+    lp.add_argument("--rounds", type=int, default=40)
+    lp.add_argument("--steps-per-round", type=int, default=40)
+    lp.add_argument("--budget", type=int, default=10, help="бюджет цели в тактах")
+    lp.add_argument("--min-repeats", type=int, default=3,
+                    help="сколько повторов делает цепочку навыком")
+    lp.add_argument("--note", default=None)
+    lp.add_argument("--compare-truth", action="store_true")
+    lp.set_defaults(fn=cmd_loop)
 
     v = sub.add_parser("verify", help="проверить целостность записи")
     v.add_argument("path", type=Path)
