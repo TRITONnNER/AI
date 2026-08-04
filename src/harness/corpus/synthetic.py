@@ -250,7 +250,7 @@ def generate_session(root: str | Path, *, profile: Profile | None = None,
 
     with Recorder(root, profile=profile, source=f"synthetic:seed={seed}",
                   synthetic=True, note=note) as rec, \
-         DebugChannel(root / "debug", mode="a") as dbg:
+         DebugChannel.for_profile(root / "debug", profile, mode="a") as dbg:
 
         # Истина, не зависящая от кадра.
         dbg.write(Stamp(0, 0, None), "world_setup", {

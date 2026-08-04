@@ -25,6 +25,7 @@ from __future__ import annotations
 import hashlib
 import re
 import unicodedata
+from typing import Any
 
 SYMBOL_RE = re.compile(r"^SYM_[0-9A-F]{4}$")
 _WS = re.compile(r"\s+")
@@ -56,12 +57,27 @@ class Symbolizer:
     отладочный поток, а не этот объект.
     """
 
-    __slots__ = ("_salt_id", "_key")
+    __slots__ = ("_salt_id", "_key", "_enabled")
 
-    def __init__(self, salt_id: str, secret: bytes | None = None) -> None:
+    @classmethod
+    def from_profile(cls, profile: Any, secret: bytes | None = None) -> "Symbolizer":
+        """Хешировать ли текст — решает профиль, а не вызывающий.
+
+        `text_symbolized=False` — законный режим ablation: агент получает читаемый
+        язык до того, как его заслужил, и это надо иметь возможность замерить. Ручка
+        структурная, значит журнал форкается, и смешать такой опыт с обычным нельзя
+        (инвариант 11). Но молча игнорировать ручку нельзя тем более: объявленная и
+        никем не читаемая настройка — это ложь о возможностях.
+        """
+        return cls(str(profile.structural["symbol_salt_id"]), secret,
+                   enabled=bool(profile.structural["text_symbolized"]))
+
+    def __init__(self, salt_id: str, secret: bytes | None = None, *,
+                 enabled: bool = True) -> None:
         if not salt_id:
             raise SymbolError("salt_id обязателен: он часть структурного профиля")
         self._salt_id = salt_id
+        self._enabled = bool(enabled)
         # Секрет по умолчанию выводится из salt_id. Этого достаточно, чтобы
         # символы не совпадали между профилями, но недостаточно против того, у
         # кого есть исходники и словарь. Настоящий секрет задаётся явно, и тогда
@@ -72,10 +88,20 @@ class Symbolizer:
     def salt_id(self) -> str:
         return self._salt_id
 
+    @property
+    def enabled(self) -> bool:
+        """Хеширует ли этот символизатор вообще. Видно в отчётах и в тестах."""
+        return self._enabled
+
     def symbolize(self, text: str) -> str:
         norm = normalize(text)
         if not norm:
             raise SymbolError("пустая надпись символом не становится")
+        if not self._enabled:
+            # Режим ablation: возвращается сама надпись. Ни одна проверка на
+            # непрозрачность её не пропустит, и это правильно — прогон с читаемым
+            # текстом обязан быть отличим от обычного на всех уровнях.
+            return norm
         h = hashlib.blake2b(norm.encode("utf-8"), key=self._key, digest_size=8)
         return "SYM_" + h.hexdigest()[:SYMBOL_DIGITS].upper()
 

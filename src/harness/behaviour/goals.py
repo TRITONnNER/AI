@@ -152,6 +152,12 @@ class GoalStack:
         # Бюджет цели — в собственных циклах агента, а не в секундах стены:
         # у агента свои часы, и мерить его терпение чужими было бы неверно.
         self.default_budget = max(1, int(float(p["drive_horizon_s"]) * float(p["hz_skills"])))
+        # Может ли человеческая речь ставить агенту цели. По умолчанию нет, и это
+        # не осторожность, а инвариант 10: реакция только на поведение и объективные
+        # величины. Ручка структурная — прогон, в котором человек ставит цели, это
+        # другой эксперимент, и смешивать его с чистым нельзя.
+        self.human_speech_affects_goals = bool(
+            profile.structural["human_speech_affects_goals"])
         self.goals: list[Goal] = []
         self._counter = 0
         self.passed = 0
@@ -182,6 +188,12 @@ class GoalStack:
     def push(self, candidate: Candidate, motivation: Motivation, seq: int,
              branch: str, stamp: Stamp | None = None, *,
              budget_ticks: int | None = None) -> Goal:
+        if candidate.drive == "human" and not self.human_speech_affects_goals:
+            raise GoalError(
+                "цель от человеческой речи запрещена этим профилем "
+                "(`human_speech_affects_goals=False`). Инвариант 10: реакция только "
+                "на поведение и объективные величины. Если это нужно замерить — "
+                "включите ручку, и журнал форкнется")
         pressure = motivation.goal_pressure()
         goal = Goal(
             id=self._next_id(), kind=candidate.kind, target=candidate.target,

@@ -187,6 +187,8 @@ class Journal:
             raise JournalError(f"нет ветки журнала: {meta_path}")
         self.meta = BranchMeta.from_dict(json.loads(meta_path.read_text(encoding="utf-8")))
         self._profile = Profile.from_dict(self.meta.profile)
+        self._text_symbolized = bool(
+            self._profile.structural.get("text_symbolized", True))
         self._fh = None
         self._seq = 0
         self._last = GENESIS
@@ -268,6 +270,8 @@ class Journal:
                     event={"code": "parameters", "reason": reason, "diff": diff,
                            "to_profile_hash": new_profile.profile_hash})
         self._profile = new_profile
+        self._text_symbolized = bool(
+            new_profile.structural.get("text_symbolized", True))
 
     # --- чтение хвоста ------------------------------------------------------
 
@@ -310,8 +314,14 @@ class Journal:
                     "Журнал дозаписывается, время в нём не отматывается")
             if stamp.t_world < self._last_stamp.t_world:
                 raise JournalError(f"t_world назад: {self._last_stamp.t_world} → {stamp.t_world}")
-        if perception is not None:
+        if perception is not None and self._text_symbolized:
             # Инвариант 5: то, что уйдёт агенту, проходит границу без читаемого текста.
+            #
+            # Проверка отключается ровно одним способом — структурной ручкой
+            # `text_symbolized=False`, то есть заявленным ablation-прогоном «а если
+            # дать агенту читаемый язык». Ручка форкает журнал (инвариант 11), и
+            # смешать такой опыт с обычным нельзя: у записей другой structure_hash.
+            # Ничего другого проверку не выключает, и по умолчанию она включена.
             assert_no_plain_text(perception, path="perception")
         if action is not None and kind not in (Kind.ACTION, Kind.THOUGHT):
             raise JournalError(

@@ -274,7 +274,7 @@ class RemoteDescriber:
                  timeout_s: float = 30.0, cache: AnswerCache | None = None,
                  limiter: RateLimiter | None = None,
                  attention_box: tuple[int, int, int, int] | None = None,
-                 model: str | None = None) -> None:
+                 model: str | None = None, internet: bool = True) -> None:
         self.provider = provider
         self.model = model or provider.model
         self.max_side = int(max_side)
@@ -282,6 +282,9 @@ class RemoteDescriber:
         self.cache = cache or AnswerCache()
         self.limiter = limiter or RateLimiter(provider.rpm, provider.rpd)
         self.attention_box = attention_box
+        # Разрешён ли этому прогону интернет. Ручка структурная: прогон без сети и
+        # прогон с сетью — разный опыт, и смешивать их нельзя.
+        self.internet = bool(internet)
         self.calls = 0
         self.name = f"{provider.name}:{self.model}"
 
@@ -293,6 +296,12 @@ class RemoteDescriber:
         return os.environ.get(self.provider.key_env)
 
     def probe(self) -> tuple[bool, str]:
+        if not self.internet and self.provider.key_env is not None:
+            return False, ("интернет этому прогону не разрешён "
+                           "(`internet_access=False`)")
+        return self._probe()
+
+    def _probe(self) -> tuple[bool, str]:
         """Можно ли пользоваться. Возвращает (да/нет, почему).
 
         Для сетевого сервиса проверяется только ключ: тратить запрос из суточной
@@ -327,6 +336,11 @@ class RemoteDescriber:
         return parsed.hostname, parsed.port or (443 if parsed.scheme == "https" else 80)
 
     def require(self) -> None:
+        if not self.internet and self.provider.key_env is not None:
+            raise BackendUnavailable(
+                f"{self.provider.name}: этому прогону интернет не разрешён "
+                "(`internet_access=False`). Это заявленное ограничение прогона, а "
+                "не поломка: локальный узел спрашивать можно, сетевой сервис — нет")
         ok, why = self.probe()
         if not ok:
             raise BackendUnavailable(f"{self.provider.name}: {why}")
@@ -460,12 +474,44 @@ def make(name: str, **kwargs: Any) -> RemoteDescriber:
     return KINDS[provider.kind](provider, **kwargs)
 
 
-def from_profile(name: str, profile: Any, **kwargs: Any) -> RemoteDescriber:
-    """То же, но параметры берутся из профиля, а не задаются на месте."""
+def from_profile(name: str | None, profile: Any, **kwargs: Any) -> RemoteDescriber:
+    """То же, но параметры берутся из профиля, а не задаются на месте.
+
+    `name=None` — взять того, кто назван в профиле (`model_provider`). Иначе
+    настройка «какой сервис спрашивать» существовала бы только на бумаге.
+    """
     p = profile.parameters
-    return make(name, max_side=int(p["model_max_side_px"]),
+    chosen = name or str(profile.structural["model_provider"])
+    return make(chosen, max_side=int(p["model_max_side_px"]),
                 timeout_s=float(p["model_timeout_s"]),
+                internet=bool(profile.structural["internet_access"]),
                 cache=AnswerCache(int(p["model_cache_size"])), **kwargs)
+
+
+def gate_from_profile(profile: Any) -> AskGate:
+    """Порог «когда вообще спрашивать» — из профиля, а не из вызова."""
+    p = profile.parameters
+    return AskGate(float(p["model_min_novelty"]),
+                   min_gap_cycles=int(p["model_min_gap_cycles"]))
+
+
+def chain_from_profile(profile: Any, **kwargs: Any) -> Chain:
+    """Цепочка по профилю: сначала названный сервис, потом запасные.
+
+    `model_fallback=False` означает «спрашивать только названного»: без этого
+    настройка бессмысленна, а сравнение прогонов ломается — ответы разных моделей
+    это разные данные.
+    """
+    p = profile.parameters
+    first = str(profile.structural["model_provider"])
+    if not bool(p["model_fallback"]):
+        names: list[str] = [first]
+    else:
+        names = [first] + [q.name for q in PROVIDERS if q.name != first]
+    return available(names, max_side=int(p["model_max_side_px"]),
+                     timeout_s=float(p["model_timeout_s"]),
+                     internet=bool(profile.structural["internet_access"]),
+                     **kwargs)
 
 
 @dataclass(slots=True)

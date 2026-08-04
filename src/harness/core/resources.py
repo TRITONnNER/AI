@@ -40,6 +40,7 @@ BREACH_RAM_CAP = "ram_cap"
 BREACH_DISK_CAP = "disk_cap"
 BREACH_BELIEF_CAP = "belief_cap"
 BREACH_SPEND_CAP = "spend_cap"
+BREACH_MODEL_RATE = "model_rate"
 
 # Операции, которые спрашивают разрешения.
 OP_FRAME = "frame"          # записать кадр
@@ -140,13 +141,22 @@ class ResourceGovernor:
                  session_root: Path | str | None = None,
                  measurer: Measurer | None = None,
                  on_evict: Callable[[int], int] | None = None,
-                 on_consolidate: Callable[[], None] | None = None) -> None:
+                 on_consolidate: Callable[[], None] | None = None,
+                 now: Callable[[], float] | None = None) -> None:
+        import time as _time
+
+        self._now = now or _time.monotonic
         p = profile.parameters
         self.ram_cap_mb = float(p["ram_cap_mb"])
         self.ram_warn = float(p["ram_warn_fraction"])
         self.disk_cap_mb = float(p["session_disk_cap_mb"])
         self.belief_cap = int(p["belief_cap"])
         self.spend_cap_usd = float(p["spend_cap_usd"])
+        # Предел частоты обращений к большой модели. Это не деньги, а темп: у
+        # бесплатных тарифов ограничение именно на число запросов, и упереться в
+        # него посреди прогона — рабочая ситуация, а не поломка.
+        self.model_rate_cap = float(p["token_budget_per_min"])
+        self._model_calls_at: list[float] = []
         self.working_frames = int(p["working_context_frames"])
         self.journal = journal
         self.session_root = Path(session_root) if session_root else None
@@ -204,6 +214,14 @@ class ResourceGovernor:
                               float(self.belief_cap), "карточек",
                               "заявлена консолидация: забывание по ценности"))
 
+        rate = self.model_call_rate()
+        if self.model_rate_cap > 0 and rate > self.model_rate_cap:
+            self._refuse_model = (
+                f"частота обращений {rate:.2f} запр/с при пределе "
+                f"{self.model_rate_cap:.2f}")
+            out.append(Breach(BREACH_MODEL_RATE, rate, self.model_rate_cap, "запр/с",
+                              "обращения к модели придётся отложить; мир идёт дальше"))
+
         if self.spend_cap_usd > 0 and self.usd_spent >= self.spend_cap_usd:
             self._refuse_model = (
                 f"расход ${self.usd_spent:.2f} при пределе ${self.spend_cap_usd:.2f}")
@@ -250,11 +268,25 @@ class ResourceGovernor:
 
     # --- расход -------------------------------------------------------------
 
-    def spend(self, usd: float = 0.0, *, model_calls: int = 0) -> None:
+    def spend(self, usd: float = 0.0, *, model_calls: int = 0,
+              at: float | None = None) -> None:
         if usd < 0 or model_calls < 0:
             raise ResourceError("расход не бывает отрицательным")
         self.usd_spent += float(usd)
         self.model_calls += int(model_calls)
+        now = self._now() if at is None else float(at)
+        self._model_calls_at.extend([now] * int(model_calls))
+
+    def model_call_rate(self, at: float | None = None) -> float:
+        """Обращений к модели в секунду за последнюю минуту.
+
+        Окно минутное, а мера — в секунду, потому что предел объявлен в запр/с:
+        средняя за минуту не наказывает за короткую серию и при этом не даёт
+        держать высокий темп долго.
+        """
+        now = self._now() if at is None else float(at)
+        self._model_calls_at = [t for t in self._model_calls_at if now - t <= 60.0]
+        return len(self._model_calls_at) / 60.0
 
     def note_beliefs(self, count: int) -> None:
         self.beliefs = max(0, int(count))
@@ -267,6 +299,8 @@ class ResourceGovernor:
             "disk_cap_mb": self.disk_cap_mb,
             "belief_cap": self.belief_cap,
             "spend_cap_usd": self.spend_cap_usd,
+            "model_rate_cap": self.model_rate_cap,
+            "model_call_rate": round(self.model_call_rate(), 4),
             "model_calls": self.model_calls,
             "frames_refused": self._refuse_frames,
             "model_refused": self._refuse_model,

@@ -42,9 +42,28 @@ class DebugChannelError(RuntimeError):
 class DebugChannel:
     """Дозаписываемый поток истины. Живёт рядом с журналом, но не внутри него."""
 
-    def __init__(self, root: str | Path, mode: Literal["a", "r"] = "r") -> None:
+    @classmethod
+    def for_profile(cls, root: str | Path, profile: Any,
+                    mode: Literal["a", "r"] = "a") -> "DebugChannel":
+        """Канал по профилю. `debug_channel_enabled=False` — канала нет.
+
+        Выключенный канал ничего не пишет и в этом честен: истины про прогон потом
+        не будет, и сверить результат будет не с чем. Это законный режим — например,
+        когда запись отдаётся кому-то, кому истину видеть нельзя, — но он должен быть
+        объявлен ручкой, а не получаться случайно.
+        """
+        return cls(root, mode,
+                   enabled=bool(profile.structural["debug_channel_enabled"]))
+
+    def __init__(self, root: str | Path, mode: Literal["a", "r"] = "r", *,
+                 enabled: bool = True) -> None:
         self.root = Path(root)
         self.mode = mode
+        self.enabled = bool(enabled)
+        if not self.enabled:
+            self._fh = None
+            self._sym_fh = None
+            return
         if mode == "a":
             self.root.mkdir(parents=True, exist_ok=True)
             self._fh = (self.root / TRUTH).open("a", encoding="utf-8")
@@ -77,6 +96,8 @@ class DebugChannel:
             raise DebugChannelError("поток открыт только на чтение")
         if not code:
             raise DebugChannelError("у записи истины должен быть код факта")
+        if not self.enabled:
+            return
         line = {"stamp": stamp.as_dict(), "code": code, "truth": truth}
         self._fh.write(json.dumps(line, ensure_ascii=False, sort_keys=True,
                                   separators=(",", ":")) + "\n")
@@ -86,6 +107,8 @@ class DebugChannel:
         """Строка таблицы расшифровки: символ → настоящая надпись."""
         if self.mode != "a":
             raise DebugChannelError("поток открыт только на чтение")
+        if not self.enabled:
+            return
         self._sym_fh.write(json.dumps(
             {"symbol": symbol, "text": text, "salt_id": salt_id},
             ensure_ascii=False, sort_keys=True, separators=(",", ":")) + "\n")

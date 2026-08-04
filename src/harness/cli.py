@@ -337,6 +337,38 @@ def cmd_selfworld(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_status(args: argparse.Namespace) -> int:
+    """Состояние проекта, посчитанное по коду и тестам.
+
+    Не текст, который кто-то написал и забыл обновить: инварианты берутся из тестов,
+    настройки из схемы, части из наличия модулей и тестов, а «чего нет» — из списка,
+    в котором у каждой строки обязана быть причина.
+    """
+    import importlib.util
+    import sys as _sys
+    from pathlib import Path as _Path
+
+    tools = _Path(__file__).resolve().parent.parent.parent / "tools"
+    spec = importlib.util.spec_from_file_location("project_status",
+                                                 tools / "project_status.py")
+    if spec is None or spec.loader is None:
+        print("не нашёл tools/project_status.py: отчёт считается им", file=sys.stderr)
+        return 2
+    mod = importlib.util.module_from_spec(spec)
+    _sys.modules["project_status"] = mod
+    spec.loader.exec_module(mod)
+
+    data = mod.collect(with_tests=args.tests)
+    if args.json:
+        _print_json(data)
+    else:
+        print(mod.render_text(data))
+    if args.md:
+        args.md.write_text(mod.render_markdown(data), encoding="utf-8")
+        print(f"\nзаписано: {args.md}")
+    return 0
+
+
 def cmd_plan(args: argparse.Namespace) -> int:
     """Весь стек до плана: лепет → разведка → модель → план → исполнение.
 
@@ -607,6 +639,13 @@ def main(argv: list[str] | None = None) -> int:
     sw.add_argument("path", type=Path)
     sw.add_argument("--dump-mask", type=Path, default=None)
     sw.set_defaults(fn=cmd_selfworld)
+
+    stt = sub.add_parser("status", help="что готово, что нет и почему — по коду")
+    stt.add_argument("--tests", action="store_true",
+                     help="прогнать тесты и показать их итог")
+    stt.add_argument("--md", type=Path, default=None, help="записать markdown")
+    stt.add_argument("--json", action="store_true")
+    stt.set_defaults(fn=cmd_status)
 
     pn = sub.add_parser("plan", help="весь стек до плана: лепет, разведка, "
                                      "модель, план, исполнение")

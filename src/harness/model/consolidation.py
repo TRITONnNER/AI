@@ -51,6 +51,7 @@ class SleepReport:
     """Что было во сне. Пишется в журнал одной записью вида SLEEP."""
 
     run: int
+    duration_s: float = 0.0          # сколько сон длится по профилю
     entries_read: int = 0
     entities_before: int = 0
     entities_after: int = 0
@@ -64,7 +65,8 @@ class SleepReport:
     fingerprint_after: str = ""
 
     def as_dict(self) -> dict[str, Any]:
-        return {"run": self.run, "entries_read": self.entries_read,
+        return {"run": self.run, "duration_s": round(self.duration_s, 3),
+                "entries_read": self.entries_read,
                 "entities_before": self.entities_before,
                 "entities_after": self.entities_after,
                 "forgotten": len(self.forgotten),
@@ -117,6 +119,10 @@ class Consolidator:
         self.merge_similarity = float(p["merge_similarity"])
         self.belief_cap = int(p["belief_cap"])
         self.overdue_minutes = float(p["reality_check_max_minutes"])
+        self.duration_s = float(p["sleep_duration_s"])
+        self.trust_human = float(p["testimony_trust_human"])
+        self.live_min_responses = int(p["body_live_min_responses"])
+        self.silent_min_deliveries = int(p["babble_repeats"])
         self.runs = 0
         self.last_reality_check_run: int | None = None
 
@@ -179,9 +185,16 @@ class Consolidator:
         с реальностью не было, и счётчик просрочки растёт.
         """
         self.runs += 1
-        rebuilt = rebuild_from_journal(journal)
+        # Доверие к человеческому свидетельству — настройка прогона, а не константа
+        # пересборки: от неё зависит, насколько чужое слово двигает убеждение, и
+        # сравнивать прогоны с разным доверием как равные нельзя.
+        rebuilt = rebuild_from_journal(
+            journal, trust_human=self.trust_human,
+            live_min_responses=self.live_min_responses,
+            silent_min_deliveries=self.silent_min_deliveries)
         store = rebuilt.beliefs
-        report = SleepReport(run=self.runs, entries_read=rebuilt.entries,
+        report = SleepReport(run=self.runs, duration_s=self.duration_s,
+                             entries_read=rebuilt.entries,
                              entities_before=len(store),
                              fingerprint_before=store.fingerprint())
 

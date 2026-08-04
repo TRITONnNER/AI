@@ -18,7 +18,7 @@ from __future__ import annotations
 
 import time
 from dataclasses import dataclass
-from typing import Callable
+from typing import Any, Callable
 
 import numpy as np
 
@@ -36,6 +36,20 @@ class Trip:
 
 
 class Watchdog:
+    """Сторожевой таймер: замерла картинка — жать СТОП.
+
+    Пороги приходят из профиля (`watchdog_still_seconds`, `watchdog_still_threshold`),
+    а не задаются на месте: захардкоженный порог означал бы, что «замерло»
+    определяется кодом, а не настройкой прогона.
+    """
+
+    @classmethod
+    def from_profile(cls, profile: Any, **kwargs: Any) -> "Watchdog":
+        p = profile.parameters
+        return cls(still_seconds=float(p["watchdog_still_seconds"]),
+                   threshold=float(p["watchdog_still_threshold"]),
+                   **kwargs)
+
     def __init__(self, *, still_seconds: float, threshold: float,
                  stop: StopSwitch | None = None, journal: Journal | None = None,
                  now: Callable[[], float] = time.monotonic,

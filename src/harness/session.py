@@ -112,6 +112,9 @@ class Recorder:
         self.governor = governor
         self._check_every = max(1, int(check_resources_every))
         self._frames_written = 0
+        self._drop_tolerance = int(profile.parameters["capture_drop_tolerance"])
+        self._last_frame_world: int | None = None
+        self._gaps_noticed = 0
         self._frames_refused = 0
 
         if devices is not None:
@@ -159,6 +162,22 @@ class Recorder:
         event: dict[str, Any] = {"code": "frame"}
         if audio_ref is not None:
             event["audio_offset_ms"] = round(float(audio_offset_ms), 3)
+
+        # Пропуск кадров замечается здесь, а не оставляется на совесть вызывающего.
+        # Иначе запись выглядит непрерывной там, где источник отвалился, и всё, что
+        # считается по соседним кадрам — сдвиг, слои, ошибка предсказания, — молча
+        # считается по разным моментам времени. Норма пропуска — из профиля
+        # (`capture_drop_tolerance`), потому что она зависит от источника.
+        if self._last_frame_world is not None:
+            missed = int(stamp.t_world) - int(self._last_frame_world) - 1
+            if missed > self._drop_tolerance:
+                self.record_gap("frames_dropped",
+                                {"missed": missed,
+                                 "tolerance": self._drop_tolerance,
+                                 "from_t_world": int(self._last_frame_world),
+                                 "to_t_world": int(stamp.t_world)})
+                self._gaps_noticed += 1
+        self._last_frame_world = int(stamp.t_world)
         self._frames_written += 1
         return self.journal.append(EntryKind.FRAME, stamp, actor,
                                    frame=frame_ref, audio=audio_ref, event=event)
