@@ -15,7 +15,11 @@ dependencies = ["numpy>=1.26"]
 # правдоподобные данные.
 linux = ["mss>=9", "evdev>=1.6", "sounddevice>=0.4"]
 windows = ["dxcam>=0.0.5", "sounddevice>=0.4"]
-dev = ["pytest>=8"]
+# Плотный оптический поток. Единственная тяжёлая зависимость в проекте, поэтому
+# отдельным extras: без неё дальность по потоку честно отказывается считаться
+# (FlowUnavailable), а не считается чем-нибудь другим молча.
+flow = ["opencv-python-headless>=4.9"]
+dev = ["pytest>=8", "opencv-python-headless>=4.9"]
 
 [project.scripts]
 harness = "harness.cli:main"

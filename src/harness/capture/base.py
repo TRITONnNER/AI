@@ -128,4 +128,10 @@ def describe_backends() -> dict[str, dict[str, object]]:
             "available": system == "Windows",
             "why": "SendInput со скан-кодами; виртуальные коды многие игры игнорируют",
         },
+        "optical_flow": {
+            "available": has("cv2"),
+            "why": "нужен OpenCV (extras: harness[flow]) для плотного потока DIS; "
+                   "без него дальность по потоку отказывается считаться, а не "
+                   "считается чем-то другим молча",
+        },
     }
