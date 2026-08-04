@@ -32,17 +32,20 @@ from .core.profile import Profile, from_schema
 from .corpus.domains import DOMAINS, make_domain
 from .model.places import PlaceGraph, fingerprint
 from .vision.predict import PredictionError
-from .vision.selfworld import (NO_SIGNAL, PARALLAX, SCREEN, STILLNESS, UNDECIDED,
-                               LayerArbiter, frame_energy)
+from .vision.selfworld import (COUPLING, MERGED, NO_SIGNAL, PARALLAX, SCREEN,
+                               STILLNESS, STRENGTH, UNDECIDED, LayerArbiter,
+                               frame_energy)
 
 # Что мы считаем правильным поведением в каждом домене. Не «сколько получилось», а
 # «чего мы вообще ждём» — иначе честный отказ выглядел бы провалом.
 EXPECTATION = {
-    "game": "параллакс: камера панорамирует, слои расходятся по сдвигу",
-    "document": "параллакс: прокрутка даёт сдвиг по одной оси",
-    "desktop": "чаще неподвижность: общего сдвига нет, но крупное едущее окно "
-               "иногда даёт сдвиг по себе, и тогда отвечает параллакс",
-    "video": "неподвижность: содержимое меняется само, обрамление стоит",
+    "game": "все три признака: камера то панорамирует, то стоит — работает и "
+            "параллакс, и связь изменений с движением",
+    "document": "все три: прокрутка даёт сдвиг по одной оси и остановки между ними",
+    "desktop": "только неподвижность: общего сдвига нет, связывать не с чем. "
+               "Крупное едущее окно иногда даёт сдвиг по себе, и тогда добавляется "
+               "параллакс",
+    "video": "только неподвижность: камера не движется вовсе, содержимое идёт само",
 }
 
 # Домены, в которых глобального сдвига по построению нет. Это пояснение к таблице, а
@@ -84,6 +87,15 @@ class DomainResult:
     stillness_iou: float | None
     stillness_decided: float
     stillness_frames: int
+    coupling_iou: float | None
+    coupling_decided: float
+    coupling_moving_frames: int
+    coupling_still_frames: int
+    # Пиксели, где два применимых признака ответили по-разному. Расхождение значит,
+    # что один из них врёт, и его надо видеть, а не усреднять.
+    disagreements: int
+    disagreement_fraction: float
+    decided_by: dict[str, int]
     # ошибка предсказания
     error_mean: float
     error_spikes: int
@@ -124,6 +136,13 @@ class DomainResult:
             "stillness_iou": r(self.stillness_iou),
             "stillness_decided": r(self.stillness_decided, 4),
             "stillness_frames": self.stillness_frames,
+            "coupling_iou": r(self.coupling_iou),
+            "coupling_decided": r(self.coupling_decided, 4),
+            "coupling_moving_frames": self.coupling_moving_frames,
+            "coupling_still_frames": self.coupling_still_frames,
+            "disagreements": self.disagreements,
+            "disagreement_fraction": r(self.disagreement_fraction, 4),
+            "decided_by": self.decided_by,
             "error_mean": r(self.error_mean, 6),
             "error_spikes": self.error_spikes,
             "shift_vs_copy": r(self.shift_vs_copy),
@@ -395,6 +414,7 @@ def bench_domain(name: str, *, seed: int = 0, frames: int = 140,
     iou, recall, precision = _score(found, truth_mask)
     par_iou, _, _ = _score(verd.parallax.pixel_mask(SCREEN) & scoreable, truth_mask)
     still_iou, _, _ = _score(verd.stillness.pixel_mask(SCREEN) & scoreable, truth_mask)
+    coup_iou, _, _ = _score(verd.coupling.pixel_mask(SCREEN) & scoreable, truth_mask)
 
     # Полнота отдельно по неподвижной и по меняющейся части обрамления. Разделение
     # взято из истины домена (`Chrome.animated`, `HudRect.animated`), а не из
@@ -434,6 +454,13 @@ def bench_domain(name: str, *, seed: int = 0, frames: int = 140,
         stillness_iou=still_iou,
         stillness_decided=verd.stillness.decided_fraction,
         stillness_frames=verd.stillness.voting_frames,
+        coupling_iou=coup_iou,
+        coupling_decided=verd.coupling.decided_fraction,
+        coupling_moving_frames=verd.coupling.moving_frames,
+        coupling_still_frames=verd.coupling.still_frames,
+        disagreements=verd.disagreements,
+        disagreement_fraction=verd.disagreement_fraction,
+        decided_by={s: int(verd.by_signal(s).sum()) for s in STRENGTH},
         error_mean=float(shift_error.summary()["mean"]),
         error_spikes=len(shift_error.spikes),
         shift_vs_copy=float(ratio),
@@ -473,7 +500,9 @@ def _layers_ok(res: DomainResult) -> tuple[bool, str]:
         return True, "обрамление исчезло за прогон, сверять не с чем"
     if res.signal == NO_SIGNAL:
         return False, "оба признака промолчали"
-    signal_name = {PARALLAX: "параллакс", STILLNESS: "неподвижность"}[res.signal]
+    signal_name = {PARALLAX: "параллакс", STILLNESS: "неподвижность",
+                   COUPLING: "связь с движением",
+                   MERGED: "три признака вместе"}[res.signal]
     precision = res.precision if res.precision is not None else 0.0
     if precision < MIN_PRECISION:
         return False, (f"{signal_name}: уверенная ерунда, точность "
@@ -548,8 +577,8 @@ class Report:
 
     def table(self) -> str:
         rows = [("домен", "признак", "IoU", "точн.", "полн. неподв.",
-                 "полн. аним.", "не реш.", "паралл.", "неподв.", "ошибка",
-                 "всплеск", "сдвиг/копия", "места", "живые", "молчащие",
+                 "полн. аним.", "не реш.", "расх.", "паралл.", "неподв.", "связь",
+                 "ошибка", "всплеск", "сдвиг/копия", "места", "живые", "молчащие",
                  "t_content")]
 
         def num(x: float | None) -> str:
@@ -559,11 +588,13 @@ class Report:
             rows.append((
                 r.domain,
                 {PARALLAX: "параллакс", STILLNESS: "неподвижн.",
+                 COUPLING: "связь", MERGED: "три вместе",
                  NO_SIGNAL: "нет"}[r.signal],
                 num(r.iou), num(r.precision),
                 num(r.recall_static), num(r.recall_animated),
                 f"{r.undecided * 100:.0f}%",
-                num(r.parallax_iou), num(r.stillness_iou),
+                f"{r.disagreement_fraction * 100:.1f}%",
+                num(r.parallax_iou), num(r.stillness_iou), num(r.coupling_iou),
                 f"{r.error_mean:.4f}",
                 str(r.error_spikes),
                 f"{r.shift_vs_copy:.2f}",

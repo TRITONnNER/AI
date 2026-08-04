@@ -210,12 +210,15 @@ def test_stillness_ignores_pixels_without_texture() -> None:
 
 
 def test_arbiter_names_the_signal_it_used() -> None:
-    """Арбитр обязан сказать, каким признаком получен ответ.
+    """Арбитр обязан сказать, какой признак решил какие пиксели.
 
-    Ответы двух признаков обоснованы по-разному, и складывать их в одну кучу нельзя.
+    Ответы трёх признаков обоснованы по-разному, и складывать их в одну величину
+    без происхождения нельзя — по той же причине, по которой у убеждения есть
+    происхождение.
     """
     from harness.corpus.domains import make_domain
-    from harness.vision.selfworld import PARALLAX, STILLNESS, LayerArbiter
+    from harness.vision.selfworld import (COUPLING, MERGED, STILLNESS, STRENGTH,
+                                          LayerArbiter, SCREEN)
 
     p = _profile()
     got = {}
@@ -229,8 +232,126 @@ def test_arbiter_names_the_signal_it_used() -> None:
         got[name] = v.signal
         assert v.reason, "признак выбран, а причина не названа"
         assert v.summary()["signal"] == v.signal
-    assert got["game"] == PARALLAX
+        # Происхождение согласовано с ответом: решённый пиксель имеет признак,
+        # нерешённый — не имеет.
+        assert v.provenance is not None
+        from harness.vision.selfworld import UNDECIDED as U
+        assert ((v.labels != U) == (v.provenance != 0)).all()
+        decided = sum(int(v.by_signal(sig).sum()) for sig in STRENGTH)
+        assert decided == int((v.labels != U).sum())
+
+    # В игре камера то движется, то стоит — работает третий признак, и он же
+    # объединяется с остальными.
+    assert got["game"] in (COUPLING, MERGED)
+    # В видео глобального сдвига нет вовсе: остаётся только неподвижность.
     assert got["video"] == STILLNESS
+
+
+def test_third_signal_finds_animated_chrome_that_the_other_two_miss() -> None:
+    """Ползущее заполнение полосы не находят ни параллакс, ни неподвижность.
+
+    Оно не смещается вместе с миром и при этом не совпадает с собой. Третий признак
+    берёт его тем, что оно меняется **и при стоящей камере**.
+    """
+    from harness.corpus.domains import make_domain
+    from harness.vision.selfworld import COUPLING, LayerArbiter, SCREEN
+
+    p = _profile()
+    d = make_domain("game", p, seed=3)
+    arb = LayerArbiter(p)
+    rng = np.random.default_rng(1)
+    for i in range(140):
+        act = None
+        if i % 3 != 0:
+            dx, dy = int(rng.integers(-40, 41)), int(rng.integers(-26, 27))
+            if dx or dy:
+                act = Action.mouse(dx, dy, duration_ms=33)
+        arb.feed(d.step(act, with_audio=False).frame)
+    v = arb.result()
+    anim = d.animated_mask()
+    assert anim.any(), "в этом сиде нет анимированного обрамления"
+
+    def recall(labels: np.ndarray) -> float:
+        return float(((labels == SCREEN) & anim).sum() / anim.sum())
+
+    # Объединение обязано быть лучше любого признака в одиночку. Именно объединение,
+    # а не третий признак сам по себе: рамка анимированной панели неподвижна, её
+    # берёт параллакс, а ползущее заполнение внутри — третий признак.
+    assert recall(v.labels) > recall(v.parallax.labels)
+    assert recall(v.labels) > recall(v.stillness.labels)
+    assert recall(v.labels) > recall(v.coupling.labels)
+
+    # И третий признак действительно приносит своё: пиксели анимированного
+    # обрамления, которых нет ни у одного из первых двух.
+    own = (v.by_signal(COUPLING) & anim & (v.labels == SCREEN)
+           & (v.parallax.labels != SCREEN) & (v.stillness.labels != SCREEN))
+    assert own.sum() > 0, "третий признак не добавил ни одного пикселя"
+
+    # Ложных срабатываний по миру он при этом не добавляет.
+    world = ~d.screen_mask()
+    assert ((v.coupling.labels == SCREEN) & world).sum() == 0
+
+
+def test_third_signal_needs_both_motion_and_stillness_in_the_record() -> None:
+    """Связывать изменения с движением можно только там, где было и то и другое."""
+    from harness.corpus.domains import make_domain
+    from harness.vision.selfworld import MotionCouplingSeparator
+
+    p = _profile()
+    d = make_domain("game", p, seed=3)
+    sep = MotionCouplingSeparator(p)
+    for _ in range(40):                      # камера движется каждый кадр
+        sep.feed(d.step(Action.mouse(40, 20, duration_ms=33), with_audio=False).frame)
+    r = sep.result()
+    assert r.still_frames == 0 and not r.applicable
+    assert r.decided_fraction == 0.0, "признак решил что-то без остановок в записи"
+
+
+def test_third_signal_ignores_pixels_that_could_not_show_motion() -> None:
+    """«Не изменился» говорит что-то только про пиксель, который мог измениться.
+
+    Пиксель в белом промежутке между строками текста при прокрутке остаётся белым.
+    Без этой проверки признак записывал такие пиксели в экранный слой: по документу
+    1004 ложных пикселя и точность 0.84 вместо 0.94.
+    """
+    from harness.corpus.domains import make_domain
+    from harness.vision.selfworld import MotionCouplingSeparator, SCREEN
+
+    p = _profile()
+    d = make_domain("document", p, seed=3)
+    sep = MotionCouplingSeparator(p)
+    rng = np.random.default_rng(2)
+    for i in range(140):
+        act = None
+        if i % 3 != 0:
+            dy = int(rng.integers(-26, 27))
+            if dy:
+                act = Action.mouse(0, dy, duration_ms=33)
+        sep.feed(d.step(act, with_audio=False).frame)
+    r = sep.result()
+    page = ~d.screen_mask()
+    false_screen = int(((r.labels == SCREEN) & page).sum())
+    assert false_screen < 400, f"страница попала в экранный слой: {false_screen} px"
+
+
+def test_disagreement_between_signals_is_counted_not_averaged() -> None:
+    """Расхождение признаков значит, что один врёт. Его надо видеть."""
+    from harness.corpus.domains import make_domain
+    from harness.vision.selfworld import LayerArbiter
+
+    p = _profile()
+    d = make_domain("game", p, seed=3)
+    arb = LayerArbiter(p)
+    rng = np.random.default_rng(3)
+    for i in range(120):
+        act = Action.mouse(int(rng.integers(-40, 41)), 0, duration_ms=33) \
+            if i % 3 else None
+        arb.feed(d.step(act, with_audio=False).frame)
+    v = arb.result()
+    assert v.disagreements >= 0
+    assert 0.0 <= v.disagreement_fraction < 0.1, (
+        f"признаки расходятся на {v.disagreement_fraction:.1%} — один из них врёт")
+    assert v.summary()["disagreements"] == v.disagreements
 
 
 def test_arbiter_respects_the_signal_fixed_in_the_profile() -> None:
@@ -371,7 +492,10 @@ def test_benchmark_reports_wrong_answers_not_just_missing_ones() -> None:
                 iou=0.9, recall=0.9, precision=0.9, recall_static=0.9,
                 recall_animated=0.5, undecided=0.0, parallax_iou=0.9,
                 parallax_decided=0.5, parallax_frames=9, stillness_iou=None,
-                stillness_decided=0.0, stillness_frames=0, error_mean=0.0,
+                stillness_decided=0.0, stillness_frames=0,
+                coupling_iou=None, coupling_decided=0.0, coupling_moving_frames=0,
+                coupling_still_frames=0, disagreements=0,
+                disagreement_fraction=0.0, decided_by={}, error_mean=0.0,
                 error_spikes=0, shift_vs_copy=1.0, places=1, edges=0,
                 mask_unstable=False, live_found=1, live_true=1, silent_found=1,
                 silent_true=1, ambiguous=0, faint=0, background_rate=0.0,

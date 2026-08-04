@@ -437,7 +437,8 @@ def fig_domains(base: Path) -> Path:
     from harness.core.action import Action as _Action
     from harness.core.profile import from_schema
     from harness.corpus.domains import make_domain
-    from harness.vision.selfworld import LayerArbiter, PARALLAX, SCREEN as _SCREEN
+    from harness.vision.selfworld import (COUPLING, LayerArbiter, MERGED, PARALLAX,
+                                          SCREEN as _SCREEN, STILLNESS)
 
     names = ("game", "document", "desktop", "video")
     titles = {"game": "игра: камера панорамирует",
@@ -485,25 +486,26 @@ def fig_domains(base: Path) -> Path:
         rgb[truth & ~found] = (0.55, 0.60, 0.68)     # пропущено
         rgb[~truth & found] = (0.88, 0.35, 0.29)     # ложно
         ax.imshow(np.clip(rgb, 0, 1))
-        sig = {"parallax": "параллакс", "stillness": "неподвижность",
-               "none": "оба промолчали"}[verdict.signal]
-        ax.set_title(f"{sig}: IoU {res.iou if res.iou is None else round(res.iou, 2)}, "
+        sig = {PARALLAX: "параллакс", STILLNESS: "неподвижность",
+               COUPLING: "связь с движением", MERGED: "три признака вместе",
+               "none": "все признаки промолчали"}[verdict.signal]
+        ax.set_title(f"{sig}\nIoU {res.iou if res.iou is None else round(res.iou, 2)}, "
                      f"точность {res.precision if res.precision is None else round(res.precision, 2)}",
                      fontsize=8.5,
-                     color=AGENT if verdict.signal == PARALLAX else HUMAN)
+                     color=AGENT if verdict.signal in (MERGED, COUPLING) else HUMAN)
         ax.set_xticks([])
         ax.set_yticks([])
 
         ax = axes[2][col]
-        vals = [res.parallax_decided, res.stillness_decided]
-        ax.barh([1, 0], vals, color=[AGENT, HUMAN], height=0.55)
-        ax.set_yticks([1, 0])
-        ax.set_yticklabels(["параллакс", "неподвижн."], fontsize=8)
+        vals = [res.coupling_decided, res.parallax_decided, res.stillness_decided]
+        ax.barh([2, 1, 0], vals, color=[PROOF, AGENT, HUMAN], height=0.6)
+        ax.set_yticks([2, 1, 0])
+        ax.set_yticklabels(["связь", "параллакс", "неподвижн."], fontsize=8)
         ax.set_xlim(0, 1)
         ax.set_xlabel("доля решённых пикселей", fontsize=8)
         for i, v in enumerate(vals):
             inside = v > 0.2
-            ax.text(v - 0.04 if inside else v + 0.04, 1 - i, f"{v:.0%}",
+            ax.text(v - 0.04 if inside else v + 0.04, len(vals) - 1 - i, f"{v:.0%}",
                     va="center", ha="right" if inside else "left", fontsize=7.5,
                     color="#14181d" if inside else "#9aa4b2")
         ax.grid(axis="x", alpha=0.2)
@@ -514,13 +516,12 @@ def fig_domains(base: Path) -> Path:
                  "светло-серое — пропущено, красное — ложно принято за обрамление.",
                  fontsize=10.5, y=0.98)
     body = "; ".join(f"{r.domain} {r.live_found}/{r.live_true} живых" for r in results)
-    fig.text(0.5, -0.015,
-             "Нижний ряд: какой признак вообще смог высказаться. Где нет глобального "
-             "сдвига, параллакс молчит — и отвечает неподвижность.\n"
-             f"Тело по доменам: {body}. "
-             "Пропущенное обрамление — однородная заливка внутри панелей: там обе "
-             "гипотезы дают одно и то же, и оба признака честно оставляют пиксель "
-             "нерешённым.",
+    fig.text(0.5, -0.02,
+             "Нижний ряд: сколько смог решить каждый из трёх признаков по отдельности. "
+             "Где нет глобального сдвига, первые два молчат — отвечает неподвижность.\n"
+             f"Тело по доменам: {body}. Ответ собирается из трёх признаков с "
+             "происхождением у каждого пикселя; расхождения считаются отдельно и не "
+             "усредняются.",
              ha="center", fontsize=8.5, color="#9aa4b2")
     return _out(base, "8-chetyre-domena.png", fig)
 

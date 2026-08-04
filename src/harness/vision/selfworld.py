@@ -361,6 +361,7 @@ def separate(frames: Iterable[np.ndarray], profile: Profile) -> SeparationResult
 
 PARALLAX = "parallax"
 STILLNESS = "stillness"
+COUPLING = "coupling"
 NO_SIGNAL = "none"
 
 
@@ -463,15 +464,230 @@ class StillnessSeparator:
                                self._voting, self._skipped)
 
 
+# --- третий признак: связь изменений с движением камеры ---------------------
+#
+# Что он закрывает. Первые два признака оба мимо анимированного обрамления —
+# ползущего заполнения полосы, мигающего индикатора. Параллакс мимо, потому что
+# такой пиксель не совпадает с собой (условие статичности не выполняется).
+# Неподвижность мимо, потому что он меняется. А он при этом прибит к экрану, и по
+# замеру это 33–63 % всего обрамления — то есть пробел не мелкий.
+#
+# Различие, которое их разводит, простое: **меняется ли пиксель тогда, когда камера
+# стоит**. Мировой пиксель при неподвижной камере не меняется вовсе: меняться ему
+# нечем. Анимированное обрамление живёт своей жизнью и меняется одинаково, движется
+# камера или нет. Замер по двум доменам, медианы:
+#
+#     класс                   при движении   при остановке
+#     статичное обрамление        0.000          0.000
+#     анимированное               0.049          0.036
+#     мир                         0.810          0.000
+#
+# Разделение с большим запасом, и оно выведено из тех же пикселей плюс уже
+# посчитанный глобальный сдвиг — ничего нового в источниках данных.
+#
+# Чего он не может, и это надо сказать прямо: мировой объект, который движется сам
+# (вода, чужой персонаж, мигающая лампа в сцене), меняется и при стоящей камере — и
+# будет принят за анимированное обрамление. В синтетическом мире такого нет, а в
+# настоящей игре есть, поэтому здесь это ограничение, а не решённый вопрос.
+# И он требует записи, в которой камера **и двигалась, и стояла**: там, где сдвига
+# нет вовсе, признак неприменим и честно молчит.
+
+
+@dataclass(slots=True)
+class CouplingResult:
+    """Результат по третьему признаку, с обеими частотами изменений."""
+
+    labels: np.ndarray
+    rate_moving: np.ndarray
+    rate_still: np.ndarray
+    seen_moving: np.ndarray
+    seen_still: np.ndarray
+    shape: tuple[int, int]
+    moving_frames: int = 0
+    still_frames: int = 0
+    # Кадры с мелким сдвигом: камера то ли дрогнула, то ли нет. Не голосуют нигде.
+    ambiguous_frames: int = 0
+
+    @property
+    def decided_fraction(self) -> float:
+        return float((self.labels != UNDECIDED).mean())
+
+    @property
+    def applicable(self) -> bool:
+        """Признак применим только там, где камера и двигалась, и стояла."""
+        return self.moving_frames > 0 and self.still_frames > 0
+
+    def pixel_mask(self, label: int = SCREEN) -> np.ndarray:
+        return self.labels == label
+
+    def summary(self) -> dict[str, object]:
+        return {
+            "screen": int((self.labels == SCREEN).sum()),
+            "world": int((self.labels == WORLD).sum()),
+            "undecided": int((self.labels == UNDECIDED).sum()),
+            "decided_fraction": round(self.decided_fraction, 4),
+            "moving_frames": self.moving_frames,
+            "still_frames": self.still_frames,
+            "ambiguous_frames": self.ambiguous_frames,
+            "applicable": self.applicable,
+        }
+
+
+class MotionCouplingSeparator:
+    """Считает частоту изменений отдельно при движении камеры и при её остановке."""
+
+    def __init__(self, profile: Profile) -> None:
+        p = profile.parameters
+        self.delta = int(p["stillness_pixel_delta"])
+        self.min_global_shift = float(p["flow_min_global_shift"])
+        self.static_rate = float(p["stillness_static_rate"])
+        self.moving_rate = float(p["stillness_moving_rate"])
+        self.max_ratio = float(p["coupling_max_ratio"])
+        self.min_votes = int(p["coupling_min_votes"])
+        self.radius = int(p["flow_window"]) // 2
+        self._prev: np.ndarray | None = None
+        self._shape: tuple[int, int] | None = None
+        self._ch_m: np.ndarray | None = None
+        self._ch_s: np.ndarray | None = None
+        self._seen_m: np.ndarray | None = None
+        self._seen_s: np.ndarray | None = None
+        self._moving = 0
+        self._still = 0
+        self._ambiguous = 0
+
+    def feed(self, frame: np.ndarray, shift: Shift | None = None) -> Shift | None:
+        """Дать кадр. `shift` можно передать готовым, чтобы не считать FFT дважды."""
+        cur = frame[:, :, :3].mean(axis=2).astype(np.uint8) if frame.ndim == 3 else frame
+        if self._shape is None:
+            self._shape = (cur.shape[0], cur.shape[1])
+            z = lambda: np.zeros(self._shape, dtype=np.int32)     # noqa: E731
+            self._ch_m, self._ch_s, self._seen_m, self._seen_s = z(), z(), z(), z()
+        elif (cur.shape[0], cur.shape[1]) != self._shape:
+            raise ValueError(f"форма кадра изменилась: {self._shape} → {cur.shape}")
+
+        prev, self._prev = self._prev, cur
+        if prev is None:
+            return None
+        if shift is None:
+            shift = estimate_global_shift(prev, cur)
+
+        changed = np.abs(cur.astype(np.int16) - prev.astype(np.int16)) > self.delta
+        # Тот же честный запрет, что у первых двух признаков: без текстуры «не
+        # изменился» ничего не значит.
+        var = _local_variance(cur, self.radius)
+        informative = var > max(1.0, float(np.median(var)) * 0.15)
+        assert self._ch_m is not None and self._ch_s is not None
+        assert self._seen_m is not None and self._seen_s is not None
+        # Три исхода, а не два. Кадр с мелким сдвигом — не «камера стояла»: мир в нём
+        # сдвинулся, пиксели изменились, и в частоту «при остановке» это попадать не
+        # должно. Именно на этом признак ошибался в документе: прокрутка на пиксель
+        # ниже порога считалась остановкой, мировые пиксели выглядели меняющимися
+        # «сами по себе», и точность падала с 1.00 до 0.84. Остановка — это ровно
+        # нулевой сдвиг; всё между нулём и порогом не голосует нигде.
+        if shift.magnitude >= self.min_global_shift:
+            # Одной текстуры в окрестности мало. «Пиксель не изменился» говорит
+            # что-то только про пиксель, который **мог** измениться. Пиксель в
+            # белом промежутке между строками текста при прокрутке остаётся белым:
+            # окрестность у него текстурная, а сам он неотличим от неподвижного, и
+            # признак записывал его в экранный слой. На замере по документу это
+            # давало 1004 ложных пикселя и точность 0.84 вместо 1.00.
+            #
+            # Проверяется прямо: сдвинуть предыдущий кадр на глобальный вектор и
+            # сравнить с ним же. Различие есть — пиксель способен показать движение;
+            # различия нет — он не свидетель ни в ту, ни в другую сторону.
+            moved_self, valid = _shift_into(prev, shift.dy, shift.dx)
+            would_change = valid & (
+                np.abs(moved_self - prev.astype(np.int16)) > self.delta)
+            self._ch_m += (changed & informative & would_change).astype(np.int32)
+            self._seen_m += (informative & would_change).astype(np.int32)
+            self._moving += 1
+        elif shift.magnitude == 0.0:
+            self._ch_s += (changed & informative).astype(np.int32)
+            self._seen_s += informative.astype(np.int32)
+            self._still += 1
+        else:
+            self._ambiguous += 1
+        return shift
+
+    def result(self) -> CouplingResult:
+        if self._shape is None or self._ch_m is None:
+            raise ValueError("не подано ни одного кадра")
+        assert self._ch_s is not None and self._seen_m is not None
+        assert self._seen_s is not None
+        with np.errstate(invalid="ignore", divide="ignore"):
+            rm = np.where(self._seen_m > 0,
+                          self._ch_m / np.maximum(self._seen_m, 1), np.nan)
+            rs = np.where(self._seen_s > 0,
+                          self._ch_s / np.maximum(self._seen_s, 1), np.nan)
+        labels = np.full(self._shape, UNDECIDED, dtype=np.int8)
+        enough = (self._seen_m >= self.min_votes) & (self._seen_s >= self.min_votes)
+
+        with np.errstate(invalid="ignore"):
+            static = (rm <= self.static_rate) & (rs <= self.static_rate)
+            # Меняется, но не от камеры: при остановке меняется почти так же часто,
+            # как при движении. Это и есть анимированное обрамление.
+            decoupled = ((rs > self.static_rate)
+                         & (rm <= self.max_ratio * np.maximum(rs, 1e-9)))
+            worldish = (rm >= self.moving_rate) & (rs <= self.static_rate)
+        labels[enough & (static | decoupled)] = SCREEN
+        labels[enough & worldish & ~static & ~decoupled] = WORLD
+        return CouplingResult(labels, rm, rs, self._seen_m.copy(),
+                              self._seen_s.copy(), self._shape,
+                              self._moving, self._still, self._ambiguous)
+
+
+MERGED = "merged"
+
+# Порядок силы признаков — от сильного к слабому. Он выведен из того, что каждый
+# **способен** различить, а не из измеренных чисел:
+#
+# 1. Связь с движением камеры различает все три случая: неподвижное обрамление,
+#    анимированное обрамление и мир.
+# 2. Параллакс различает «прибито к экрану» и «сместилось вместе с миром», но
+#    анимированное обрамление ему не даётся: оно не совпадает с собой.
+# 3. Неподвижность различает только «менялось» и «не менялось», то есть путает
+#    «прибито к экрану» и «стоит на месте».
+STRENGTH = (COUPLING, PARALLAX, STILLNESS)
+
+
 @dataclass(slots=True)
 class LayerVerdict:
-    """Чем именно получен ответ. Признак называется, а не подразумевается."""
+    """Чем именно получен ответ. Признак называется, а не подразумевается.
 
-    signal: str                        # PARALLAX | STILLNESS | NO_SIGNAL
+    Ответ собирается из трёх признаков **с происхождением у каждого пикселя**, а не
+    выбором одного признака на весь кадр. Причина та же, по которой у убеждения есть
+    происхождение: у каждого признака своя область применимости, и отбрасывать
+    ответы там, где он единственный, кто может ответить, — терять знание. Замер
+    показал это прямо: по документу связь с движением даёт точность 0.90, но решает
+    только 47 % пикселей, а параллакс решает 62 % с точностью 0.95; выбор одного
+    признака на весь кадр в любом случае терял бы часть ответа.
+
+    Что при этом не размывается: `provenance` помнит, какой признак решил каждый
+    пиксель, а `disagreements` считает пиксели, где два признака ответили
+    **по-разному**. Расхождение — не мелочь, а признак того, что один из них врёт, и
+    оно обязано быть на виду.
+    """
+
+    signal: str        # MERGED | PARALLAX | STILLNESS | COUPLING | NO_SIGNAL
     labels: np.ndarray
     reason: str
     parallax: SeparationResult
     stillness: StillnessResult
+    coupling: CouplingResult
+    # Какой признак решил пиксель: 0 — никакой, дальше по индексу в STRENGTH + 1.
+    provenance: np.ndarray | None = None
+    disagreements: int = 0
+
+    @property
+    def disagreement_fraction(self) -> float:
+        decided = int((self.labels != UNDECIDED).sum())
+        return self.disagreements / decided if decided else 0.0
+
+    def by_signal(self, signal: str) -> np.ndarray:
+        """Маска пикселей, решённых именно этим признаком."""
+        if self.provenance is None:
+            return np.zeros(self.labels.shape, dtype=bool)
+        return self.provenance == (STRENGTH.index(signal) + 1)
 
     @property
     def decided_fraction(self) -> float:
@@ -483,57 +699,102 @@ class LayerVerdict:
     def summary(self) -> dict[str, object]:
         return {"signal": self.signal, "reason": self.reason,
                 "decided_fraction": round(self.decided_fraction, 4),
+                "decided_by": {s: int(self.by_signal(s).sum()) for s in STRENGTH},
+                "disagreements": self.disagreements,
+                "disagreement_fraction": round(self.disagreement_fraction, 4),
                 "parallax": self.parallax.summary(),
-                "stillness": self.stillness.summary()}
+                "stillness": self.stillness.summary(),
+                "coupling": self.coupling.summary()}
 
 
 class LayerArbiter:
-    """Оба признака сразу и явный выбор между ними.
+    """Три признака сразу и явный выбор между ними.
 
     Выбор, а не смесь. Смесь была бы удобнее в таблице и хуже по смыслу: пиксель,
     названный экранным по неподвижности, и пиксель, названный экранным по
-    параллаксу, обоснованы по-разному, и второй обоснован сильнее. Сложив их, мы
-    получили бы одну цифру, в которой не видно, что именно мы знаем.
+    параллаксу, обоснованы по-разному. Сложив их, мы получили бы одну цифру, в
+    которой не видно, что именно мы знаем.
+
+    Порядок предпочтения выведен из того, что каждый признак **способен** увидеть, и
+    проверен замером:
+
+    1. **Связь с движением камеры** — если запись содержит и движение, и остановку.
+       Он единственный различает все три случая: неподвижное обрамление,
+       анимированное обрамление и мир.
+    2. **Параллакс** — если сдвиг есть, но остановок в записи не было. Тогда третий
+       признак неприменим: сравнивать «при остановке» не с чем.
+    3. **Неподвижность** — если глобального сдвига нет вовсе. Самый слабый: не
+       различает «прибито к экрану» и «стоит на месте».
     """
 
     def __init__(self, profile: Profile) -> None:
         self.mode = str(profile.structural.get("layer_signal", "auto"))
         self.min_parallax_frames = int(
             profile.parameters["arbiter_min_parallax_frames"])
+        self.min_votes = int(profile.parameters["coupling_min_votes"])
         self.parallax = SelfWorldSeparator(profile)
         self.stillness = StillnessSeparator(profile)
+        self.coupling = MotionCouplingSeparator(profile)
 
     def feed(self, frame: np.ndarray) -> None:
-        self.parallax.feed(frame)
+        # Сдвиг считается один раз и передаётся третьему признаку: FFT — самая
+        # дорогая часть кадра, считать её дважды незачем.
+        shift = self.parallax.feed(frame)
         self.stillness.feed(frame)
+        self.coupling.feed(frame, shift)
 
     def result(self) -> LayerVerdict:
         par = self.parallax.result()
         still = self.stillness.result()
-        if self.mode == PARALLAX:
-            return LayerVerdict(PARALLAX, par.labels, "признак задан профилем",
-                                par, still)
-        if self.mode == STILLNESS:
-            return LayerVerdict(STILLNESS, still.labels, "признак задан профилем",
-                                par, still)
+        coup = self.coupling.result()
+        fixed = {PARALLAX: par.labels, STILLNESS: still.labels,
+                 COUPLING: coup.labels}
+        if self.mode in fixed:
+            prov = np.where(fixed[self.mode] != UNDECIDED,
+                            STRENGTH.index(self.mode) + 1, 0).astype(np.int8)
+            return LayerVerdict(self.mode, fixed[self.mode].copy(),
+                                "признак задан профилем", par, still, coup, prov, 0)
 
-        par_ok = (par.voting_frames >= self.min_parallax_frames
-                  and par.decided_fraction > 0.0)
-        if par_ok:
+        # Применимость проверяется до ответа: признак, у которого нет данных, не
+        # должен участвовать даже в согласии.
+        applicable: list[tuple[str, np.ndarray]] = []
+        if (coup.moving_frames >= self.min_parallax_frames
+                and coup.still_frames >= self.min_votes):
+            applicable.append((COUPLING, coup.labels))
+        if par.voting_frames >= self.min_parallax_frames:
+            applicable.append((PARALLAX, par.labels))
+        if still.voting_frames > 0:
+            applicable.append((STILLNESS, still.labels))
+
+        labels = np.full(par.labels.shape, UNDECIDED, dtype=np.int8)
+        prov = np.zeros(par.labels.shape, dtype=np.int8)
+        disagreements = 0
+        used: list[str] = []
+        for name, lab in sorted(applicable, key=lambda it: STRENGTH.index(it[0])):
+            decided = lab != UNDECIDED
+            if not decided.any():
+                continue
+            used.append(name)
+            fresh = decided & (prov == 0)
+            conflict = decided & (prov != 0) & (labels != lab)
+            disagreements += int(conflict.sum())
+            labels[fresh] = lab[fresh]
+            prov[fresh] = STRENGTH.index(name) + 1
+
+        if not used:
             return LayerVerdict(
-                PARALLAX, par.labels,
-                f"параллакс применим: {par.voting_frames} кадров со сдвигом",
-                par, still)
-        if still.voting_frames > 0 and still.decided_fraction > 0.0:
-            return LayerVerdict(
-                STILLNESS, still.labels,
-                f"глобального сдвига нет ({par.voting_frames} кадров со сдвигом), "
-                f"разделено по неподвижности на {still.voting_frames} кадрах",
-                par, still)
-        empty = np.full(par.labels.shape, UNDECIDED, dtype=np.int8)
-        return LayerVerdict(
-            NO_SIGNAL, empty,
-            "ни сдвига, ни различия в изменчивости: разделять нечем", par, still)
+                NO_SIGNAL, labels,
+                "ни сдвига, ни различия в изменчивости: разделять нечем",
+                par, still, coup, prov, 0)
+        names = {COUPLING: "связь с движением", PARALLAX: "параллакс",
+                 STILLNESS: "неподвижность"}
+        parts = [f"{names[s]} решил {int((prov == STRENGTH.index(s) + 1).sum())}"
+                 for s in used]
+        reason = ("применимо: " + ", ".join(parts)
+                  + f"; расхождений {disagreements}")
+        signal = used[0] if len(used) == 1 else MERGED
+        return LayerVerdict(signal, labels, reason, par, still, coup, prov,
+                            disagreements)
 
 
 # --- фон и превышение над фоном (первые два пункта 0.6) ---------------------
