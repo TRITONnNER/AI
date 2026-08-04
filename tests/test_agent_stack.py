@@ -581,15 +581,33 @@ def test_mood_derives_from_objective_quantities_only() -> None:
 
 
 def test_emotion_label_influences_nothing() -> None:
-    """Инвариант 10: имя эмоции — ярлык для человека, поведение от него не зависит."""
-    import harness.model.drives as mod
+    """Инвариант 10: имя эмоции — ярлык для человека, поведение от него не зависит.
 
-    src = Path(mod.__file__).read_text(encoding="utf-8")
-    body = src.split("def emotion_label", 1)[1].split("@dataclass", 1)[0]
-    del body
-    # Ни в одной ветке, кроме самой функции-ярлыка, имена эмоций не встречаются
-    for name in ("страх", "досада", "скука", "удовлетворение"):
-        assert src.count(f'"{name}"') <= 1, f"имя эмоции {name} используется как условие"
+    Проверяется по дереву разбора, а не подсчётом вхождений строки. Подсчёт ломался
+    от безобидного: объявление набора ярлыков константой (`EMOTIONS`, нужной словарю
+    самоотчёта) давало второе вхождение и роняло тест, хотя условием ярлык от этого
+    не стал. Здесь запрещено именно то, что запрещать надо: сравнение с ярлыком и
+    ветвление по нему.
+    """
+    import ast as _ast
+
+    import harness.model.drives as mod
+    from harness.model.drives import EMOTIONS
+
+    tree = _ast.parse(Path(mod.__file__).read_text(encoding="utf-8"))
+    labels = set(EMOTIONS)
+    offenders: list[str] = []
+    for node in _ast.walk(tree):
+        if isinstance(node, _ast.Compare):
+            parts = [node.left, *node.comparators]
+            if any(isinstance(x, _ast.Constant) and x.value in labels for x in parts):
+                offenders.append(f"сравнение на строке {node.lineno}")
+        if isinstance(node, _ast.Subscript) and isinstance(node.slice, _ast.Constant):
+            if node.slice.value in labels:
+                offenders.append(f"выбор по ярлыку на строке {node.lineno}")
+    assert not offenders, (
+        "имя эмоции участвует в решении: " + ", ".join(offenders)
+        + ". Поведение обязано зависеть от чисел, а не от слова")
 
 
 def test_emotion_modulates_thresholds_continuously() -> None:

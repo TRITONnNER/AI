@@ -483,7 +483,7 @@ def execute(plan: Plan, *, act: Callable[[Action], str],
             ex.surprises += 1
         if journal is not None and stamp_of is not None:
             journal.append(
-                EntryKind.NOTE, stamp_of(i), Actor.AGENT,
+                EntryKind.PLAN, stamp_of(i), Actor.AGENT,
                 event={"code": "plan_step", "goal": plan.goal_id, "index": i,
                        "expected": step.expected_place, "observed": place,
                        "agreed": agreed, "p": round(step.p, 4)})

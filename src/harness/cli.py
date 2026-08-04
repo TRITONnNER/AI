@@ -5,6 +5,7 @@
     harness gen-corpus PATH [--seed N]   записать синтетическую сессию
     harness verify PATH                  проверить целостность записи
     harness journal PATH                 сводка по журналу
+    harness report PATH                  показатели и самоотчёт агента рядом
     harness replay PATH [--at N]         пройти запись покадрово
     harness selfworld PATH               разделить экранный и мировой слои (0.6)
     harness record PATH                  запись с живого экрана
@@ -167,6 +168,7 @@ def cmd_loop(args: argparse.Namespace) -> int:
     проверяется объективным тестом по карте тела, а карта тела заполняется
     настоящими пробами в мире, который про цель ничего не знает.
     """
+    from .behaviour import selfreport
     from .behaviour.babbling import Babbler, run_babbling
     from .behaviour.goals import GoalStack, candidates_from_body, choose
     from .behaviour.skills import Library
@@ -205,6 +207,17 @@ def cmd_loop(args: argparse.Namespace) -> int:
             run_babbling(world, babbler, steps=args.steps_per_round,
                          clocks=rec.clocks, error=error)
             stack.tick(rec.clocks.stamp())
+
+            # Отчёт о себе — в конце каждого круга. Он никуда не возвращается и
+            # ничем не читается: круг после него идёт точно так же, как без него.
+            # Проверить это можно, убрав следующие три строки — числа не изменятся.
+            stamp = rec.clocks.stamp()
+            report = selfreport.compose(
+                stamp=stamp, body=babbler.body, goals=stack, motivation=motivation,
+                error=error, outputs=len(world.outputs),
+                did={"babble": babbler.progress()["probes_done"]},
+                error_high=summary["last"] > summary["mean"])
+            selfreport.journal_report(rec.journal, report, stamp)
 
         goal_stats = stack.stats()
         body_stats = babbler.progress()
@@ -366,6 +379,58 @@ def cmd_status(args: argparse.Namespace) -> int:
     if args.md:
         args.md.write_text(mod.render_markdown(data), encoding="utf-8")
         print(f"\nзаписано: {args.md}")
+    return 0
+
+
+def cmd_report(args: argparse.Namespace) -> int:
+    """Две колонки: объективные показатели и слова агента о себе.
+
+    Рядом, но не вместе — и это главное в этой команде. Слева то, что посчитано по
+    журналу и ни от чьих слов не зависит. Справа то, что агент сказал о себе, и оно
+    ни на что не влияет: последняя запись `SELF_REPORT` просто читается из журнала
+    как есть.
+
+    Расхождение колонок — не ошибка, а самое интересное в отчёте. «Я научился» при
+    компетентности 0.2 значит, что агент считает освоенным то, что тестами целей не
+    подтверждается; сравнить это можно только глядя на обе колонки одновременно.
+    """
+    from .core.journal import Kind
+    from .model import vitals
+    from .session import Session
+
+    with Session.open(args.path) as s:
+        v = vitals.from_journal(s.journal, profile=s.profile,
+                                skip=() if args.beliefs else ("beliefs",))
+        reports = [e for e in s.journal if e.kind is Kind.SELF_REPORT]
+
+    if args.json:
+        _print_json({"vitals": v.as_dict(),
+                     "self_report": reports[-1].event if reports else None,
+                     "self_reports": len(reports)})
+        return 0
+
+    print("показатели (посчитаны по журналу)")
+    print(v.render_text())
+
+    absent = v.absent()
+    if absent:
+        print(f"\nчего в журнале нет ({len(absent)}): "
+              + ", ".join(x.code for x in absent))
+        print("  причины — в json-выводе; это не заготовки, а честные пропуски")
+
+    print(f"\nсамоотчёты агента: {len(reports)}")
+    if not reports:
+        print("  ни одного. Отчёт пишется агентской стороной, а не этой командой")
+        return 0
+    last = reports[-1]
+    print(f"  последний: запись {last.seq}, {last.stamp}")
+    for line in last.event.get("lines", []):
+        code = str(line.get("code"))
+        value = line.get("value")
+        prov = str(line.get("provenance") or "?")
+        print(f"    {code:<22} {str(value):<28} происхождение: {prov}")
+    print("\nслова справа ни на что не влияют: пересборка записи SELF_REPORT "
+          "пропускает (инвариант 10)")
     return 0
 
 
@@ -643,6 +708,14 @@ def main(argv: list[str] | None = None) -> int:
     sw.add_argument("path", type=Path)
     sw.add_argument("--dump-mask", type=Path, default=None)
     sw.set_defaults(fn=cmd_selfworld)
+
+    rp = sub.add_parser("report", help="показатели по журналу рядом со словами "
+                                       "агента о себе")
+    rp.add_argument("path", type=Path)
+    rp.add_argument("--beliefs", action="store_true",
+                    help="пересобрать убеждения и карту тела (медленнее)")
+    rp.add_argument("--json", action="store_true")
+    rp.set_defaults(fn=cmd_report)
 
     stt = sub.add_parser("status", help="что готово, что нет и почему — по коду")
     stt.add_argument("--tests", action="store_true",

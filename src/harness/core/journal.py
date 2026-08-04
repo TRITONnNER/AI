@@ -69,6 +69,8 @@ class Kind(StrEnum):
     SLEEP = "sleep"                  # прогон консолидации
     INTERVENTION = "intervention"    # вмешательство исследователя
     CAPTURE_GAP = "capture_gap"      # пропуск кадров, рассинхрон, отвал источника
+    PLAN = "plan"                    # шаг плана: что ожидалось и что вышло
+    SELF_REPORT = "self_report"      # слова агента о себе, ни на что не влияют
     NOTE = "note"                    # пометка исследователя, ни на что не влияет
 
 

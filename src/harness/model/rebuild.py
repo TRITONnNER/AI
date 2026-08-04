@@ -220,12 +220,14 @@ class Rebuilt:
     interventions: int = 0
     frames: int = 0
     thoughts: int = 0
+    self_reports: int = 0
     entries: int = 0
 
     def as_dict(self) -> dict[str, Any]:
         return {"beliefs": self.beliefs.stats(), "body": self.body.stats(),
                 "interventions": self.interventions, "frames": self.frames,
-                "thoughts": self.thoughts, "entries": self.entries,
+                "thoughts": self.thoughts, "self_reports": self.self_reports,
+                "entries": self.entries,
                 "fingerprint": self.beliefs.fingerprint()}
 
 
@@ -261,6 +263,14 @@ def rebuild_from_journal(journal: Journal, *, response_field: str = "responded",
             # Воображаемое не обновляет убеждения о мире. Оно вообще не про мир:
             # это опыт думания, и путать его с опытом действия нельзя.
             out.thoughts += 1
+            continue
+
+        if e.kind is EntryKind.SELF_REPORT:
+            # Самоотчёт — не наблюдение. Слова агента о себе не создают убеждений и
+            # не меняют карту тела: сказать «я умею это откатывать» и тем самым
+            # сделать выход откатываемым невозможно (инвариант 10). Считаем их,
+            # чтобы было видно, что записи есть и что они именно пропущены.
+            out.self_reports += 1
             continue
 
         if e.kind is EntryKind.ACTION and e.action is not None:
