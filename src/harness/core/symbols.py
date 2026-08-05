@@ -146,3 +146,36 @@ def assert_no_plain_text(payload: object, *, path: str = "") -> None:
         return  # массив пикселей: это и есть законный канал восприятия
     raise SymbolError(f"неизвестный тип на пути к агенту{' в ' + path if path else ''}: "
                       f"{type(payload).__name__}")
+
+_WORD_SEPARATORS = re.compile(r"[|@:/,]")
+_NUMBER_LIKE = re.compile(r"^-?\d+(\.\d+)?$")
+
+
+def assert_known_words(payload: object, *, vocabulary: frozenset[str],
+                       path: str = "") -> None:
+    """Как `assert_no_plain_text`, но со своим закрытым словарём допустимых слов.
+
+    Нужна там, где структура собрана не с экрана, а из собственных понятий агента:
+    имена признаков разделения слоёв, имена драйвов, виды целей. На границе восприятия
+    таких слов быть не может и проверка там строже — только символы. Здесь допустимы
+    ещё и слова из словаря, но **только** из него: закрытость и есть вся защита.
+    Расшифрованная надпись в словарь не входит и падает так же громко.
+
+    Составные строки режутся по разделителям: `ENT_1C90|afford|OUT_2C@200` — это
+    символ, слово из словаря, символ и число.
+    """
+    if isinstance(payload, str):
+        for token in _WORD_SEPARATORS.split(payload):
+            token = token.strip()
+            if not token or token in vocabulary or _NUMBER_LIKE.match(token):
+                continue
+            assert_no_plain_text(token, path=path)
+        return
+    if isinstance(payload, dict):
+        for k, v in payload.items():
+            assert_known_words(v, vocabulary=vocabulary,
+                               path=f"{path}.{k}" if path else str(k))
+        return
+    if isinstance(payload, (list, tuple, set, frozenset)):
+        for i, v in enumerate(payload):
+            assert_known_words(v, vocabulary=vocabulary, path=f"{path}[{i}]")

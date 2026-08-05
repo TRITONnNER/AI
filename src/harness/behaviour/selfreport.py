@@ -37,13 +37,12 @@
 
 from __future__ import annotations
 
-import re
 from dataclasses import dataclass, field
 from typing import Any
 
 from ..core.clocks import Stamp
 from ..core.journal import Actor, Journal, Kind as EntryKind
-from ..core.symbols import assert_no_plain_text
+from ..core.symbols import assert_known_words
 from ..model.drives import DRIVE_NAMES, EMOTIONS, emotion_label
 from ..model.rebuild import BodyMap
 
@@ -106,28 +105,19 @@ VOCABULARY = frozenset(DRIVE_NAMES) | frozenset(EMOTIONS) | CODES | frozenset({
     "babble", "plan", "rehearse", "travel", "sleep", "watch",
 })
 
-_SEPARATORS = re.compile(r"[|@:/,]")
-_NUMBER = re.compile(r"^-?\d+(\.\d+)?$")
-
-
 def check_opaque(value: str, *, path: str = "") -> None:
     """Проверить, что в строке отчёта нет надписи с экрана.
 
     Проверка не та же, что на границе восприятия, и это не поблажка. На границе
     допустимы только символы: там всё приходит с экрана, значит всё подозрительно.
-    Здесь строки составные (`ENT_1C90|afford|OUT_2C@200`) и содержат слова, которых
-    на экране быть не может — имена драйвов, виды целей. Поэтому строка режется на
-    части, и каждая часть обязана быть либо числом, либо словом из закрытого
-    словаря, либо символом — последнее проверяется той же функцией, что и восприятие.
+    Здесь строки составные (`ENT_1C90|afford|OUT_2C@200`) и содержат слова, которых на
+    экране быть не может — имена драйвов, виды целей. Поэтому строка режется на части, и
+    каждая обязана быть числом, словом из закрытого словаря или символом.
 
-    Смысл именно в закрытости словаря: расшифрованная надпись в словарь не входит и
-    падает громко, как и должна.
+    Механизм общий с восприятием слоёв (`core.symbols.assert_known_words`): словарь у
+    них разный, а правило одно.
     """
-    for token in _SEPARATORS.split(value):
-        token = token.strip()
-        if not token or token in VOCABULARY or _NUMBER.match(token):
-            continue
-        assert_no_plain_text(token, path=path or "self_report")
+    assert_known_words(value, vocabulary=VOCABULARY, path=path or "self_report")
 
 
 @dataclass(slots=True)
