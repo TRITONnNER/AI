@@ -444,6 +444,7 @@ def cmd_plan(args: argparse.Namespace) -> int:
     from .behaviour.babbling import Babbler, run_babbling
     from .behaviour.goals import Goal
     from .behaviour.planner import Planner, choose_probe, execute
+    from .behaviour.skills import MacroRecorder
     from .core.action import Action, action_key
     from .core.clocks import Clocks
     from .core.profile import from_schema
@@ -471,12 +472,22 @@ def cmd_plan(args: argparse.Namespace) -> int:
     graph = PlaceGraph.from_profile(profile)
     state: dict[str, Any] = {"seq": 0, "last": None}
 
+    macro_len = int(profile.structural["macro_max_length"])
+    macros = (MacroRecorder(graph, max_length=macro_len, seconds_per_seq=1 / 30.0)
+              if macro_len >= 2 else None)
+
     def step(output: str, duration_ms: int = hold) -> str:
+        src = graph.current
         obs = world.step(Action.key(output, duration_ms), with_audio=False)
         state["seq"] += 1
         state["last"] = output
-        return graph.see(obs.frame, state["seq"], seconds_per_seq=1 / 30.0,
-                         mode=action_key(output, duration_ms))
+        dst = graph.see(obs.frame, state["seq"], seconds_per_seq=1 / 30.0,
+                        mode=action_key(output, duration_ms))
+        # Цепочка, пройденная целиком, — тоже наблюдение, и своё: у неё своя
+        # надёжность, а не произведение надёжностей звеньев.
+        if macros is not None and src is not None:
+            macros.note(src, action_key(output, duration_ms), dst, state["seq"])
+        return dst
 
     graph.see(world.step(None, with_audio=False).frame, 0,
               seconds_per_seq=1 / 30.0, mode="start")
@@ -504,6 +515,9 @@ def cmd_plan(args: argparse.Namespace) -> int:
     print(f"   мест {len(graph)}, пар (место, действие) {len(model.transitions)}, "
           f"подтверждённых исходов {confirmed}")
     print(f"   рёбер {gs['edges']}, из них петель «нажал и остался» {gs['loops']}")
+    if macros is not None:
+        print(f"   макро-рёбер записано {macros.stats()['recorded']}: цепочка до "
+              f"{macro_len} шагов может стать одним шагом плана")
 
     def model_reach(src: str, max_depth: int = 4) -> dict[str, int]:
         depth = {src: 0}
@@ -529,7 +543,15 @@ def cmd_plan(args: argparse.Namespace) -> int:
             frontier = nxt
         return {k: v for k, v in depth.items() if v > 0}
 
+    # Досягаемость при той же глубине поиска — то, ради чего макросы и нужны.
+    # Замер: без макросов достижимо 12 мест (медиана), с цепочками до трёх — 21.
+    here0 = graph.current or ""
+    reach_all = model_reach(here0)
+    singles_only = {k: v for k, v in reach_all.items()}
+    print(f"   достижимо мест при глубине 4: {len(reach_all)}")
+
     print("3. Планы до мест, куда модель знает дорогу")
+    del singles_only
     found = arrived = 0
     for _ in range(args.goals):
         refinements += graph.refine()
@@ -556,9 +578,11 @@ def cmd_plan(args: argparse.Namespace) -> int:
                      goal=goal)
         arrived += ex.goal_passed
         if found <= args.show:
-            print(f"   план {plan.length} шагов, {plan.seconds:.2f} с, "
-                  f"слабое звено наблюдено {plan.min_step_n} раз, "
-                  f"опасный {plan.risky} → "
+            chains = sum(1 for s in plan.steps if s.is_macro)
+            presses = sum(len(s.chain) or 1 for s in plan.steps)
+            print(f"   план {plan.length} шагов ({presses} нажатий, "
+                  f"навыков {chains}), {plan.seconds:.2f} с, "
+                  f"слабое звено {plan.min_step_n}, опасный {plan.risky} → "
                   f"{'дошёл' if ex.goal_passed else 'нет: ' + ex.reason[:50]}")
     if found:
         print(f"   планов {found}, дошли {arrived} ({arrived / found:.0%})")

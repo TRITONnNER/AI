@@ -29,7 +29,8 @@ from collections import Counter
 from dataclasses import dataclass
 from typing import Any, Callable, Sequence
 
-from ..core.action import Action, Reversibility, action_key
+from ..core.action import (Action, ActionError, Reversibility, action_key,
+                          macro_key)
 from ..core.clocks import Stamp
 from ..core.journal import Journal, Kind as EntryKind
 from ..model.beliefs import Origin, Provenance
@@ -288,3 +289,72 @@ def try_undo(skill: Skill, world: Any, undo_steps: Sequence[Step], *,
     undone = bool(same_as(before, after))
     skill.reversibility = skill.reversibility.observe(undone)
     return undone
+
+
+# ---------------------------------------------------------------------------
+# Макро-переходы: цепочка как один шаг плана
+# ---------------------------------------------------------------------------
+
+
+class MacroRecorder:
+    """Замечает, что цепочка действий отсюда приводит туда, и пишет это ребром.
+
+    Зачем это нужно отдельно от одиночных рёбер. Планировщик считает надёжность
+    цепочки произведением надёжностей звеньев: два шага по 0.9 дают 0.81, три — 0.73.
+    Для *независимых* шагов это верно, но цепочка, которую агент прошёл целиком двадцать
+    раз и двадцать раз попал куда надо, — это одно наблюдение с надёжностью 1.0, а не
+    произведение догадок. Разница не косметическая: план из трёх звеньев по 0.9
+    отбраковывается порогом `plan_min_step_p`, а тот же путь одним подтверждённым
+    макро-шагом проходит.
+
+    Второе, что даёт макро-ребро: промежуточные места могут быть склеены или
+    неустойчивы, и тогда план через них рвётся, хотя цепочка как целое работает.
+    Макро-ребро не зависит от того, как выглядит середина пути.
+
+    Одиночные рёбра при этом остаются. Макро не заменяет их, а добавляет альтернативу,
+    и планировщик выбирает по измеренному времени.
+    """
+
+    def __init__(self, graph: Any, *, max_length: int = 3,
+                 seconds_per_seq: float = 1.0) -> None:
+        if max_length < 2:
+            raise SkillError(
+                "макрос короче двух шагов — это одиночное действие, и ребро у него "
+                "уже есть")
+        self.graph = graph
+        self.max_length = int(max_length)
+        self.seconds_per_seq = float(seconds_per_seq)
+        # Окно последних шагов: (место до шага, ключ действия, номер такта)
+        self._window: list[tuple[str, str, int]] = []
+        self.recorded = 0
+
+    def note(self, src: str, key: str, dst: str, seq: int) -> int:
+        """Заметить один шаг. Вернуть, сколько макро-рёбер записалось.
+
+        Записываются все цепочки, кончающиеся этим шагом, длиной от двух до
+        `max_length`. Цепочка, которая привела обратно в начало, не записывается: это
+        петля, а петля из цепочки — не переход, а его отсутствие, и ставить её шагом
+        плана бессмысленно.
+        """
+        self._window.append((src, key, seq))
+        del self._window[:-self.max_length]
+        written = 0
+        for length in range(2, len(self._window) + 1):
+            tail = self._window[-length:]
+            start, start_seq = tail[0][0], tail[0][2]
+            if start == dst:
+                continue
+            keys = [k for _src, k, _seq in tail]
+            try:
+                mode = macro_key(keys)
+            except ActionError:
+                continue                    # среди звеньев не ключ действия
+            seconds = max(0.0, (seq - start_seq + 1) * self.seconds_per_seq)
+            self.graph.note_macro(start, dst, mode, seconds)
+            written += 1
+        self.recorded += written
+        return written
+
+    def stats(self) -> dict[str, Any]:
+        return {"recorded": self.recorded, "max_length": self.max_length,
+                "window": len(self._window)}

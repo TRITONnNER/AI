@@ -41,7 +41,8 @@ import heapq
 from dataclasses import dataclass, field
 from typing import Any, Callable, Iterator, Mapping, Sequence
 
-from ..core.action import Action, action_key, parse_action_key
+from ..core.action import (UNKNOWN, Action, Reversibility, action_key,
+                          macro_key, parse_action_key, parse_any_key)
 from ..core.clocks import Stamp
 from ..core.journal import Actor, Journal, Kind as EntryKind
 from ..core.profile import Profile
@@ -57,7 +58,14 @@ class PlanError(ValueError):
 
 @dataclass(frozen=True, slots=True)
 class PlanStep:
-    """Шаг плана: что нажать, куда это по модели ведёт и насколько это надёжно."""
+    """Шаг плана: что нажать, куда это по модели ведёт и насколько это надёжно.
+
+    Шаг бывает одиночным нажатием или **цепочкой** — навыком из библиотеки. Во втором
+    случае `output` и `duration_ms` описывают первое нажатие, а `chain` — все ключи
+    действий по порядку. Так сделано затем, чтобы весь прежний код, который смотрит на
+    `output`, продолжал работать и не начал молча делать половину шага: `actions()`
+    возвращает столько действий, сколько их в шаге, и вызывающий обязан выполнить все.
+    """
 
     output: str
     duration_ms: int
@@ -66,15 +74,47 @@ class PlanStep:
     seconds: float
     n: int                       # на скольких наблюдениях держится
     caution: float
+    # Ключи всех действий шага. Пустой кортеж — одиночное нажатие.
+    chain: tuple[str, ...] = ()
+
+    @property
+    def is_macro(self) -> bool:
+        return len(self.chain) > 1
+
+    def key(self) -> str:
+        """Ключ шага: тот же, под которым он лежит в модели перехода."""
+        if self.is_macro:
+            return macro_key(list(self.chain))
+        return action_key(self.output, self.duration_ms)
 
     def to_step(self) -> Step:
         return Step(self.output, self.duration_ms)
+
+    def actions(self, reversibility: Reversibility = UNKNOWN) -> tuple[Action, ...]:
+        """Действия шага по порядку. У одиночного шага одно, у навыка — все.
+
+        Обратимость передаётся снаружи и одна на все действия шага: она про выход, а
+        планировщик знает только осторожность цепочки в целом. Разбирать её по звеньям
+        здесь значило бы выдумать то, чего в модели нет.
+        """
+        if not self.is_macro:
+            return (Action.key(self.output, self.duration_ms,
+                               reversibility=reversibility),)
+        out: list[Action] = []
+        for one in self.chain:
+            parsed = parse_action_key(one)
+            if parsed is None:               # ключ проверен при сборке макроса
+                raise PlanError(f"в шаге плана не ключ действия: {one!r}")
+            output, ms, mods = parsed
+            out.append(Action.key(output, ms, mods, reversibility=reversibility))
+        return tuple(out)
 
     def as_dict(self) -> dict[str, Any]:
         return {"output": self.output, "duration_ms": self.duration_ms,
                 "expected_place": self.expected_place, "p": round(self.p, 4),
                 "seconds": round(self.seconds, 3), "n": self.n,
-                "caution": round(self.caution, 4)}
+                "caution": round(self.caution, 4),
+                "chain": list(self.chain), "is_macro": self.is_macro}
 
 
 @dataclass(slots=True)
@@ -212,10 +252,14 @@ class Planner:
                 continue
 
             for key in self.model.actions_from(place):
-                parsed = parse_action_key(key)
-                if parsed is None:
+                keys = parse_any_key(key)
+                if keys is None:
                     continue                    # не действие — повторить нечем
-                output, duration_ms, _mods = parsed
+                first = parse_action_key(keys[0])
+                if first is None:
+                    continue
+                output, duration_ms = first[0], first[1]
+                chain = keys if len(keys) > 1 else ()
                 pred = self.model.predict(place, key)
                 if pred is None:
                     continue                    # «не знаю» ветку не строит
@@ -233,7 +277,8 @@ class Planner:
                     # Удержание берётся из наблюдения, а не из настройки: план
                     # обязан повторять то действие, на котором модель училась.
                     step = PlanStep(output, duration_ms, outcome.dst, p,
-                                    outcome.mu_seconds, outcome.n, caution)
+                                    outcome.mu_seconds, outcome.n, caution,
+                                    chain=chain)
                     chain = steps + (step,)
                     total = seconds + outcome.mu_seconds
                     dst = outcome.dst
@@ -464,8 +509,9 @@ def execute(plan: Plan, *, act: Callable[[Action], str],
             model: ForwardModel | None = None) -> Execution:
     """Применить план в мире, сверяя каждый шаг с предсказанием.
 
-    `act` исполняет действие и возвращает место, в котором мир оказался. Первое
-    расхождение с предсказанием прекращает исполнение: дальше план построен на
+    `act` исполняет одно действие и возвращает место, в котором мир оказался. Шаг из
+    навыка исполняется целиком, и сверяется только его итог: обещание модели было про
+    конец цепочки. Первое расхождение с предсказанием прекращает исполнение: дальше план построен на
     состоянии, которого нет, и продолжать значит действовать вслепую.
 
     Расхождение — не поломка, а данные. Оно записывается в журнал и есть та же
@@ -474,8 +520,12 @@ def execute(plan: Plan, *, act: Callable[[Action], str],
     """
     ex = Execution(plan)
     for i, step in enumerate(plan.steps):
-        action = Action.key(step.output, step.duration_ms)
-        place = act(action)
+        # Шаг может быть цепочкой (навык из библиотеки). Тогда выполняются все
+        # действия по порядку, а сверка с предсказанием — одна, после последнего:
+        # модель обещала место в конце цепочки, а не после каждого её звена.
+        place = ""
+        for action in step.actions():
+            place = act(action)
         ex.steps_done += 1
         ex.places.append(place)
         agreed = place == step.expected_place
@@ -486,7 +536,8 @@ def execute(plan: Plan, *, act: Callable[[Action], str],
                 EntryKind.PLAN, stamp_of(i), Actor.AGENT,
                 event={"code": "plan_step", "goal": plan.goal_id, "index": i,
                        "expected": step.expected_place, "observed": place,
-                       "agreed": agreed, "p": round(step.p, 4)})
+                       "agreed": agreed, "p": round(step.p, 4),
+                       "actions": len(step.chain) or 1})
         if not agreed:
             ex.abandoned_at = i
             ex.reason = (f"шаг {i}: ожидалось {step.expected_place}, "

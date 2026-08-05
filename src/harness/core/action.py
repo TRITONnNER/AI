@@ -21,7 +21,7 @@ import hashlib
 import re
 from dataclasses import dataclass
 from enum import StrEnum
-from typing import Any, Mapping
+from typing import Any, Mapping, Sequence
 
 OUTPUT_RE = re.compile(r"^(OUT|MOD|BTN)_[0-9A-F]{2,4}$")
 
@@ -53,6 +53,52 @@ def parse_action_key(key: str) -> tuple[str, int, tuple[str, ...]] | None:
         return None
     mods = tuple(m.group("mods").split("+")) if m.group("mods") else ()
     return m.group("out"), int(m.group("ms")), mods
+
+
+MACRO_SEP = "|"
+
+
+def macro_key(keys: Sequence[str]) -> str:
+    """Ключ макроса: ключи действий через `|`, в порядке нажатия.
+
+    Форма та же, что у `Skill.signature()`, и это не совпадение: навык в журнале и
+    шаг плана из навыка обязаны иметь один ключ, иначе статистика по ним не сойдётся.
+
+    Отдельная функция, а не «просто join», нужна ради проверки: макрос из одного шага
+    — это одиночное действие, и записывать его макросом значит завести второй ключ для
+    того же самого. Тогда наблюдения разъедутся по двум ключам, и оба будут выглядеть
+    менее подтверждёнными, чем есть.
+    """
+    if len(keys) < 2:
+        raise ActionError(
+            f"макрос из {len(keys)} шагов: это одиночное действие, и ключ у него "
+            "уже есть. Два ключа на одно действие разведут его статистику надвое")
+    for k in keys:
+        if parse_action_key(k) is None:
+            raise ActionError(f"в макросе не ключ действия: {k!r}")
+    return MACRO_SEP.join(keys)
+
+
+def parse_macro_key(key: str) -> tuple[str, ...] | None:
+    """Разобрать ключ макроса. `None`, если это не макрос."""
+    if MACRO_SEP not in key:
+        return None
+    parts = key.split(MACRO_SEP)
+    if len(parts) < 2 or any(parse_action_key(p) is None for p in parts):
+        return None
+    return tuple(parts)
+
+
+def parse_any_key(key: str) -> tuple[str, ...] | None:
+    """Ключи действий в этом ключе: один для одиночного, несколько для макроса.
+
+    `None` — не ключ вовсе. Нужна там, где всё равно, одиночное действие или макрос:
+    модели перехода, например, важно только, что переход можно повторить.
+    """
+    macro = parse_macro_key(key)
+    if macro is not None:
+        return macro
+    return (key,) if parse_action_key(key) is not None else None
 
 
 class ActionError(ValueError):

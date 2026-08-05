@@ -31,7 +31,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any, Iterable
 
-from ..core.action import parse_action_key
+from ..core.action import parse_action_key, parse_any_key
 from .places import PlaceGraph, Traversal
 from .rebuild import BodyMap
 
@@ -120,15 +120,15 @@ class ForwardModel:
     def observe(self, edge: Traversal) -> None:
         """Добавить ребро графа как наблюдённый переход.
 
-        Ребро берётся только если его `mode` — полный ключ действия
-        (`OUT_xx@200`). Переход, про который неизвестно, **чем именно** его прошли,
+        Ребро берётся, если его `mode` — ключ действия (`OUT_xx@200`) или ключ
+        макроса (`OUT_xx@200|OUT_yy@40`). Переход, про который неизвестно, **чем именно** его прошли,
         для планирования бесполезен: повторить его нечем. И длительность здесь не
         придирка — нажатие на 40 мс и на 200 мс это разные действия (инвариант 8), а
         подставить длительность «по умолчанию» значило бы предсказывать последствие
         другого действия. На замере это стоило первого же шага плана: модель обещала
         место, наблюдённое при 200 мс, планировщик жал 40 мс и попадал не туда.
         """
-        if not edge.mode or parse_action_key(edge.mode) is None:
+        if not edge.mode or parse_any_key(edge.mode) is None:
             return
         key = (edge.src, edge.mode)
         outcomes = self.transitions.setdefault(key, [])
@@ -171,13 +171,23 @@ class ForwardModel:
         Обратимость известна про выход, а не про длительность, поэтому ключ
         разбирается и берётся выход. Без карты тела осторожность максимальна:
         незнание обратимости — это и есть максимальная осторожность (инвариант 9).
+        У макроса берётся худший шаг, а не средний.
         """
         if self.body is None:
             return 1.0
-        parsed = parse_action_key(key)
-        output = parsed[0] if parsed else key
-        facts = self.body.outputs.get(output)
-        return 1.0 if facts is None else facts.reversibility.caution
+        keys = parse_any_key(key)
+        if keys is None:
+            return 1.0
+        # У макроса осторожность — по самому неоткатываемому шагу. Не среднее: цепочка
+        # из девяти откатываемых нажатий и одного необратимого — необратимая цепочка,
+        # и усреднение спрятало бы ровно это.
+        worst = 0.0
+        for one in keys:
+            parsed = parse_action_key(one)
+            output = parsed[0] if parsed else one
+            facts = self.body.outputs.get(output)
+            worst = max(worst, 1.0 if facts is None else facts.reversibility.caution)
+        return worst
 
     # --- сводка -------------------------------------------------------------
 
