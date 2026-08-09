@@ -631,3 +631,102 @@ def test_lineage_refuses_a_dirty_root(tmp_path: Path) -> None:
     (tmp_path / "busy" / "чужое.txt").write_text("тут уже живут", encoding="utf-8")
     with pytest.raises(LineageError, match="прибавлять, а не"):
         new_lineage(tmp_path / "busy", PROFILE, reason="поверх чужого")
+
+
+# --- TASK-05: свойства мира как структурные переключатели -------------------
+
+
+def test_world_switches_are_structural_and_off_by_default() -> None:
+    """Прежний мир остаётся контролем: оба переключателя выключены по умолчанию.
+
+    Без контроля новый замер ничего не доказывает — на прежнем мире сверка `mu`
+    обязана остаться вакуумной (`TASK-05`, оговорка про честность).
+    """
+    from harness.core.settings import SCHEMA
+
+    by_key = {x.key: x for x in SCHEMA}
+    for key in ("world_variable_cost", "world_bounded"):
+        assert by_key[key].structural, f"{key} обязан форкать журнал"
+        assert by_key[key].default is False, f"{key} обязан быть выключен по умолчанию"
+
+    plain = from_schema("контроль", capture_width=64, capture_height=64)
+    changed = from_schema("новый", capture_width=64, capture_height=64,
+                          world_variable_cost=True)
+    assert plain.structure_hash != changed.structure_hash, (
+        "смена свойства мира обязана менять structure_hash, иначе опыт двух миров "
+        "смешается в одной ветке")
+
+
+def test_variable_cost_makes_traversal_time_carry_information() -> None:
+    """Вырождение 13.1 снимается: время перестаёт быть тождественным числу шагов."""
+    import numpy as np
+
+    from harness.core.action import Action
+    from harness.corpus.world import InteractiveWorld
+
+    def costs(**kw) -> list[int]:
+        profile = from_schema("цена", capture_width=320, capture_height=180, **kw)
+        world = InteractiveWorld(profile, seed=5, n_outputs=16)
+        out = []
+        for i in range(120):
+            world.step(Action.key(world.outputs[i % 16], 200), with_audio=False)
+            out.append(world.last_cost_ticks)
+        return out
+
+    plain = costs()
+    assert set(plain) == {1}, "в прежнем мире шаг обязан стоить ровно один такт"
+
+    varied = costs(world_variable_cost=True)
+    assert min(varied) > 1 or max(varied) > min(varied), (
+        "переменная цена не заработала: стоимость не варьируется")
+    assert float(np.std(varied)) > 0.0
+
+
+def test_jitter_zero_zeroes_the_spread() -> None:
+    """Проверка, объявленная заранее: `sigma` обязана исчезать при выключении разброса.
+
+    Иначе «переменная стоимость заработала» было бы нечем подтвердить: разброс мог
+    бы приходить откуда угодно, в том числе из простоя разведки, как это уже было.
+    """
+    from harness.core.action import Action
+    from harness.corpus.world import InteractiveWorld
+
+    def repeat_same_place(jitter: float) -> set[int]:
+        profile = from_schema("разброс", capture_width=320, capture_height=180,
+                              world_variable_cost=True, world_cost_jitter=jitter)
+        world = InteractiveWorld(profile, seed=5, n_outputs=16)
+        silent = None
+        for out in world.outputs:
+            world.step(Action.key(out, 200), with_audio=False)
+            if world.last_action_changed is False:
+                silent = out
+                break
+        assert silent is not None, "молчащего выхода не нашлось"
+        # Один и тот же выход, ничего не меняющий: местность та же, цена обязана
+        # быть той же при нулевом разбросе.
+        seen = set()
+        for _ in range(20):
+            world.step(Action.key(silent, 200), with_audio=False)
+            seen.add(world.last_cost_ticks)
+        return seen
+
+    assert len(repeat_same_place(0.0)) == 1, (
+        "при нулевом разбросе цена одного и того же перехода обязана быть постоянной")
+    assert len(repeat_same_place(0.35)) > 1, "разброс не даёт разброса"
+
+
+def test_bounded_world_keeps_the_camera_inside() -> None:
+    """Границу агент узнаёт по последствию: стены не рисуются отдельно."""
+    from harness.core.action import Action
+    from harness.corpus.world import InteractiveWorld
+
+    profile = from_schema("остров", capture_width=320, capture_height=180,
+                          world_bounded=True, world_extent_px=40)
+    world = InteractiveWorld(profile, seed=5, n_outputs=16)
+    home_x, home_y = world._home
+    for _ in range(300):
+        for out in world.outputs:
+            world.step(Action.key(out, 340), with_audio=False)
+    assert abs(world.state.cam_x - home_x) <= 40 + 1e-6
+    assert abs(world.state.cam_y - home_y) <= 40 + 1e-6
+    assert world.walls_hit > 0, "за 300 проходов агент обязан упереться в границу"

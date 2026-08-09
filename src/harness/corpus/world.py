@@ -113,6 +113,28 @@ class InteractiveWorld:
         self._steps = 0
         self.last_action_changed: bool | None = None
 
+        # --- два свойства из TASK-05, оба структурные ------------------------
+        #
+        # Переменная стоимость прохода. Без неё время прохода тождественно числу
+        # шагов, `mu` ребра равна 1/30 у всех рёбер, `sigma` нулю, и всякая сверка
+        # `mu` сравнивает число с самим собой (вырождение 13.1 в MEASUREMENT.md).
+        # По умолчанию выключена намеренно: прежний мир остаётся контролем, на
+        # котором замер обязан остаться вакуумным, иначе новый ничего не доказывает.
+        self.variable_cost = bool(profile.structural["world_variable_cost"])
+        self.cost_min = int(p["world_cost_min_ticks"])
+        self.cost_max = max(self.cost_min, int(p["world_cost_max_ticks"]))
+        self.cost_jitter = float(p["world_cost_jitter"])
+        # Ограниченность области. Без неё фронтир не кончается: в 34.7 % решений
+        # разведки место незнакомо вовсе, и замыкание петель почти не срабатывает
+        # (вырождение 13.2).
+        self.bounded = bool(profile.structural["world_bounded"])
+        self.extent = float(p["world_extent_px"])
+        self._home = (self.state.cam_x, self.state.cam_y)
+        # Сколько тактов стоил последний переход. Истина исследователя: агенту она
+        # недоступна, он видит только то, что кадры сменились не за один такт.
+        self.last_cost_ticks = 1
+        self.walls_hit = 0
+
     # --- проводка тела ------------------------------------------------------
 
     def _wire_outputs(self, n: int) -> tuple[tuple[str, ...], dict[str, Effect]]:
@@ -150,17 +172,66 @@ class InteractiveWorld:
         acted = action is not None and not action.masked
         if acted:
             self._apply(action)
+        # Стоимость прохода считается **после** применения действия: она зависит от
+        # местности, в которую пришли, а не от ребра. Ребра агент ещё не знает, а
+        # местность есть свойство мира и существует до всякого знания о ней.
+        self.last_cost_ticks = self._cost_of(before)
         # Истина исследователя: подействовало ли именно действие. Здесь она
         # совпадает с общим изменением, потому что этот мир сам ничего не делает,
         # — но у миров, которые идут сами, не совпадёт, поэтому величина отдельная.
         self.last_action_changed = ((self.state.snapshot() != before) if acted
                                     else None)
-        self.t_world += 1
+        # Такты мира идут по стоимости прохода, а не по одному за шаг. Именно здесь
+        # время перестаёт быть тождественным топологии: два перехода между теми же
+        # местами могут стоить разное, и `mu` ребра начинает нести информацию.
+        self.t_world += self.last_cost_ticks
         self._steps += 1
         frame = self._render()
         audio, bearing = (self._audio() if with_audio else (None, None))
         return Observation(frame, audio, self.t_world, bearing,
                            changed=self.state.snapshot() != before)
+
+    def _cost_of(self, before: Any) -> int:
+        """Сколько тактов занял этот переход. Один — если переменная цена выключена.
+
+        Стоимость выводится из **местности**: из яркости текстуры в том месте, куда
+        пришли. Так она оказывается свойством мира, устойчивым между проходами, а не
+        случайным числом на ребре, — и агент, вернувшись сюда другой дорогой, застанет
+        ту же местность и ту же примерную цену.
+
+        Разброс от прохода к проходу добавляется поверх: помеха, обход, задержка. Он
+        и есть то, что делает `sigma` величиной о мире. При `world_cost_jitter = 0`
+        `sigma` снова станет нулём — это проверяется тестом, потому что иначе
+        «переменная стоимость заработала» было бы нечем подтвердить.
+        """
+        if not self.variable_cost:
+            return 1
+        tex = self.scene._texture
+        h, w = tex.shape[:2]
+        y = int(self.state.cam_y) % h
+        x = int(self.state.cam_x) % w
+        # Яркость местности в [0,1] → цена в объявленном диапазоне.
+        terrain = float(tex[y, x]) / 255.0
+        base = self.cost_min + terrain * (self.cost_max - self.cost_min)
+        if self.cost_jitter > 0.0:
+            base *= 1.0 + self._rng.uniform(-self.cost_jitter, self.cost_jitter)
+        return int(max(self.cost_min, min(self.cost_max, round(base))))
+
+    def _clamp_to_extent(self) -> None:
+        """Удержать камеру внутри области. Стены не рисуются: их узнают по последствию.
+
+        Отдельного изображения стены нет намеренно. Агент не должен получать разметку
+        мира ни одним каналом (инвариант 4); границу он узнаёт тем же способом, каким
+        узнаёт всё остальное, — нажал, а мир не сдвинулся.
+        """
+        if not self.bounded:
+            return
+        hx, hy = self._home
+        cx = min(hx + self.extent, max(hx - self.extent, self.state.cam_x))
+        cy = min(hy + self.extent, max(hy - self.extent, self.state.cam_y))
+        if cx != self.state.cam_x or cy != self.state.cam_y:
+            self.walls_hit += 1
+        self.state.cam_x, self.state.cam_y = cx, cy
 
     def _apply(self, action: Action) -> None:
         if action.kind is ActionKind.MOUSE_MOVE:
@@ -175,6 +246,7 @@ class InteractiveWorld:
         for out in action.outputs_touched():
             effect = self._effects.get(out, Effect.SILENT)
             self._apply_effect(effect, scale)
+        self._clamp_to_extent()
 
     def _apply_effect(self, effect: Effect, scale: float) -> None:
         s = self.state

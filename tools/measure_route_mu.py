@@ -190,12 +190,26 @@ def edge_disjoint(pairs: list[Pair]) -> list[Pair]:
 # ---------------------------------------------------------------------------
 
 
-def build_graph(seed: int, *, steps: int, babble: int,
-                closing: bool) -> tuple[PlaceGraph, ForwardModel, int]:
-    """Собрать граф разведкой. Условия те же, что в замере степеней."""
+def build_graph(seed: int, *, steps: int, babble: int, closing: bool,
+                variable_cost: bool = False, bounded: bool = False,
+                jitter: float | None = None,
+                extent: int | None = None) -> tuple[PlaceGraph, ForwardModel, int]:
+    """Собрать граф разведкой. Условия те же, что в замере степеней.
+
+    `variable_cost` и `bounded` — структурные переключатели мира из `TASK-05`. По
+    умолчанию оба выключены: это прежний мир, контроль, на котором замер обязан
+    остаться вакуумным.
+    """
+    extra: dict[str, Any] = {}
+    if jitter is not None:
+        extra["world_cost_jitter"] = jitter
+    if extent is not None:
+        extra["world_extent_px"] = extent
     profile = from_schema("сверка-mu", capture_width=320, capture_height=180,
                           babble_repeats=3, place_record_loops=True,
-                          macro_max_length=0, explore_closes_loops=closing)
+                          macro_max_length=0, explore_closes_loops=closing,
+                          world_variable_cost=variable_cost,
+                          world_bounded=bounded, **extra)
     min_n = int(profile.parameters["plan_min_step_n"])
     bw = InteractiveWorld(profile, seed=seed, n_outputs=16)
     bab = Babbler(profile, bw.outputs, rng_seed=seed)
@@ -204,15 +218,18 @@ def build_graph(seed: int, *, steps: int, babble: int,
 
     world = InteractiveWorld(profile, seed=seed, n_outputs=16)
     graph = PlaceGraph.from_profile(profile)
-    graph.see(world.step(None, with_audio=False).frame, 0,
-              seconds_per_seq=1 / 30.0, mode="start")
-    state = {"seq": 0, "last": None}
+    first = world.step(None, with_audio=False)
+    graph.see(first.frame, first.t_world, seconds_per_seq=1 / 30.0, mode="start")
+    state: dict[str, Any] = {"last": None}
 
     def step(out: str, ms: int = 200) -> str:
         obs = world.step(Action.key(out, ms), with_audio=False)
-        state["seq"] += 1
         state["last"] = out
-        return graph.see(obs.frame, state["seq"], seconds_per_seq=1 / 30.0,
+        # Графу передаются **такты мира**, а не счётчик шагов. Без этого время в
+        # графе осталось бы тождественным топологии даже при переменной стоимости в
+        # мире: шаг всегда один, а такты — столько, сколько переход стоил. Это и
+        # есть та связь, из-за отсутствия которой замер TASK-04 был вакуумен.
+        return graph.see(obs.frame, obs.t_world, seconds_per_seq=1 / 30.0,
                          mode=action_key(out, ms))
 
     model = ForwardModel.from_graph(graph, bab.body)
@@ -394,6 +411,13 @@ def main() -> int:
     ap.add_argument("--seeds", default="3 5 7 11 13 17 19 23")
     ap.add_argument("--steps", type=int, default=1500)
     ap.add_argument("--babble", type=int, default=600)
+    ap.add_argument("--variable-cost", action="store_true",
+                    help="переменная стоимость прохода (структурный переключатель)")
+    ap.add_argument("--bounded", action="store_true",
+                    help="ограниченная область (структурный переключатель)")
+    ap.add_argument("--jitter", type=float, default=None,
+                    help="разброс стоимости; 0 обязан обнулить sigma")
+    ap.add_argument("--extent", type=int, default=None)
     ap.add_argument("--no-closing", action="store_true",
                     help="прежняя разведка: пар почти не будет, это и есть смысл")
     ap.add_argument("--json", default="")
@@ -405,7 +429,11 @@ def main() -> int:
     for seed in seeds:
         graph, _model, min_n = build_graph(seed, steps=args.steps,
                                            babble=args.babble,
-                                           closing=not args.no_closing)
+                                           closing=not args.no_closing,
+                                           variable_cost=args.variable_cost,
+                                           bounded=args.bounded,
+                                           jitter=args.jitter,
+                                           extent=args.extent)
         o = one_step_pairs(graph, min_n, seed)
         m = multi_step_pairs(graph, min_n, seed)
         one.pairs += o
