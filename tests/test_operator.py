@@ -643,3 +643,28 @@ def test_a_forged_clock_survives_the_trip(tmp_path: Path) -> None:
         assert walls, "часов в записи нет вовсе"
         assert all(w < 1_700_000_000.0 for w in walls), (
             f"часы подменены местными: {walls[:2]}")
+
+
+def test_setup_gives_windows_commands_for_cmd_not_only_powershell() -> None:
+    """Оператор пришёл в `cmd.exe`, а файл давал `ls` и только PowerShell.
+
+    Это случилось на самом деле, на первой же строке: `ls` в командной строке
+    отвечает «не является внутренней или внешней командой», а `Activate.ps1` там не
+    запускается. Дальше человек остановился. Поэтому проверяется механически: для
+    Windows названы обе оболочки и их **разные** файлы активации.
+    """
+    text = (ROOT / "SETUP.md").read_text(encoding="utf-8")
+    assert "cmd.exe" in text
+    assert "activate.bat" in text and "Activate.ps1" in text
+    assert "dir" in text, "список каталога в cmd.exe — dir, и это надо сказать"
+    assert "не является внутренней или внешней командой" in text, (
+        "симптом, на котором оператор встал, обязан быть в разделе «что пойдёт "
+        "не так» — дословно, чтобы находился поиском по тексту ошибки")
+
+
+def test_setup_warns_against_system_directories() -> None:
+    """Клон в System32 удаётся из окна администратора, а окружение там не живёт."""
+    text = (ROOT / "SETUP.md").read_text(encoding="utf-8")
+    assert "System32" in text
+    assert "move C:\\Windows\\System32\\harness" in text, (
+        "мало сказать «не туда»: нужна команда, которая переносит уже склонированное")

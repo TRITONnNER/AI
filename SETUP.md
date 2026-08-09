@@ -29,18 +29,40 @@
 
 ### Если git есть
 
+**Сначала выберите каталог, в котором можно писать.** Не `C:\Windows\System32`, не `C:\Program Files` и не корень системного диска: в системных каталогах всё требует прав администратора, и питоновское окружение там работать не будет.
+
+**Linux, macOS:**
+
 ```bash
+mkdir -p ~/ai && cd ~/ai
 git clone -b claude/save-claude-design-draft-ul62eo https://github.com/TRITONnNER/AI.git harness
 cd harness
-```
-
-Увидите: `Cloning into 'harness'...`, затем несколько строк про объекты и `Resolving deltas: 100%`. Проверить, что приехало то, что нужно:
-
-```bash
 ls
 ```
 
-Увидите: `CLAUDE.md  README.md  SETUP.md  src  tests  tools  docs` и ещё десяток файлов `.md`. Если видите только `README.md` — клон без ветки; удалите каталог и повторите команду целиком.
+**Windows (командная строка, `cmd.exe`):**
+
+```bat
+mkdir C:\ai
+cd /d C:\ai
+git clone -b claude/save-claude-design-draft-ul62eo https://github.com/TRITONnNER/AI.git harness
+cd harness
+dir
+```
+
+Увидите: `Cloning into 'harness'...`, несколько строк про объекты, `Resolving deltas: 100%`, затем список файлов: `CLAUDE.md  README.md  SETUP.md  src  tests  tools  docs` и ещё десяток `.md`.
+
+Список каталога в `cmd.exe` — это `dir`. Команды `ls` там нет: она есть в PowerShell и в Unix, а в командной строке отвечает «не является внутренней или внешней командой».
+
+Если видите только `README.md` — клон без имени ветки; удалите каталог и повторите команду целиком.
+
+**Если уже склонировали не туда** (например, в `System32`), перенесите каталог и закройте окно администратора:
+
+```bat
+move C:\Windows\System32\harness C:\ai\harness
+```
+
+затем откройте **обычное** окно командной строки (`Win+R` → `cmd`) и `cd /d C:\ai\harness`.
 
 ### Если git нет и ставить его не хочется
 
@@ -53,6 +75,16 @@ ls
   curl -L -o harness.zip "https://codeload.github.com/TRITONnNER/AI/zip/refs/heads/claude/save-claude-design-draft-ul62eo"
   unzip harness.zip
   cd AI-claude-save-claude-design-draft-ul62eo
+  ```
+
+  На Windows в командной строке (`cmd.exe`) — `tar` и `curl` там есть с Windows 10:
+
+  ```bat
+  cd /d C:\ai
+  curl.exe -L -o harness.zip "https://codeload.github.com/TRITONnNER/AI/zip/refs/heads/claude/save-claude-design-draft-ul62eo"
+  tar -x -f harness.zip
+  cd AI-claude-save-claude-design-draft-ul62eo
+  dir
   ```
 
   На Windows в PowerShell:
@@ -103,7 +135,32 @@ python3 -m pip install -e '.[macos,dev]'
 brew install python@3.12
 ```
 
-### Windows (PowerShell)
+### Windows
+
+Сначала проверьте, что Python есть:
+
+```bat
+py -V
+```
+
+Увидите `Python 3.12.x` или подобное. Если ответ «`py` не является внутренней или внешней командой» — Python не установлен:
+
+```bat
+winget install --id Python.Python.3.12 -e
+```
+
+затем **закройте и откройте окно заново** — иначе `py` не появится в PATH — и повторите `py -V`.
+
+**Командная строка (`cmd.exe`)** — то, что открывается по `Win+R` → `cmd`:
+
+```bat
+py -m venv .venv
+.venv\Scripts\activate.bat
+py -m pip install --upgrade pip
+py -m pip install -e ".[windows,dev]"
+```
+
+**PowerShell** — то, что открывается по `Win+X` → «Терминал»:
 
 ```powershell
 py -m venv .venv
@@ -112,21 +169,17 @@ py -m pip install --upgrade pip
 py -m pip install -e ".[windows,dev]"
 ```
 
-Увидите `Successfully installed ...`. Если PowerShell отказывается запускать `Activate.ps1` со словами про политику выполнения:
+Файл активации у них **разный**: `activate.bat` для командной строки, `Activate.ps1` для PowerShell. Если запустить не тот, окружение молча не включится, а следом `harness` не найдётся.
+
+После активации приглашение начинается с `(.venv)` — по этому признаку видно, что сработало. Затем увидите `Successfully installed harness-0.1.0 mss-... numpy-... dxcam-... sounddevice-...`.
+
+Если PowerShell отказывается запускать `Activate.ps1` со словами про политику выполнения:
 
 ```powershell
 Set-ExecutionPolicy -Scope CurrentUser -ExecutionPolicy RemoteSigned
 ```
 
 и повторите активацию.
-
-Если `py` не найден:
-
-```powershell
-winget install --id Python.Python.3.12 -e
-```
-
-затем **закройте и откройте терминал заново** — иначе `py` не появится в PATH.
 
 ---
 
@@ -277,7 +330,11 @@ harness ingest ~/harness-live/stillness --corpus ~/harness-live/corpus --kind st
 cd ~ && tar czf harness-live.tar.gz harness-live/corpus
 ```
 
-На Windows: щёлкните по папке правой кнопкой → «Отправить» → «Сжатая ZIP-папка».
+На Windows проще мышью: щёлкнуть по папке правой кнопкой → «Отправить» → «Сжатая ZIP-папка». Или командой:
+
+```bat
+tar -a -c -f %USERPROFILE%\harness-live.zip -C %USERPROFILE% harness-live\corpus
+```
 
 ---
 
@@ -339,11 +396,44 @@ echo $XDG_SESSION_TYPE
 - macOS: `brew install ffmpeg`
 - Windows: `winget install --id Gyan.FFmpeg -e`, затем закрыть и открыть терминал — иначе PATH не обновится.
 
+### `«ls» не является внутренней или внешней командой`
+
+**Причина:** это командная строка Windows (`cmd.exe`), а `ls` — команда Unix и PowerShell. Ничего не сломалось.
+
+**Что делать:** список каталога в `cmd.exe` — `dir`. Ниже таблица того же для трёх оболочек, чтобы не искать:
+
+| Что нужно | `cmd.exe` | PowerShell | Linux, macOS |
+|---|---|---|---|
+| список каталога | `dir` | `ls` или `dir` | `ls` |
+| перейти в каталог на другом диске | `cd /d C:\ai` | `cd C:\ai` | `cd ~/ai` |
+| активировать окружение | `.venv\Scripts\activate.bat` | `.venv\Scripts\Activate.ps1` | `source .venv/bin/activate` |
+| показать переменную | `echo %PATH%` | `$env:PATH` | `echo $PATH` |
+
+### Всё требует прав администратора, установка падает на правах
+
+**Симптом:** `pip install` пишет `Access is denied` или `Permission denied`, `py -m venv` не создаёт каталог.
+
+**Причина:** код лежит в системном каталоге — `C:\Windows\System32`, `C:\Program Files` или похожем. Клонировать туда получается, если окно запущено от администратора, но питоновское окружение там работать не будет.
+
+**Что делать:** перенести каталог и работать в обычном окне:
+
+```bat
+move C:\Windows\System32\harness C:\ai\harness
+```
+
+затем `Win+R` → `cmd` → `cd /d C:\ai\harness` и с шага 2 заново.
+
 ### `harness: command not found`
 
 **Причина:** не активировано виртуальное окружение (`.venv`) в этом терминале. Оно активируется на каждый новый терминал заново.
 
-**Что делать:** `source .venv/bin/activate` (Linux, macOS) или `.venv\Scripts\Activate.ps1` (Windows). Признак, что сработало: в начале строки приглашения появится `(.venv)`.
+**Что делать:** активировать окружение — командой для **своей** оболочки:
+
+- Linux, macOS: `source .venv/bin/activate`
+- Windows, командная строка (`cmd.exe`): `.venv\Scripts\activate.bat`
+- Windows, PowerShell: `.venv\Scripts\Activate.ps1`
+
+Признак, что сработало: в начале строки приглашения появится `(.venv)`. Файл не тот — окружение не включится молча.
 
 Если и после этого не находит — запускайте через модуль, это то же самое:
 
