@@ -2,7 +2,7 @@
 
 Этот файл **сгенерирован** `tools/project_status.py` по коду и тестам. Править его руками бессмысленно: он перезапишется. Смысл именно в этом — написанный руками список «что готово» расходится с кодом незаметно.
 
-Тестов: **486 прошло**, 0 упало (`486 passed in 114.63s (0:01:54)`).
+Тестов: **491 прошло**, 0 упало (`491 passed in 113.21s (0:01:53)`).
 
 ## Инварианты из CLAUDE.md
 
@@ -26,6 +26,8 @@
 ## М3: состояние по пунктам
 
 ### На живом экране проверено: **0 из 11** пунктов
+
+Картинка: `docs/figures/16-sostoyanie-m3.png`.
 
 Ноль. Все замеры — на синтетических мирах, написанных вместе с проверяемым кодом. Это не придирка: детектор слоёв показывал IoU 0.97 на такой синтетике и 0.18 на мире, написанном позже и независимо.
 
@@ -138,13 +140,16 @@
 
 ## Картинки
 
-Все рисуются по настоящим прогонам: `python3 tools/make_figures.py docs/figures`.
+Все рисуются по настоящим прогонам, тремя генераторами: `tools/make_figures.py`, `tools/make_task05_figures.py`, `tools/make_task06_figures.py`. Правила инварианта 28 в каждом проверяются механически: заголовок-предложение не длиннее 96 символов, обязательные `n` и единица независимости, не больше четырёх панелей.
 
 - `docs/figures/1-mir.png`
 - `docs/figures/10-svertka-mu.png`
 - `docs/figures/11-vremya-i-topologiya.png`
 - `docs/figures/12-vetki-arbitrazha.png`
 - `docs/figures/13-moshchnost-dlin.png`
+- `docs/figures/14-krivaya-balansa.png`
+- `docs/figures/15-rashozhdeniya.png`
+- `docs/figures/16-sostoyanie-m3.png`
 - `docs/figures/2-sebya-i-mira.png`
 - `docs/figures/3-oshibka-predskazaniya.png`
 - `docs/figures/4-lepet.png`

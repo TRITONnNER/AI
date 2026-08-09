@@ -503,6 +503,8 @@ def render_markdown(d: dict) -> str:
     w(f"### На живом экране проверено: **{m3['measured_on_live']} из "
       f"{m3['total']}** пунктов")
     w("")
+    w("Картинка: `docs/figures/16-sostoyanie-m3.png`.")
+    w("")
     if not m3["measured_on_live"]:
         w("Ноль. Все замеры — на синтетических мирах, написанных вместе с "
           "проверяемым кодом. Это не придирка: детектор слоёв показывал IoU 0.97 "
@@ -567,7 +569,11 @@ def render_markdown(d: dict) -> str:
 
     w("## Картинки")
     w("")
-    w("Все рисуются по настоящим прогонам: `python3 tools/make_figures.py docs/figures`.")
+    w("Все рисуются по настоящим прогонам, тремя генераторами: "
+      "`tools/make_figures.py`, `tools/make_task05_figures.py`, "
+      "`tools/make_task06_figures.py`. Правила инварианта 28 в каждом "
+      "проверяются механически: заголовок-предложение не длиннее 96 символов, "
+      "обязательные `n` и единица независимости, не больше четырёх панелей.")
     w("")
     for f in d["figures"]:
         w(f"- `docs/figures/{f}`")
