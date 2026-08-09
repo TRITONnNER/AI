@@ -101,6 +101,10 @@ class Scheduler:
         self.slice_seconds = float(p["contour_slice_ms"]) / 1000.0
         self.max_yields = int(p["contour_max_yields"])
         self.subsumption = bool(profile.structural["subsumption_enabled"])
+        # Пятая ось модуляции: насколько рано нижний контур имеет право перебить
+        # верхний. Ноль — только когда он уже просрочен, и это прежнее поведение,
+        # поэтому база в профиле нулевая. Единица — за целый свой период до срока.
+        self.reflex_priority = float(profile.parameters["emotion_reflex_priority_base"])
         self._now = now
         self.contours: list[Contour] = []
         self.steps = 0
@@ -206,8 +210,17 @@ class Scheduler:
         return Ran(contour.name, slices, False, True, contour.best)
 
     def _lower_is_due(self, contour: Contour) -> bool:
+        """Есть ли внизу тот, кому пора. `reflex_priority` решает, насколько «пора».
+
+        Право хода — не «да/нет», а насколько рано. Запас отсчитывается от периода
+        самого нижнего контура, а не от абсолютных секунд: у рефлекса на 20 Гц и у
+        планировщика на 0.5 Гц «немного раньше» — это разные величины, и абсолютное
+        число здесь означало бы разное на разных частотах.
+        """
         now = self._now()
-        return any(c.level < contour.level and (now >= c._next_due or c.busy)
+        return any(c.level < contour.level
+                   and (now >= c._next_due - self.reflex_priority * c.period
+                        or c.busy)
                    for c in self.contours)
 
     # --- опрос --------------------------------------------------------------

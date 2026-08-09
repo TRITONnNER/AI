@@ -198,7 +198,13 @@ class GoalStack:
         goal = Goal(
             id=self._next_id(), kind=candidate.kind, target=candidate.target,
             test=candidate.test, test_text=candidate.test_text,
-            budget_ticks=budget_ticks or self.default_budget,
+            # Седьмая ось модуляции: инерция возврата. Бюджет цели берётся у
+            # настроения, а не только из профиля, — при высоком возбуждении цель
+            # бросается быстрее. Явно переданный бюджет главнее: вызывающий,
+            # назвавший число, знает про свой замер больше, чем настроение.
+            budget_ticks=(budget_ticks
+                          or int(motivation.modulation().return_inertia)
+                          or self.default_budget),
             provenance=Provenance(Origin.EXPERIENCE, branch, seq),
             drive=candidate.drive, pressure=candidate.priority(pressure))
 

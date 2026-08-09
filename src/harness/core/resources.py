@@ -159,6 +159,11 @@ class ResourceGovernor:
         self.ram_warn = float(p["ram_warn_fraction"])
         self.disk_cap_mb = float(p["session_disk_cap_mb"])
         self.belief_cap = int(p["belief_cap"])
+        # Шестая ось модуляции: какая доля предела карточек отдана текущей задаче.
+        # Единица — весь предел, то есть прежнее поведение; настроение сужает долю,
+        # когда прогноз рушится. Это не «экономия памяти», а ставка: вкладывать весь
+        # предел в одну задачу дороже, когда дела идут хуже ожидаемого.
+        self.task_share = 1.0
         self.spend_cap_usd = float(p["spend_cap_usd"])
         # Предел частоты обращений к большой модели. Это не деньги, а темп: у
         # бесплатных тарифов ограничение именно на число запросов, и упереться в
@@ -240,6 +245,18 @@ class ResourceGovernor:
             self._journal_once(b, stamp)
         return out
 
+    def task_cap(self) -> int:
+        """Предел карточек для текущей задачи после модуляции долей ресурсов.
+
+        Не ниже одной карточки: доля, сжатая до нуля, означала бы «задача не имеет
+        права ничего узнать», а это не сужение ставки, а остановка.
+        """
+        return max(1, int(self.belief_cap * max(0.0, min(1.0, self.task_share))))
+
+    def set_task_share(self, share: float) -> None:
+        """Принять ось модуляции. Отдельный метод: значение приходит от настроения."""
+        self.task_share = max(0.05, min(1.0, float(share)))
+
     def _evict(self) -> int:
         """Вытеснить рабочий контекст. Он эфемерный и выводим из журнала."""
         if self._on_evict is None:
@@ -277,8 +294,13 @@ class ResourceGovernor:
             return Admission(False, self._refuse_frames)
         if op == OP_MODEL and self._refuse_model:
             return Admission(False, self._refuse_model)
-        if op == OP_BELIEF and self.beliefs >= self.belief_cap:
-            return Admission(False, f"карточек {self.beliefs} при пределе {self.belief_cap}")
+        if op == OP_BELIEF:
+            allowed = self.task_cap()
+            if self.beliefs >= allowed:
+                return Admission(
+                    False, f"карточек {self.beliefs} при пределе {allowed}"
+                    + (f" (доля задачи {self.task_share:.2f} от {self.belief_cap})"
+                       if allowed != self.belief_cap else ""))
         return Admission(True)
 
     def require(self, op: str) -> None:

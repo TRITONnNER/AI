@@ -180,9 +180,10 @@ def cmd_loop(args: argparse.Namespace) -> int:
     from .vision.predict import PredictionError
 
     profile = from_schema("КРУГ-1", capture_width=320, capture_height=180,
-                          babble_rate=0.9, babble_repeats=3, drive_horizon_s=60.0)
+                          babble_repeats=3, drive_horizon_s=60.0)
     world = InteractiveWorld(profile, seed=args.seed)
-    caution = float(profile.parameters["irreversibility_threshold"])
+    # Порог осторожности больше не берётся здесь: его отдаёт модуляция на каждом
+    # круге. Значение из профиля живо — оно её база.
 
     with Recorder(args.path, profile=profile, source=f"loop:seed={args.seed}",
                   synthetic=True, note=args.note) as rec:
@@ -198,15 +199,22 @@ def cmd_loop(args: argparse.Namespace) -> int:
                 error_mean=summary["mean"], error_sigma=summary["sigma"],
                 error_now=summary["last"],
                 unknown_reversibility=babbler.progress()["unknown_reversibility"])
+            # Модуляция берётся один раз на круг и отдаётся потребителям. Без этой
+            # строки оси считаются и не читаются: именно так три из них и оказались
+            # мёртвым кодом, а отчёт при этом печатал их сдвиги.
+            mod = motivation.modulation(
+                error_high=summary["last"] > summary["mean"])
             if stack.active is None:
                 cands = candidates_from_body(babbler.body, world.outputs,
-                                             caution_threshold=caution)
+                                             caution_threshold=mod.caution_threshold)
                 if cands:
                     stack.push(choose(cands, motivation, top=1)[0], motivation,
                                rec.journal.seq, branch, rec.clocks.stamp(),
                                budget_ticks=args.budget)
             run_babbling(world, babbler, steps=args.steps_per_round,
-                         clocks=rec.clocks, error=error)
+                         clocks=rec.clocks, error=error,
+                         explore_rate=mod.explore_rate,
+                         caution_threshold=mod.caution_threshold)
             stack.tick(rec.clocks.stamp())
 
             # Отчёт о себе — в конце каждого круга. Он никуда не возвращается и

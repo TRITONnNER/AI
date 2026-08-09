@@ -37,6 +37,7 @@ from typing import Any, Iterable
 
 from ..core.journal import Journal, Kind as EntryKind
 from ..core.profile import Profile
+from .drives import AXES, DRIVE_NAMES, axes_with_consumer
 from .rebuild import Rebuilt, rebuild_from_journal
 from .units import Independence, count, mean, share
 
@@ -435,4 +436,31 @@ def from_journal(journal: Journal, *, profile: Profile,
                 "от планировщика и при девяноста от рефлекса — разные прогоны",
                 independence=count("запись", layers[name]))
 
+    # Два числа по расхождениям аудита, часть 2. Они выводятся из кода, а не из
+    # журнала, и это здесь законно: утверждение не про прогон, а про устройство
+    # механизма — «сколько драйвов выведено» и «сколько осей доходит до поведения».
+    # Считаются они здесь потому, что расхождение, живущее только в документе, уже
+    # трижды переносилось; число в постоянном отчёте перенести нельзя.
+    out.add("drives_discovered", _drives_discovered(), "драйвов",
+            "model.drives.Motivation",
+            "сколько драйвов выведено из корреляции интерфейса с пережитым, а не "
+            "задано литералом. До М6 ноль из шести: машинерия драйвов верная, но "
+            "набор дан, а не найден (AUDIT.md, часть 2)",
+            independence=count("драйв", len(DRIVE_NAMES)))
+    live = len(axes_with_consumer())
+    out.add("modulation_axes_live", live, "осей", "model.drives.CONSUMERS",
+            f"сколько осей модуляции читает хотя бы один потребитель: {live} из "
+            f"{len(AXES)}. Ось без читателя обещает поведение, которого нет; "
+            "прежняя редакция считала три оси реализованными, а modulation() "
+            "вызывался только при печати отчёта",
+            independence=count("ось", len(AXES)))
+
     return out
+
+
+def _drives_discovered() -> int:
+    """Сколько драйвов помечено выведенными в заданном наборе. Пока ноль."""
+    from .drives import DriveOrigin, given_drives
+
+    return sum(1 for d in given_drives().values()
+               if d.origin is DriveOrigin.DISCOVERED)

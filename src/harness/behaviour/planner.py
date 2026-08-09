@@ -48,6 +48,7 @@ from ..core.clocks import Stamp
 from ..core.journal import (Actor, ActorLayer, Journal, Kind as EntryKind,
                           StateSnapshot)
 from ..core.profile import Profile
+from ..model.drives import Modulation
 from ..model.forward import ForwardModel
 from .goals import Goal
 from .imagination import Loop, Mode
@@ -196,6 +197,9 @@ class Planner:
         self.model = model
         self.max_expansions = int(p["plan_max_expansions"])
         self.max_length = int(p["plan_max_length"])
+        # Базовая длина хранится отдельно от текущей: модуляция домножает базу, а не
+        # уже сдвинутое значение, иначе горизонт съезжает от такта к такту сам собой.
+        self.base_max_length = self.max_length
         self.min_step_p = float(p["plan_min_step_p"])
         self.min_step_n = int(p["plan_min_step_n"])
         self.caution_threshold = float(p["irreversibility_threshold"])
@@ -330,6 +334,26 @@ class Planner:
                             "маршрут найден, но в нём есть неоткатываемый шаг"))
 
     # --- удобная обёртка ----------------------------------------------------
+
+    def modulate(self, modulation: Modulation) -> None:
+        """Принять две оси модуляции: длину горизонта и порог необратимости.
+
+        Горизонт задан в секундах, а план мерится шагами, поэтому переносится
+        отношением к базе, а не самим числом: сжался горизонт вдвое — вдвое короче
+        допустимый план. Прямой перевод секунд в шаги требовал бы знать, сколько
+        секунд занимает шаг, а это свойство мира, которого агенту никто не сообщал.
+
+        Осторожность идёт как есть: она и там, и здесь доля необратимости.
+
+        Метод существует затем, что без него оси мертвы. Прежняя редакция считала
+        горизонт «реализованной осью», а планировщик брал длину прямо из профиля и
+        про настроение не знал.
+        """
+        base_h = float(modulation.base.get("horizon_s", 0.0))
+        if base_h > 1e-9:
+            scale = modulation.horizon_s / base_h
+            self.max_length = max(1, int(round(self.base_max_length * scale)))
+        self.caution_threshold = float(modulation.caution_threshold)
 
     def plan(self, goal: Goal, start: str, target: str) -> Plan | None:
         """Досчитать поиск до конца. Для офлайновых прогонов и тестов.

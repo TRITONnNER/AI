@@ -26,13 +26,17 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Callable, Sequence
+from typing import Any, Callable, Iterator, Sequence
 
 from ..core.action import Action, Reversibility
 from ..core.clocks import Stamp
 from ..core.journal import Actor, ActorLayer, Journal, Kind as EntryKind
 from ..core.profile import Profile
 from ..model.rebuild import BodyMap
+
+# Потолок темпа исследования. Не «на всякий случай»: без него коэффициент усиления
+# при скуке мог бы дать сотню проб за такт, и один такт съел бы весь бюджет прогона.
+PACE_MAX = 4.0
 
 
 @dataclass(frozen=True, slots=True)
@@ -108,6 +112,9 @@ class Babbler:
         self.repeats = int(p["babble_repeats"])
         self.combo_after = int(p["babble_combo_after"])
         self.caution_threshold = float(p["irreversibility_threshold"])
+        self.rate = float(p["babble_rate"])
+        self._pace: float | None = None   # первый такт не пропускается
+        self.paced_out = 0          # тактов пропущено темпом: видно в отчёте
         self.pause_ms = int(p["pause_after_irreversible_ms"])
         self._rng = random.Random(rng_seed)
         self._pause_left_ms = 0
@@ -130,6 +137,42 @@ class Babbler:
         между 300 и 320 мс не выучивается, а перебор растёт линейно."""
         mid = (self.hold_min + self.hold_max) // 2
         return (self.hold_min, mid, self.hold_max)
+
+    def pace(self, explore_rate: float | None = None) -> int:
+        """Сколько проб на этом такте. Темп исследования — ось модуляции.
+
+        Число, а не «да/нет», потому что ось двусторонняя: страх тормозит
+        исследование, скука его ускоряет. Доля тактов выразить второе не может —
+        быстрее, чем каждый такт, доля не бывает, и «скука ускоряет лепет» при
+        базовом темпе 1.0 оказалось бы невыполнимым требованием. Поэтому 0.5 — проба
+        через такт, 2.0 — две пробы за такт.
+
+        Отдельный метод, а не значение `None` из `next_probe`: `None` там уже значит
+        «идёт пауза после необратимого», и совмещение двух смыслов в одном ответе
+        сразу же дало ложное «при высокой осторожности лепет встал совсем» — вызов из
+        одной точки не мог отличить «темп пропустил такт» от «лепет остановился».
+
+        Счётчик, а не случайность: прогон обязан воспроизводиться от сида, и «страх
+        притормозил исследование» должно читаться в числе проб, а не в шуме. Первый
+        такт не пропускается никогда — пропущенный первый такт неотличим от
+        неработающего лепета.
+
+        До этого ручка `babble_rate` не читалась ни одной строкой кода: объявленный и
+        никем не спрошенный темп.
+        """
+        rate = max(0.0, min(PACE_MAX, self.rate if explore_rate is None
+                            else float(explore_rate)))
+        if self._pace is None:
+            # Первый такт не пропускается никогда, и остаток подобран так, чтобы
+            # дальше темп шёл ровно `rate`: иначе фиксированный старт завышал бы
+            # долю проб на малых темпах (при 0.5 выходило 0.75).
+            self._pace = 1.0 - rate
+        self._pace += rate
+        times = int(self._pace)
+        self._pace -= times
+        if times == 0:
+            self.paced_out += 1
+        return times
 
     def next_probe(self, *, caution_threshold: float | None = None) -> Probe | None:
         """Что пробовать дальше. `None`, если идёт пауза после необратимого."""
@@ -333,7 +376,9 @@ class Babbler:
 def run_babbling(world: Any, babbler: Babbler, *, steps: int,
                  clocks: Any, journal: Journal | None = None,
                  undo_with: Callable[[str], str | None] | None = None,
-                 error: Any = None) -> dict[str, Any]:
+                 error: Any = None,
+                 explore_rate: float | None = None,
+                 caution_threshold: float | None = None) -> dict[str, Any]:
     """Прогон лепета по миру. Проверяемо офлайн, без игры и без устройства.
 
     `undo_with` — чем агент пытается откатить последствие. По умолчанию он
@@ -390,9 +435,29 @@ def run_babbling(world: Any, babbler: Babbler, *, steps: int,
         # дрожание в один уровень яркости стало бы «последствием».
         return abs(change - mean) > max(floor, sigmas * max(sigma, 1e-4))
 
-    for _ in range(steps):
-        babbler.tick_pause(1000.0 / float(babbler.profile.parameters["capture_fps"]))
-        probe = babbler.next_probe()
+    def slots() -> Iterator[bool]:
+        """Такты и пробы внутри такта. Темп может дать больше одной пробы за такт.
+
+        Отдельный генератор, чтобы тело пробы осталось нетронутым: переписывать
+        семьдесят строк ради двух осей модуляции — это заводить новые ошибки в
+        механизме, который уже замерен.
+        """
+        for _ in range(steps):
+            babbler.tick_pause(1000.0
+                               / float(babbler.profile.parameters["capture_fps"]))
+            times = babbler.pace(explore_rate)
+            if times == 0:
+                yield False
+                continue
+            for _ in range(times):
+                yield True
+
+    for probing in slots():
+        # Две оси модуляции читаются здесь: темп исследования решает, сколько проб
+        # на такте, порог необратимости — что именно выбрать. Без этих двух строк
+        # обе оси считались бы реализованными и не влияли бы ни на что.
+        probe = (babbler.next_probe(caution_threshold=caution_threshold)
+                 if probing else None)
         if probe is None:
             world.step(None, with_audio=False)      # мир идёт и во время паузы
             clocks.tick_self()
