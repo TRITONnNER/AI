@@ -43,6 +43,7 @@ from typing import Any, Callable, Iterator, Mapping, Sequence
 
 from ..core.action import (UNKNOWN, Action, Reversibility, action_key,
                           macro_key, parse_action_key, parse_any_key)
+from ..core.branches import Arbitration
 from ..core.clocks import Stamp
 from ..core.journal import (Actor, ActorLayer, Journal, Kind as EntryKind,
                           StateSnapshot)
@@ -520,11 +521,31 @@ def undersewn(graph: Any, model: ForwardModel, outputs: Sequence[str], *,
     return sorted(out)
 
 
+#: Ветки разведки с замыканием, в порядке приоритета. Объявлены списком, потому что
+#: инвариант 26 требует счётчик на каждой, а счётчик по необъявленному списку врёт
+#: умолчанием: ветка, которой нет в перечне, не попадёт в отчёт о нулевых
+#: срабатываниях, и мёртвый код снова окажется невидимым.
+CLOSING_BRANCHES = (
+    ("нет модели здесь", "место незнакомо: решать нечем, отдаём прежней разведке"),
+    ("подтвердить здесь", "переход наблюдён меньше min_n раз — планировать по нему нельзя"),
+    ("непробованное здесь", "выход, которым отсюда не уходили, при недозамкнутом месте"),
+    ("идти в недозамкнутое", "маршрут в место с малой степенью: прийти в известное иначе"),
+    ("непробованное всё же", "дозамкнутых целей нет или до них нет маршрута"),
+    ("прежняя разведка", "обратная пара и наименее пробованный выход"),
+)
+
+
+def closing_arbitration() -> Arbitration:
+    """Счётчики для разведки с замыканием. Инвариант 26."""
+    return Arbitration.of("разведка с замыканием", CLOSING_BRANCHES)
+
+
 def choose_closing_probe(model: ForwardModel, graph: Any, place: str | None,
                          outputs: Sequence[str], *, hold_ms: int,
                          min_n: int = 2, degree_bar: int = 2,
                          inverse: Mapping[str, str] | None = None,
-                         last_output: str | None = None) -> tuple[str, int]:
+                         last_output: str | None = None,
+                         arb: Arbitration | None = None) -> tuple[str, int]:
     """Разведка, которая старается прийти в известное иначе.
 
     Порядок предпочтения, и каждый пункт про степень, а не про новизну:
@@ -540,7 +561,12 @@ def choose_closing_probe(model: ForwardModel, graph: Any, place: str | None,
     4. **Обратная пара** — последней, а не третьей. Она не может поднять степень.
     5. Меньше всего пробованное, если ничего из перечисленного не нашлось.
     """
+    def hit(name: str) -> None:
+        if arb is not None:
+            arb.hit(name)
+
     if place is None or not model.actions_from(place):
+        hit("нет модели здесь")
         return choose_probe(model, place, outputs, hold_ms=hold_ms, min_n=min_n,
                             inverse=inverse, last_output=last_output)
 
@@ -552,6 +578,7 @@ def choose_closing_probe(model: ForwardModel, graph: Any, place: str | None,
         if min(o.n for o, _ in pred.outcomes()) < min_n:
             parsed = parse_action_key(key)
             if parsed is not None:
+                hit("подтвердить здесь")
                 return parsed[0], parsed[1]
 
     seen_outputs: set[str] = set()
@@ -577,6 +604,7 @@ def choose_closing_probe(model: ForwardModel, graph: Any, place: str | None,
     # ровно цепь, — разведка уходит замыкать, а не углубляться. Это и есть
     # «максимизировать прирост степени, а не число новых узлов».
     if fresh and here_degree < degree_bar:
+        hit("непробованное здесь")
         return fresh[0], hold_ms
 
     # 3. Куда идти, чтобы поднять степень. Маршрут берётся из графа — это тот же
@@ -595,13 +623,16 @@ def choose_closing_probe(model: ForwardModel, graph: Any, place: str | None,
         if (inverse is not None and last_output is not None
                 and inverse.get(last_output) == first[0] and len(route) == 1):
             continue
+        hit("идти в недозамкнутое")
         return first[0], first[1]
 
     # 4. Дозамкнутых целей нет или до них нет маршрута — тогда всё-таки вглубь.
     if fresh:
+        hit("непробованное всё же")
         return fresh[0], hold_ms
 
     # 5 и 6 — как раньше: обратная пара, потом меньше всего пробованное.
+    hit("прежняя разведка")
     return choose_probe(model, place, outputs, hold_ms=hold_ms, min_n=min_n,
                         inverse=inverse, last_output=last_output)
 
