@@ -634,7 +634,11 @@ def test_invariant_13_confabulation_is_measured_not_prevented(tmp_path: Path) ->
                            state=StateSnapshot(stated_reason_id="R1"),
                            event={"code": "plan_step"})
     with Session.open(tmp_path / "s") as s:
-        c = measure(s.journal)
+        # Порог 1: проверяется измеримость механизма, а не достаточность выборки.
+        # Инвариант 13 требует, чтобы расхождение было видно, — и оно видно. Хватает
+        # ли эпизодов на доверительное число, спрашивает отдельно инвариант 22, и
+        # ответ на него даёт `confab_min_episodes` из схемы.
+        c = measure(s.journal, min_episodes=1)
     assert c.rate == 1.0, "заявил планировщик, начал рефлекс — это расхождение"
 
 

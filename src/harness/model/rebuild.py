@@ -222,12 +222,18 @@ class Rebuilt:
     thoughts: int = 0
     self_reports: int = 0
     entries: int = 0
+    questions_asked: int = 0
+    questions_reopened: int = 0
+    questions_resolved: int = 0
 
     def as_dict(self) -> dict[str, Any]:
         return {"beliefs": self.beliefs.stats(), "body": self.body.stats(),
                 "interventions": self.interventions, "frames": self.frames,
                 "thoughts": self.thoughts, "self_reports": self.self_reports,
                 "entries": self.entries,
+                "questions_asked": self.questions_asked,
+                "questions_reopened": self.questions_reopened,
+                "questions_resolved": self.questions_resolved,
                 "fingerprint": self.beliefs.fingerprint()}
 
 
@@ -290,10 +296,47 @@ def rebuild_from_journal(journal: Journal, *, response_field: str = "responded",
                     branch=branch, seq=e.seq))
             continue
 
+        if e.kind is EntryKind.HYPOTHESIS:
+            # Жизнь вопроса восстанавливается из журнала, а не хранится сбоку. Иначе
+            # перечень непонятого — единственное, что не выводимо из следа, и он
+            # тихо расходится с ним (инвариант 1, показатель 9 «дрейф памяти»).
+            _absorb_hypothesis(e, store, out)
+            continue
+
         if e.kind is EntryKind.INTERVENTION:
             out.interventions += 1
 
     return out
+
+
+def _absorb_hypothesis(e, store: BeliefStore, out: Rebuilt) -> None:
+    """Одна запись о жизни гипотезы. Порядок переходов проверяет сам конвейер."""
+    from .beliefs import Hypothesis, Origin, Provenance
+
+    code = str(e.event.get("code", ""))
+    claim = str(e.event.get("claim", ""))
+    if not claim:
+        return
+    if code == "asked":
+        prov = Provenance(Origin(str(e.event.get("origin", "hunch"))),
+                          str(e.event.get("branch", store.branch)), e.seq,
+                          str(e.event.get("source", "self")),
+                          float(e.event.get("trust", 1.0)))
+        store.add_hypothesis(Hypothesis.question(
+            claim, float(e.event.get("prior", 0.5)), prov,
+            because=str(e.event.get("because", "не сказано")),
+            reopens_on=tuple(str(x) for x in e.event.get("needs", ()))))
+        out.questions_asked += 1
+    elif code == "reopened":
+        h = store.hypotheses.get(claim)
+        if h is not None:
+            store.add_hypothesis(h.with_test(str(e.event.get("test", "?"))))
+            out.questions_reopened += 1
+    elif code == "resolved":
+        h = store.hypotheses.get(claim)
+        if h is not None:
+            store.add_hypothesis(h.resolved(bool(e.event.get("outcome", False))))
+            out.questions_resolved += 1
 
 
 def _absorb_action(e, body: BodyMap, store: BeliefStore, branch: str,
@@ -349,3 +392,36 @@ def rebuild_twice_matches(journal: Journal) -> tuple[bool, str, str]:
     a = rebuild_from_journal(journal).beliefs.fingerprint()
     b = rebuild_from_journal(journal).beliefs.fingerprint()
     return a == b, a, b
+
+
+def drift(live: BeliefStore, journal: Journal, **kw: Any) -> dict[str, Any]:
+    """Дрейф памяти (показатель 9): чем живое хранилище отличается от пересобранного.
+
+    Расхождение и есть **ложное воспоминание, измеренное**. Живое хранилище правится по
+    ходу дела: слияния, забывание, реконсолидация. Пересобранное из журнала не знает
+    ничего, кроме следа. Всё, что есть в живом и чего нет в пересобранном, агент помнит
+    без основания в опыте, а всё обратное — забыл.
+
+    Возвращает доли, а не только «совпало/нет»: отпечаток отвечает да или нет, а
+    величина расхождения — это то, что нужно смотреть на графике. Единица независимости
+    здесь — **утверждение** хранилища, и `n` в отчёте равен размеру объединения.
+    """
+    fresh = rebuild_from_journal(journal, **kw).beliefs
+    a = {b.claim: b for b in live.beliefs()}
+    b = {x.claim: x for x in fresh.beliefs()}
+    only_live = sorted(set(a) - set(b))
+    only_fresh = sorted(set(b) - set(a))
+    common = sorted(set(a) & set(b))
+    moved = [c for c in common if abs(a[c].mu - b[c].mu) > 1e-9]
+    union = len(set(a) | set(b))
+    return {
+        "same_fingerprint": live.fingerprint() == fresh.fingerprint(),
+        "n_claims": union,
+        "only_live": only_live,
+        "only_rebuilt": only_fresh,
+        "mu_moved": moved,
+        # Доля утверждений, по которым живое и пересобранное расходятся хоть в чём-то.
+        "drift": (0.0 if not union
+                  else round((len(only_live) + len(only_fresh) + len(moved)) / union, 6)),
+        "unit": "утверждение",
+    }

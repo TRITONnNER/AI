@@ -414,7 +414,9 @@ def cmd_report(args: argparse.Namespace) -> int:
         # Метрика конфабуляции — третья величина в отчёте, и она про **разницу**
         # между колонками: заявленный слой против настоящего инициатора. Считается
         # тут же по журналу, потому что контроллеру сопоставлять нельзя.
-        conf = confabulation.measure(s.journal)
+        conf = confabulation.measure(
+            s.journal,
+            min_episodes=int(s.profile.parameters["confab_min_episodes"]))
         layers = confabulation.layer_histogram(s.journal)
 
     if args.json:

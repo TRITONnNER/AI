@@ -387,8 +387,16 @@ class Finding:
 def diagnose(setting: Setting, sites: Iterable[Site],
              runtime_reads: int | None = None) -> Finding:
     all_sites = tuple(sites)
-    readers = tuple(s for s in all_sites if not s.report_only)
     applies = applies_of(setting)
+    # Настройка, **объявленная** отчётной, читателем считает и печать. Это не поддавка:
+    # инвариант 23 требует держать порог замера в схеме, иначе он не попадёт в
+    # `profile_hash` и прогоны станут несравнимыми; инвариант 30 требует читателя на
+    # объявленном пути. Оба выполнимы одновременно ровно так — путь объявлен отчётным.
+    # Диагноз «только отчёт» остаётся для случая, ради которого он и заведён: настройка
+    # объявлена меняющей поведение, а потребитель у неё один — печать.
+    report_declared = tuple(applies) == (Path_.REPORT,)
+    readers = tuple(s for s in all_sites
+                    if report_declared or not s.report_only)
     covered = {p for s in readers for p in s.paths}
     missing = tuple(p for p in applies if p not in covered)
 

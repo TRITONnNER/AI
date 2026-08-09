@@ -27,7 +27,10 @@ from __future__ import annotations
 import hashlib
 from dataclasses import dataclass, field
 from enum import StrEnum
-from typing import Any, Iterable, Iterator, Mapping
+from typing import TYPE_CHECKING, Any, Iterable, Iterator, Mapping
+
+if TYPE_CHECKING:  # только для аннотации: счётчики переходов необязательны
+    from ..core.branches import Arbitration
 
 
 class BeliefError(ValueError):
@@ -89,6 +92,12 @@ class Belief:
     provenance: Provenance
     n_experience: int = 0
     last_seq: int = 0
+    # Эпизоды собственных проверок — отдельно от происхождения. Именно это поле
+    # позволяет пересказу быть проверенным, не перестав быть пересказом: происхождение
+    # говорит «откуда узнал», `checked_at` — «когда сам убедился», и одно не подменяет
+    # другого. Без него подтверждение приходилось бы записывать сменой происхождения, и
+    # различение опыта и свидетельства терялось при первой же успешной проверке.
+    checked_at: tuple[int, ...] = ()
 
     def __post_init__(self) -> None:
         if not self.claim:
@@ -127,32 +136,65 @@ class Belief:
         return base * (0.5 + 0.5 * own)
 
     def observe(self, outcome: bool, prov: Provenance) -> Belief:
-        """Ещё одно подтверждение или опровержение. Возвращает новое убеждение."""
+        """Ещё одно подтверждение или опровержение. Возвращает новое убеждение.
+
+        Что здесь происходит с происхождением, и почему прежняя редакция была неверна.
+
+        Стояло так: любое подтверждение своими руками повышало происхождение до
+        `experience` — и догадку, и **пересказ**. То есть чужое утверждение,
+        подтвердившееся один раз, становилось неотличимо от того, что агент узнал сам,
+        и вся защита от загрязнения (`instances.py`: «свидетельство опытом не становится
+        никогда») отваливалась на первой же удачной проверке. Ошибка тихая: код читается
+        разумно, тест на неё не падал, а различие, ради которого заводились экземпляры и
+        разделялись линии, исчезало молча.
+
+        Теперь: `hunch` → `experience` повышается (догадка была своя, проверка делает её
+        опытом), `testimony` — **никогда**. Собственная проверка пересказа
+        записывается в `checked_at` и увеличивает `n_experience`, поэтому пересказ
+        перестаёт быть слухом (`is_hearsay`) и растёт в `confidence`, но остаётся
+        свидетельством по происхождению. Понижения не бывает ни в каком случае.
+        """
         n = self.n + 1
         mu = (self.mu * self.n + (1.0 if outcome else 0.0)) / n
         sigma = (max(mu * (1.0 - mu), 1e-9) / n) ** 0.5 if n > 1 else 0.5
-        n_exp = self.n_experience + (1 if prov.origin is Origin.EXPERIENCE else 0)
-        # Происхождение повышается: догадка, подтверждённая своими руками,
-        # становится опытом. Обратно не понижается никогда.
+        own = prov.origin is Origin.EXPERIENCE
+        n_exp = self.n_experience + (1 if own else 0)
         origin = self.provenance
-        if prov.origin is Origin.EXPERIENCE and origin.origin is not Origin.EXPERIENCE:
+        if own and origin.origin is Origin.HUNCH:
             origin = prov
-        return Belief(self.claim, mu, sigma, n, origin, n_exp, max(self.last_seq, prov.seq))
+        checked = self.checked_at + ((prov.seq,) if own else ())
+        return Belief(self.claim, mu, sigma, n, origin, n_exp,
+                      max(self.last_seq, prov.seq), checked_at=checked)
+
+    @property
+    def verified_testimony(self) -> bool:
+        """Пересказ, проверенный своими руками. Опытом при этом не стал.
+
+        Отдельное имя нужно затем, чтобы это состояние было видно в отчётах: доля
+        проверенных пересказов — прямая мера того, насколько агент живёт своим, и
+        свернуть её в «опыт» значило бы потерять единственный честный счётчик
+        загрязнения.
+        """
+        return (self.provenance.origin is Origin.TESTIMONY
+                and self.n_experience > 0)
 
     def as_dict(self) -> dict[str, Any]:
         return {"claim": self.claim, "mu": round(self.mu, 6), "sigma": round(self.sigma, 6),
                 "n": self.n, "n_experience": self.n_experience, "last_seq": self.last_seq,
+                "checked_at": list(self.checked_at),
+                "verified_testimony": self.verified_testimony,
                 "provenance": self.provenance.as_dict()}
 
     @classmethod
     def from_dict(cls, d: Mapping[str, Any]) -> Belief:
         return cls(str(d["claim"]), float(d["mu"]), float(d["sigma"]), int(d["n"]),
                    Provenance.from_dict(d["provenance"]), int(d.get("n_experience", 0)),
-                   int(d.get("last_seq", 0)))
+                   int(d.get("last_seq", 0)),
+                   checked_at=tuple(int(x) for x in d.get("checked_at", ())))
 
 
 class State(StrEnum):
-    """Три исхода конвейера убеждений, а не два (инвариант 16).
+    """Три **исхода** конвейера убеждений, а не два (инвариант 16).
 
     `DEFERRED` — не «пока не проверили», а «проверить нечем»: теста не
     существует. Такая гипотеза не тратит бюджет, не удаляется и переоткрывается
@@ -161,11 +203,76 @@ class State(StrEnum):
 
     Без третьего исхода отказ по перерасходу выбросил бы все загадки агента, и он
     вечно забывал бы, чего не понял.
+
+    **Исход — не то же, что состояние.** Гипотеза с тестом, который ещё не выполнен,
+    исхода не имеет вообще (`MIND.md`, раздел 5), поэтому `Hypothesis.state` для неё
+    возвращает `None`. Полный автомат из четырёх положений — `Stage`.
     """
 
     VERIFIED = "verified"
     REFUTED = "refuted"
     DEFERRED = "deferred"
+
+
+class Stage(StrEnum):
+    """Четыре положения конвейера. Полный автомат, в отличие от `State`.
+
+    Две сущности, а не одна, и сводить их нельзя ни в какую сторону:
+
+    - `State` отвечает на «чем кончилось». У гипотезы в работе ответа нет — `None`;
+    - `Stage` отвечает на «где она сейчас». Положений четыре, и они перечислимы.
+
+    Соблазн прибрать одно в другое возникает при каждом чтении этого файла, и
+    поддаться ему нельзя в обе стороны. Выдать гипотезе в работе `DEFERRED` — значит
+    смешать перечень непонятого с обычной очередью дел: множество отложенного тут же
+    забьётся задачами, до которых просто не дошли руки, и третий исход обесценится.
+    Выдать отложенной `HYPOTHESIS` — значит утверждать, что проверка существует, и
+    планировщик начнёт тратить на неё бюджет, которого у неё нет.
+    """
+
+    HYPOTHESIS = "hypothesis"    # тест есть, не выполнен. Исхода нет
+    VERIFIED = "verified"
+    REFUTED = "refuted"
+    DEFERRED = "deferred"        # тест не конструируется — это вопрос
+
+
+#: Смысл каждого положения одной строкой. Для отчёта и для тестов: положение без
+#: объяснённого смысла завести нельзя.
+STAGE_MEANING: dict[Stage, str] = {
+    Stage.HYPOTHESIS: "тест есть, не выполнен",
+    Stage.VERIFIED: "проверена, подтвердилась",
+    Stage.REFUTED: "проверена, опровергнута",
+    Stage.DEFERRED: "тест не конструируется: проверить нельзя, а не «не проверял»",
+}
+
+#: Разрешённые переходы: откуда, куда и по какому событию. Всё остальное — ошибка.
+#:
+#: Обратных переходов нет ни одного, и это существенно. Раз проверка нашлась, она не
+#: пропадает: вопрос, ставший гипотезой, обратно вопросом не становится, иначе агент
+#: терял бы найденную возможность вместе с первой неудачной попыткой.
+TRANSITIONS: tuple[tuple[Stage, Stage, str], ...] = (
+    (Stage.DEFERRED, Stage.HYPOTHESIS, "появилось недостающее: место, навык, свидетельство"),
+    (Stage.HYPOTHESIS, Stage.VERIFIED, "тест выполнен, исход положительный"),
+    (Stage.HYPOTHESIS, Stage.REFUTED, "тест выполнен, исход отрицательный"),
+)
+
+
+def transition_allowed(src: Stage, dst: Stage) -> bool:
+    return any(a is src and b is dst for a, b, _why in TRANSITIONS)
+
+
+def pipeline_arbitration() -> "Arbitration":
+    """Счётчики переходов конвейера (инвариант 26).
+
+    Переход без ни одного срабатывания за полный прогон докладывается как дефект —
+    ровно так же, как ветка арбитража. Причина та же: код, который никогда не
+    исполняется, читается верно и не работает. Переоткрытие отложенного — первый
+    кандидат в такой мёртвый переход: он срабатывает редко и только при удаче.
+    """
+    from ..core.branches import Arbitration, Branch
+
+    return Arbitration("конвейер убеждений", [
+        Branch(f"{a}→{b}", why) for a, b, why in TRANSITIONS])
 
 
 @dataclass(frozen=True, slots=True)
@@ -256,7 +363,37 @@ class Hypothesis:
             return None
         return State.VERIFIED if self.outcome else State.REFUTED
 
-    def with_test(self, test: str) -> Hypothesis:
+    @property
+    def stage(self) -> Stage:
+        """Положение в конвейере. Всегда одно из четырёх, `None` не бывает.
+
+        Отличие от `state` — в том, что здесь у гипотезы в работе есть своё имя, и
+        оно **не** `deferred`. Проверяется тестом: `stage is HYPOTHESIS` обязано
+        сопровождаться `state is None`, иначе очередь дел просочилась в перечень
+        непонятого.
+        """
+        if self.is_question:
+            return Stage.DEFERRED
+        if self.outcome is None:
+            return Stage.HYPOTHESIS
+        return Stage.VERIFIED if self.outcome else Stage.REFUTED
+
+    def moved_to(self, dst: Stage, *, arb: "Arbitration | None" = None) -> None:
+        """Отметить переход и отказать в недопустимом.
+
+        Счётчик обязателен по инварианту 26, но необязателен как аргумент: прогон без
+        учёта переходов законен, а вот переход, которого нет в `TRANSITIONS`, — нет.
+        """
+        src = self.stage
+        if not transition_allowed(src, dst):
+            allowed = [f"{a}→{b}" for a, b, _ in TRANSITIONS if a is src] or ["ничего"]
+            raise BeliefError(
+                f"переход {src}→{dst} для {self.claim!r} не разрешён. Из {src} можно: "
+                f"{', '.join(allowed)}")
+        if arb is not None:
+            arb.hit(f"{src}→{dst}")
+
+    def with_test(self, test: str, *, arb: "Arbitration | None" = None) -> Hypothesis:
         """Вопрос стал гипотезой: появилась возможность его проверить.
 
         Именно так работает переоткрытие: множество отложенного не удаляется, и
@@ -272,21 +409,35 @@ class Hypothesis:
                 f"у гипотезы {self.claim!r} тест уже есть: {self.test!r}")
         if not test:
             raise BeliefError("переоткрытие без теста ничего не меняет")
+        self.moved_to(Stage.HYPOTHESIS, arb=arb)
         return Hypothesis(self.claim, test, self.prior, self.provenance,
                           checked=False, outcome=None, deferred_reason="",
                           reopens_on=self.reopens_on)
 
-    def resolved(self, outcome: bool) -> Hypothesis:
+    def resolved(self, outcome: bool, *,
+                 arb: "Arbitration | None" = None) -> Hypothesis:
         """Зафиксировать исход проверки: `verified` или `refuted`."""
         if self.is_question:
             raise BeliefError(
                 f"вопрос {self.claim!r} не имеет исхода: проверять нечем")
+        self.moved_to(Stage.VERIFIED if outcome else Stage.REFUTED, arb=arb)
         return Hypothesis(self.claim, self.test, self.prior, self.provenance,
                           checked=True, outcome=bool(outcome),
                           reopens_on=self.reopens_on)
 
     def confirm(self, outcome: bool, prov: Provenance) -> Belief:
-        """Проверили в мире — стало убеждением с происхождением «опыт»."""
+        """Проверили в мире — стало убеждением. Происхождение при этом **сохраняется**.
+
+        Тонкое место, на котором стоит вся защита от загрязнения. Утверждение, пришедшее
+        из свидетельства, **не становится опытом от того, что подтвердилось**: оно
+        становится `verified` с происхождением `testimony` и отдельной ссылкой на эпизод
+        проверки (`checked_at`). Различие сохраняется навсегда, потому что вопрос «что я
+        узнал сам, а что мне рассказали» не имеет срока давности: подтверждённый
+        пересказ — это по-прежнему пересказ, у которого совпало.
+
+        Своя догадка (`hunch`) — другое дело: она и была своей, проверка делает её
+        опытом. Поэтому повышается только `hunch`, и только он.
+        """
         if self.is_question:
             raise BeliefError(
                 f"вопрос {self.claim!r} нельзя подтвердить: теста нет, и подтверждать "
@@ -296,7 +447,9 @@ class Hypothesis:
             raise BeliefError(
                 "гипотеза становится убеждением только после собственной проверки; "
                 "свидетельство её не подтверждает")
-        return Belief(self.claim, 1.0 if outcome else 0.0, 0.5, 1, prov, 1, prov.seq)
+        keep = self.provenance if self.provenance.origin is Origin.TESTIMONY else prov
+        return Belief(self.claim, 1.0 if outcome else 0.0, 0.5, 1, keep, 1, prov.seq,
+                      checked_at=(prov.seq,))
 
     def as_dict(self) -> dict[str, Any]:
         return {"claim": self.claim, "test": self.test, "prior": self.prior,
@@ -358,6 +511,24 @@ class Entity:
     dynamics: dict[str, Belief] = field(default_factory=dict)      # что делает само
     links: dict[str, str] = field(default_factory=dict)            # id → вид связи
     uses: int = 0
+    # Обращения к карточке. Растут при `BeliefStore.recall` — извлечение есть транзакция,
+    # а не чтение, и без счётчика ранжирование не имело бы входа: «что держать подробно»
+    # решается по обращениям, а обращения надо считать в момент, когда они происходят.
+    recalls: int = 0
+    last_recall_seq: int = 0
+
+    def rank(self) -> float:
+        """Ранг: насколько подробно стоит держать эту карточку.
+
+        Два входа, и оба нужны. **Обращения** — часто извлекаемое нужно подробно.
+        **Ненасыщенность** — карточка, по которой `sigma` ещё широка, нуждается в
+        подробностях, а насыщенная (низкая `sigma` при большом `n`) не нуждается: четыреста
+        проходов по этой тропе говорят одно и то же (`STORAGE.md`, раздел 4a). Поэтому
+        `sigma` здесь входит со знаком плюс, а не минус: она сигнал сжатия.
+        """
+        bs = [*self.affordances.values(), *self.dynamics.values()]
+        unsaturated = (sum(b.sigma for b in bs) / len(bs)) if bs else 0.5
+        return round(0.6 * min(1.0, self.recalls / 10.0) + 0.4 * min(1.0, unsaturated * 2), 6)
 
     def value(self) -> float:
         """Ценность карточки: по ней решается, что забыть во сне.
@@ -378,6 +549,7 @@ class Entity:
         return {"id": self.id, "kind": self.kind, "first_seq": self.first_seq,
                 "last_seq": self.last_seq, "encounters": self.encounters,
                 "uses": self.uses, "value": round(self.value(), 4),
+                "recalls": self.recalls, "rank": self.rank(),
                 "affordances": {k: v.as_dict() for k, v in sorted(self.affordances.items())},
                 "dynamics": {k: v.as_dict() for k, v in sorted(self.dynamics.items())},
                 "links": dict(sorted(self.links.items()))}
@@ -391,6 +563,10 @@ class BeliefStore:
         self.entities: dict[str, Entity] = {}
         self.hypotheses: dict[str, Hypothesis] = {}
         self.testimonies: list[Testimony] = []
+        # Обращений всего. Число не хранится в журнале и в отпечаток не входит: это
+        # свойство использования, а не знания, и пересобранное хранилище обязано
+        # совпасть с живым по знанию, даже если извлекали из них по-разному.
+        self.recalls = 0
 
     # --- наполнение ---------------------------------------------------------
 
@@ -429,6 +605,42 @@ class BeliefStore:
         e.dynamics[what] = b
         return b
 
+    def recall(self, ent_id: str, key: str, *, seq: int) -> Belief | None:
+        """Извлечь убеждение — **транзакцией**, а не чтением. Реконсолидация.
+
+        Обращение к убеждению его меняет: растёт счётчик обращений и обновляется ранг.
+        Это не оптимизация кэша, а свойство памяти, которое здесь воспроизводится
+        сознательно: часто используемое становится точнее (по нему чаще случаются новые
+        наблюдения), а неиспользуемое сползает в холод **само**, без отдельного
+        механизма забывания.
+
+        Что здесь **не** делается: `mu` и `sigma` от одного извлечения не меняются.
+        Извлечение — не наблюдение. Двигать оценку фактом обращения значило бы позволить
+        агенту укреплять убеждение, просто вспоминая его, а это ровно тот способ
+        выучить свою модель вместо мира, от которого предупреждает `consolidation`.
+        """
+        e = self.entities.get(ent_id)
+        if e is None:
+            return None
+        b = e.affordances.get(key) or e.dynamics.get(key)
+        if b is None:
+            return None
+        e.recalls += 1
+        e.last_recall_seq = max(e.last_recall_seq, int(seq))
+        self.recalls += 1
+        return b
+
+    def rank(self) -> list[tuple[str, float]]:
+        """Карточки по ранжированию: обращения плюс вклад в снижение ошибки.
+
+        Ранг — не ценность (`Entity.value`). Ценность отвечает «что забыть», ранг —
+        «что держать в высоком разрешении», и это разные вопросы: карточка может быть
+        ценной и при этом не нужной подробно, потому что по ней всё уже насыщено.
+        """
+        out = [(e.id, e.rank()) for e in self.entities.values()]
+        out.sort(key=lambda kv: (-kv[1], kv[0]))
+        return out
+
     def link(self, a: str, b: str, kind: str) -> None:
         if a in self.entities:
             self.entities[a].links[b] = kind
@@ -458,8 +670,24 @@ class BeliefStore:
         """Всё, что известно только с чужих слов. Требует своей проверки."""
         return [b for b in self.beliefs() if b.is_hearsay]
 
+    def by_stage(self, stage: Stage) -> list[Hypothesis]:
+        return [h for h in self.hypotheses.values() if h.stage is stage]
+
+    def deferred(self) -> list[Hypothesis]:
+        """Перечень непонятого: теста не существует. Не очередь дел."""
+        return self.by_stage(Stage.DEFERRED)
+
     def unchecked_hypotheses(self) -> list[Hypothesis]:
-        return [h for h in self.hypotheses.values() if not h.checked]
+        """Очередь дел: тест есть, ещё не выполнен. **Вопросы сюда не входят.**
+
+        Прежде здесь стояло `not h.checked`, и под это условие попадали и вопросы: у
+        вопроса `checked` тоже ложь. То есть очередь дел и перечень непонятого
+        складывались в одно число, и `merge_testimony` докладывал их суммой как
+        «ожидает перепроверки». Ровно то размывание, от которого предупреждает
+        `MIND.md`, раздел 5, — и оно случилось само, без всякой попытки «прибрать
+        состояния»: достаточно было одного удобного условия.
+        """
+        return self.by_stage(Stage.HYPOTHESIS)
 
     def stats(self) -> dict[str, Any]:
         bs = list(self.beliefs())
@@ -471,8 +699,15 @@ class BeliefStore:
             "beliefs": len(bs),
             "hearsay": sum(1 for b in bs if b.is_hearsay),
             "experience": sum(1 for b in bs if not b.is_hearsay),
+            # Проверенный пересказ считается отдельно от опыта и от слуха: он не то и
+            # не другое, и слить его с опытом значило бы потерять счётчик загрязнения.
+            "verified_testimony": sum(1 for b in bs if b.verified_testimony),
+            "by_origin": {str(o): sum(1 for b in bs if b.provenance.origin is o)
+                          for o in Origin},
             "hypotheses": len(self.hypotheses),
+            "by_stage": {str(s): len(self.by_stage(s)) for s in Stage},
             "unchecked_hypotheses": len(self.unchecked_hypotheses()),
+            "deferred": len(self.deferred()),
             "testimonies": len(self.testimonies),
             "mean_confidence": round(
                 sum(b.confidence for b in bs) / len(bs), 4) if bs else 0.0,

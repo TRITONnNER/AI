@@ -138,11 +138,24 @@ def test_criterion_3_confabulation_gives_a_number(tmp_path: Path) -> None:
                  state=StateSnapshot(stated_reason_id="R3"), event={"code": "s"})
 
     with Session.open(tmp_path / "s") as s:
-        c = measure(s.journal)
+        # Порог 1 — «мерить механизм, а не выборку»: здесь проверяется, что
+        # сопоставление заявленного слоя с настоящим работает.
+        c = measure(s.journal, min_episodes=1)
+        # А с порогом из схемы тот же журнал числа не даёт, и это главная правка
+        # TASK-12, часть 3: три объяснения лежат в одном эпизоде (записей GOAL в
+        # журнале нет вовсе), то есть независимых наблюдений здесь одно, а не три.
+        strict = measure(s.journal,
+                         min_episodes=int(s.profile.parameters["confab_min_episodes"]))
     assert c.explained == 3 and c.matched == 1 and c.mismatched == 2
     assert c.rate == pytest.approx(2 / 3)
     assert c.by_pair == {"planner→reflex": 2}
     assert "конфабуляция: 67%" in c.line()
+
+    assert strict.rate is None, "выборки не хватает — числа быть не должно"
+    assert strict.episodes_explained == 1
+    assert strict.share_by_explanation == pytest.approx(2 / 3)
+    assert "числа нет" in strict.line() and "Покрытие" in strict.line()
+    assert "разметки нет" in strict.coverage["episode_marker"]
 
 
 def test_confabulation_without_explanations_is_not_zero(tmp_path: Path) -> None:
@@ -153,7 +166,7 @@ def test_confabulation_without_explanations_is_not_zero(tmp_path: Path) -> None:
         rec.journal.append(Kind.GOAL, Stamp(1, 1), Actor.AGENT, ActorLayer.DRIVE,
                            event={"code": "set"})
     with Session.open(tmp_path / "s") as s:
-        c = measure(s.journal)
+        c = measure(s.journal, min_episodes=1)
     assert c.rate is None
     assert c.absent_reason and "объяснений в этом прогоне не было" in c.absent_reason
     assert "не измерена" in c.line()
@@ -393,7 +406,7 @@ def test_criterion_6_v1_refuses_a_metric_that_needs_v2(tmp_path: Path) -> None:
     path = _make_v1_branch(tmp_path / "journal")
     legacy = LegacyJournal(path)
     with pytest.raises(FormatError) as exc:
-        measure(legacy)
+        measure(legacy, min_episodes=1)
     text = str(exc.value)
     assert "формате v1" in text
     assert "actor_layer" in text and "stated_reason_id" in text
