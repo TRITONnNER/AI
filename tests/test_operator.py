@@ -668,3 +668,22 @@ def test_setup_warns_against_system_directories() -> None:
     assert "System32" in text
     assert "move C:\\Windows\\System32\\harness" in text, (
         "мало сказать «не туда»: нужна команда, которая переносит уже склонированное")
+
+
+def test_setup_puts_the_code_in_the_home_directory() -> None:
+    """Каталог в корне `C:\\`, созданный администратором, закрыт на запись.
+
+    Это случилось: клон прошёл, `dir` показал все файлы, и `py -m venv` упал с
+    «Отказано в доступе». Читать можно, писать нельзя — и выглядит это как поломка
+    Python, а не как права каталога. Поэтому файл обязан вести в домашнюю папку и
+    обязан сказать, что переносить бесполезно: права переедут вместе с каталогом.
+    """
+    text = (ROOT / "SETUP.md").read_text(encoding="utf-8")
+    assert "%USERPROFILE%" in text
+    assert "не в корень диска" in text
+    assert "WinError 5" in text, (
+        "симптом обязан быть дословно: его ищут поиском по тексту ошибки")
+    assert "harness.egg-info" in text, (
+        "второе сообщение о той же причине сбивает с толку и должно быть названо")
+    assert "не переносите" in text.lower(), (
+        "перенос выглядит очевидным решением и не работает")
