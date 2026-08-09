@@ -498,9 +498,7 @@ def cmd_plan(args: argparse.Namespace) -> int:
     graph = PlaceGraph.from_profile(profile)
     state: dict[str, Any] = {"seq": 0, "last": None}
 
-    macro_len = int(profile.structural["macro_max_length"])
-    macros = (MacroRecorder(graph, max_length=macro_len, seconds_per_seq=1 / 30.0)
-              if macro_len >= 2 else None)
+    macros = MacroRecorder.from_profile(graph, profile, seconds_per_seq=1 / 30.0)
 
     def step(output: str, duration_ms: int = hold) -> str:
         src = graph.current
@@ -901,6 +899,33 @@ def cmd_selftest(args: argparse.Namespace) -> int:
     return 0 if res.ok else 1
 
 
+def cmd_params(args: argparse.Namespace) -> int:
+    """Мёртвые и однобокие параметры. 0 — дефектов нет, 1 — есть.
+
+    Ненулевой код при найденных дефектах, а не при ошибке команды: по нему ставится
+    проверка в сценарий. Число дефектов не должно расти незамеченным (TASK-10, часть 3),
+    а незамеченным оно растёт ровно тогда, когда его никто не спрашивает.
+    """
+    import tempfile
+
+    from . import params
+
+    runtime = None
+    if args.run:
+        with tempfile.TemporaryDirectory(prefix="harness-params-") as d:
+            runtime = params.runtime_probe(steps=args.steps, root=Path(d) / "session")
+        print(f"прогон со счётчиками: прочитано ключей {len(runtime)} "
+              f"за {args.steps} шагов лепета\n")
+    findings = params.audit(runtime=runtime)
+    if args.json:
+        _print_json({"findings": [f.as_dict() for f in findings],
+                     "counts": params.counts(findings),
+                     "defects": params.defect_count(findings)})
+    else:
+        print(params.render_table(findings, only_defects=not args.all))
+    return 0 if params.defect_count(findings) == 0 else 1
+
+
 def cmd_ingest(args: argparse.Namespace) -> int:
     """Принять запись с чужой машины в живой корпус. Ничего не пересчитывая."""
     from .corpus.live import KINDS, LiveError, ingest
@@ -1137,6 +1162,16 @@ def build_parser() -> argparse.ArgumentParser:
                          "кадров здесь правильный ответ, а не отказ")
     st.add_argument("--json", action="store_true")
     st.set_defaults(fn=cmd_selftest)
+
+    pm = sub.add_parser("params", help="мёртвые и однобокие параметры (инвариант 30)")
+    pm.add_argument("--all", action="store_true",
+                    help="все настройки, а не только дефектные")
+    pm.add_argument("--run", action="store_true",
+                    help="второй способ: короткий прогон со счётчиками чтений")
+    pm.add_argument("--steps", type=int, default=40,
+                    help="шагов лепета в прогоне со счётчиками")
+    pm.add_argument("--json", action="store_true")
+    pm.set_defaults(fn=cmd_params)
 
     ing = sub.add_parser("ingest", help="принять запись с чужой машины в корпус")
     ing.add_argument("path", type=Path, nargs="?", default=Path("."))

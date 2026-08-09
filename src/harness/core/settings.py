@@ -25,9 +25,24 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from enum import StrEnum
 from typing import Any, Iterable, Literal, Mapping
 
 Kind = Literal["bool", "int", "float", "str"]
+
+
+class RunPath(StrEnum):
+    """Путь исполнения, на котором настройка может что-то изменить.
+
+    Словарь путей живёт рядом со схемой, а не в детекторе (`harness.params`), потому
+    что применимость — это **объявление схемы**, а не вывод анализатора. Детектор
+    только сверяет объявленное с найденными читателями (инвариант 30).
+    """
+
+    LIVE = "живая запись"          # захват экрана, звук, инъекция ввода
+    SYNTHETIC = "синтетика"        # генератор корпуса, миры с известной истиной
+    AGENT = "агентский стек"       # восприятие, поведение, модель мира
+    REPORT = "печать отчёта"       # читателем не считается
 
 
 class SchemaError(ValueError):
@@ -65,7 +80,13 @@ class Setting:
     # Вред, который задача называет, — ложные различия при сверке двух живых
     # профилей — снимается не выбрасыванием, а **подписью**: `Profile.diff` помечает
     # такие строки, и видно, что различие на живую запись повлиять не могло.
-    applies_to: tuple[str, ...] = ("synthetic", "live")
+    #
+    # Значения — из `RunPath`. Пустой кортеж означает «по группе»: применимость
+    # группы объявлена в `harness.params.GROUP_APPLIES`, и большинству настроек этого
+    # достаточно. Заполнять здесь нужно те, что отличаются от своей группы — иначе
+    # детектор мёртвых параметров спросит читателя на пути, которого у механизма нет,
+    # и объявит однобоким работающий параметр.
+    applies_to: tuple[str, ...] = ()
 
     def check(self, value: Any) -> bool | int | float | str:
         """Проверить значение и привести к объявленному типу."""
@@ -98,24 +119,11 @@ class Setting:
 def _s(key: str, kind: Kind, default: Any, unit: str, group: str, note: str,
        *, structural: bool = False, lo: float | None = None, hi: float | None = None,
        choices: Iterable[str] = (), planned: str = "",
-       applies_to: tuple[str, ...] = ("synthetic", "live")) -> Setting:
+       applies_to: Iterable[str] = ()) -> Setting:
     return Setting(key, kind, default, unit, group, structural, note, lo, hi,
-                   tuple(choices), planned, applies_to)
+                   tuple(choices), planned, tuple(str(x) for x in applies_to))
 
 
-#: Настройки, которые может прочитать только синтетический мир: живому захвату они
-#: ничего не меняют. Объявлены списком, а не угадываются по префиксу `world_`:
-#: `randomize_world` префикса не имеет, а `world_layer_tolerance` читает разделитель
-#: слоёв, который работает и на живом.
-SYNTHETIC_ONLY: tuple[str, ...] = (
-    "world_variable_cost", "world_cost_min_ticks", "world_cost_max_ticks",
-    "world_cost_jitter", "world_bounded", "world_extent_px", "randomize_world",
-)
-
-
-def applies_to_live(key: str) -> bool:
-    """Может ли эта настройка что-то изменить в живой записи."""
-    return key not in SYNTHETIC_ONLY
 
 
 # ---------------------------------------------------------------------------
@@ -599,11 +607,17 @@ SCHEMA: tuple[Setting, ...] = (
     _s("pause_after_irreversible_ms", "int", 900, "мс", "Осторожность",
        "пауза после необратимого действия, чтобы увидеть последствие",
        lo=0, hi=60000),
+    # Обратный сторож (инвариант 15) живёт там, где ввод действительно вводится: у
+    # синтетического мира инъекции нет, у агентского стека нет эффекторов. Поэтому обе
+    # настройки объявлены применимыми только к живой записи — иначе детектор требует
+    # читателя на путях, где механизма не существует, и работающий сторож попадает в
+    # однобокие.
     _s("watchdog_still_seconds", "float", 20.0, "с", "Осторожность",
-       "экран не менялся столько — стоп и запись события", lo=0.5, hi=3600.0),
+       "экран не менялся столько — стоп и запись события", lo=0.5, hi=3600.0,
+       applies_to=(RunPath.LIVE,)),
     _s("watchdog_still_threshold", "float", 0.002, "доля", "Осторожность",
        "доля изменившихся пикселей, ниже которой экран считается неподвижным",
-       lo=0.0, hi=1.0),
+       lo=0.0, hi=1.0, applies_to=(RunPath.LIVE,)),
     _s("stop_max_latency_frames", "float", 1.0, "кадров", "Осторожность",
        "за сколько кадров обязан срабатывать СТОП", lo=0.1, hi=10.0,
        planned="задержка СТОПа измеряется тестом, но предел нигде не проверяется на ходу"),
@@ -721,7 +735,8 @@ SCHEMA: tuple[Setting, ...] = (
        "абляции", structural=True),
     _s("randomize_world", "bool", True, "—", "Экземпляры",
        "рандомизация мира между прогонами: единственная защита от загрязнения, "
-       "без неё нельзя отличить открытие от воспоминания", structural=True),
+       "без неё нельзя отличить открытие от воспоминания", structural=True,
+       applies_to=(RunPath.SYNTHETIC,)),
     _s("resurrection_visible", "bool", True, "—", "Экземпляры",
        "видит ли агент факт своей смерти и возврата; меняет цену смерти и всю "
        "оценку необратимости", structural=True,
@@ -747,6 +762,85 @@ for _setting in SCHEMA:
 del _setting
 
 GROUPS: tuple[str, ...] = tuple(dict.fromkeys(s.group for s in SCHEMA))
+
+
+# ---------------------------------------------------------------------------
+# Применимость: на каких путях настройка вообще может что-то изменить
+# ---------------------------------------------------------------------------
+
+#: К каким путям применима **группа** настроек. Объявлено, а не выведено.
+#:
+#: Первая редакция детектора (`harness.params`) считала применимым всё ко всем путям и
+#: получила 140 «однобоких» из 155. Это не находка, а шум, и он прячет настоящие:
+#: `capture_width` утонул бы среди ста сорока строк ровно так же, как тонул до
+#: детектора. Инвариант 30 говорит «путь, на котором параметр **заявлен**». Заявлен —
+#: значит объявлен здесь, а не угадан по имени модуля.
+#:
+#: Группа — правильная единица объявления: настройки захвата относятся к живой записи
+#: и к генератору корпуса (он тоже пишет кадры), настройки лепета — к агентскому
+#: стеку. Настройка, отличающаяся от своей группы, перечисляет пути сама
+#: (`Setting.applies_to`), и это перекрывает таблицу.
+GROUP_APPLIES: dict[str, tuple[RunPath, ...]] = {
+    "Захват": (RunPath.LIVE, RunPath.SYNTHETIC),
+    "Звук": (RunPath.LIVE, RunPath.SYNTHETIC),
+    "Устройства": (RunPath.LIVE,),
+    "Ресурсы": (RunPath.LIVE, RunPath.SYNTHETIC, RunPath.AGENT),
+    "Хранение": (RunPath.LIVE, RunPath.SYNTHETIC),
+    "Отладка": (RunPath.LIVE, RunPath.SYNTHETIC),
+    "Мир": (RunPath.SYNTHETIC,),
+    "Экземпляры": (RunPath.AGENT,),
+    # Всё остальное — агентский стек: восприятие, поведение, модель мира. Эти
+    # настройки не меняют ни захвата, ни синтетического мира, и требовать от них
+    # читателя на живом пути значило бы объявить однобоким весь агент.
+    "Себя и мира": (RunPath.AGENT,),
+    "Драйвы": (RunPath.AGENT,),
+    "Дальность": (RunPath.AGENT,),
+    "Файрвол": (RunPath.AGENT,),
+    "Граф мест": (RunPath.AGENT,),
+    "Лепет": (RunPath.AGENT,),
+    "Восприятие": (RunPath.AGENT,),
+    "Планирование": (RunPath.AGENT,),
+    "Контуры": (RunPath.AGENT,),
+    "Предсказание": (RunPath.AGENT,),
+    "Осторожность": (RunPath.AGENT,),
+    "Сон": (RunPath.AGENT,),
+}
+
+#: Если группа не объявлена — агентский стек. Не «везде»: «везде» превращает проверку
+#: в шум, а незаявленная группа — недосмотр, который ловит отдельный тест.
+DEFAULT_APPLIES: tuple[RunPath, ...] = (RunPath.AGENT,)
+
+
+def applies_of(setting: Setting) -> tuple[RunPath, ...]:
+    """К каким путям объявлен применимым параметр.
+
+    Порядок: своё объявление настройки перекрывает группу, иначе группа, иначе
+    агентский стек.
+    """
+    declared = tuple(RunPath(x) for x in setting.applies_to
+                     if x in {str(p) for p in RunPath})
+    if declared:
+        return declared
+    return GROUP_APPLIES.get(setting.group, DEFAULT_APPLIES)
+
+
+def applies_to_live(key: str) -> bool:
+    """Может ли эта настройка что-то изменить в живой записи.
+
+    Выводится из объявленной применимости, а не из отдельного списка рядом со схемой.
+    Список был вторым местом правды: добавив настройку мира, легко забыть дописать её
+    туда, и тогда `Profile.diff` подпишет различие как влияющее на живую запись, хотя
+    влиять ему нечем.
+    """
+    setting = BY_KEY.get(key)
+    return True if setting is None else RunPath.LIVE in applies_of(setting)
+
+
+#: Настройки, которые может прочитать только синтетический мир. Выводятся, а не
+#: перечисляются: раньше это был ручной список из семи имён, и он мог разойтись со
+#: схемой молча.
+SYNTHETIC_ONLY: tuple[str, ...] = tuple(
+    s.key for s in SCHEMA if applies_of(s) == (RunPath.SYNTHETIC,))
 
 
 def defaults(structural: bool) -> dict[str, Any]:

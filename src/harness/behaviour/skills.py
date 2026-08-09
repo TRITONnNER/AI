@@ -327,6 +327,27 @@ class MacroRecorder:
         self._window: list[tuple[str, str, int]] = []
         self.recorded = 0
 
+    @classmethod
+    def from_profile(cls, graph: Any, profile: Any, *,
+                     seconds_per_seq: float = 1.0) -> "MacroRecorder | None":
+        """Записыватель по профилю, либо `None`, если макросы выключены.
+
+        Читателем `macro_max_length` до этого был только `cli.py`, который передавал
+        число в конструктор. Печать и разовая проводка в одной команде читателем не
+        считаются (инвариант 30): всякий другой вызывающий получал зашитую тройку из
+        значения по умолчанию, то есть ручка в профиле обещала поведение, которым не
+        управляла. Отсюда `from_profile` — единственное место, где длина макроса
+        берётся, и оно на агентском пути, где механизм и живёт.
+
+        Значение меньше двух означает «макросов нет»: макрос из одного шага — это
+        одиночное действие, и ребро у него уже есть. Поэтому здесь `None`, а не
+        отказ, — выключение законно, и `tools/` им пользуются.
+        """
+        length = int(profile.structural["macro_max_length"])
+        if length < 2:
+            return None
+        return cls(graph, max_length=length, seconds_per_seq=seconds_per_seq)
+
     def note(self, src: str, key: str, dst: str, seq: int) -> int:
         """Заметить один шаг. Вернуть, сколько макро-рёбер записалось.
 

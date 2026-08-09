@@ -48,6 +48,28 @@ class SessionError(RuntimeError):
     pass
 
 
+#: Поля профиля, описывающие **свойство самой записи**, и место, где оно сверяется с
+#: записью. Правило общее (TASK-10, часть 4): расхождение — отказ, а не предупреждение.
+#:
+#: Предупреждение здесь не годится по опыту: живая запись оператора уже унесла профиль,
+#: заявляющий кадр 320×180 при кадрах 1920×1080, и предупреждение никто бы не прочёл, а
+#: посчитанное по такому профилю ошибалось в тридцать шесть раз. Заявление о себе — не
+#: пожелание; либо оно верно, либо записи нет.
+#:
+#: `capture_fps` в список не входит, и это решение, а не пропуск: частота кадров —
+#: **цель для цикла, а не свойство записи**. Машина, отдающая 28 кадров вместо
+#: тридцати, работает нормально, и отказ на этом остановил бы любую настоящую запись.
+#: Достигнутая частота наблюдаема по трём часам самой записи, и `selftest` её считает и
+#: печатает; профилю тут верить не нужно.
+RECORD_CLAIMS: tuple[tuple[str, str], ...] = (
+    ("capture_width", "первый кадр, живая запись: Recorder._check_declared"),
+    ("capture_height", "первый кадр, живая запись: Recorder._check_declared"),
+    ("frame_format", "первый кадр, любой путь: Recorder._check_declared"),
+    ("audio_channels", "первый блок, любой путь: AudioStore.append_block"),
+    ("audio_rate", "открытие устройства: LoopbackAudio.start"),
+)
+
+
 @dataclass(frozen=True, slots=True)
 class SessionMeta:
     created_unix: float
@@ -139,6 +161,48 @@ class Recorder:
                                 ActorLayer.HUMAN,
                                 event={"code": "registry", **devices.summary()})
 
+    # --- сверка профиля с записью -------------------------------------------
+
+    def _check_declared(self, image: np.ndarray) -> None:
+        """Сверить с первым кадром всё, что профиль о кадре заявляет. `RECORD_CLAIMS`.
+
+        Вызывается один раз, на первом кадре: свойства кадра в пределах сессии
+        неизменны (размер и формат — структурные), а проверять каждый кадр значило бы
+        платить за это тридцать раз в секунду.
+        """
+        # Формат — на **обоих** путях. Читателем `frame_format` до этого был только
+        # живой захват (`selftest`, `harness record`), а синтетические миры рисуют кадр
+        # `(H, W)` uint8 всегда, чем бы профиль ни объявлял. Профиль с `rgb8` молча
+        # получал серую запись — та же ложь записи о себе, что и с размером кадра, но
+        # в другой оси. Теперь такой профиль получает отказ.
+        fmt = str(self.profile.structural["frame_format"])
+        want_dims = {"gray8": 2, "rgb8": 3}.get(fmt)
+        if want_dims is not None and int(image.ndim) != want_dims:
+            raise SessionError(
+                f"профиль заявляет frame_format={fmt} (это {want_dims} измерения), а "
+                f"кадр пришёл с формой {tuple(int(x) for x in image.shape)}. "
+                "Синтетические миры рисуют серый кадр всегда: для rgb8 нужен источник, "
+                "который его отдаёт, иначе запись врёт о себе")
+        if fmt == "rgb8" and int(image.shape[-1]) != 3:
+            raise SessionError(
+                f"профиль заявляет rgb8, а у кадра {int(image.shape[-1])} канала")
+
+        # Размер — только у живых записей: у синтетических его задаёт профиль, и миры
+        # его читают, а здесь его задаёт экран, и спорить с экраном бессмысленно.
+        if self._synthetic:
+            return
+        want = (int(self.profile.parameters["capture_height"]),
+                int(self.profile.parameters["capture_width"]))
+        got = (int(image.shape[0]), int(image.shape[1]))
+        if got != want:
+            raise SessionError(
+                f"кадр {got[1]}×{got[0]}, а профиль записи заявляет "
+                f"{want[1]}×{want[0]}. Живой захват отдаёт монитор целиком, и "
+                "уменьшать его никто не просит, поэтому профиль надо строить по "
+                "кадру: profile.for_frame(первый_кадр). Иначе запись врёт о "
+                "себе, и любой расчёт по её профилю ошибётся во столько раз, во "
+                "сколько различаются площади")
+
     # --- запись -------------------------------------------------------------
 
     def record_frame(self, image: np.ndarray, *, t_world: int | None = None,
@@ -173,23 +237,9 @@ class Recorder:
                                  "level_refused": 2, "level_kept": 0})
                 return None
 
-        # Заявленный размер кадра обязан совпадать с настоящим — иначе запись врёт о
-        # себе, и посчитанное по её профилю расходится с содержимым в тридцать шесть
-        # раз. Проверяется только у живых записей: у синтетических размер задаёт
-        # профиль и миры его читают, а здесь его задаёт экран.
-        if not self._synthetic and self._expect_shape is None:
-            want = (int(self.profile.parameters["capture_height"]),
-                    int(self.profile.parameters["capture_width"]))
-            got = (int(image.shape[0]), int(image.shape[1]))
-            if got != want:
-                raise SessionError(
-                    f"кадр {got[1]}×{got[0]}, а профиль записи заявляет "
-                    f"{want[1]}×{want[0]}. Живой захват отдаёт монитор целиком, и "
-                    "уменьшать его никто не просит, поэтому профиль надо строить по "
-                    "кадру: profile.for_frame(первый_кадр). Иначе запись врёт о "
-                    "себе, и любой расчёт по её профилю ошибётся во столько раз, во "
-                    "сколько различаются площади")
-            self._expect_shape = got
+        if self._expect_shape is None:
+            self._check_declared(image)
+            self._expect_shape = (int(image.shape[0]), int(image.shape[1]))
 
         self.clocks.tick_self()
         self.clocks.set_world(self.clocks.t_world + 1 if t_world is None else t_world)
@@ -478,6 +528,27 @@ class Session:
         report["audio_sync_tolerance_ms"] = tol
         if worst > tol:
             problems.append(f"рассинхрон звука {worst:.1f} мс при допуске {tol:.0f} мс")
+
+        # Достигнутая частота кадров — по настенному времени самой записи, а не по
+        # заявленной в профиле. `capture_fps` — цель для цикла, а не свойство записи, и
+        # отказывать по нему нельзя: машина, отдавшая 28 кадров вместо тридцати, работает
+        # нормально. Но всякий, кто считает по записи длительность как «кадров делить на
+        # capture_fps», обязан иметь возможность увидеть настоящее число, иначе профиль
+        # снова оказывается единственным источником, а он уже врал про размер кадра.
+        #
+        # Порога здесь нет намеренно. Он стоит в `selftest`, где оператор ещё может
+        # что-то поменять; порог, придуманный на чтении, был бы числом, нарисованным
+        # рукой (инвариант 23), и сравнимости между прогонами не дал бы.
+        report["capture_fps_declared"] = float(
+            self.profile.parameters.get("capture_fps", 0.0))
+        report["capture_fps_observed"] = None
+        if len(self._cursors) > 1:
+            walls = [e.wall_clock for e in self.journal.frames()
+                     if e.wall_clock is not None]
+            if len(walls) > 1:
+                span = max(walls) - min(walls)
+                if span > 0:
+                    report["capture_fps_observed"] = round((len(walls) - 1) / span, 3)
 
         # Кадры должны читаться. Проверяем выборочно: начало, середина, конец,
         # иначе проверка часовой записи сама станет часовой.

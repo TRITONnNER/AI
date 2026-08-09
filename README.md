@@ -25,8 +25,9 @@ harness record --plan   # что именно записывать, с гото�
 
 ```bash
 pip install -e '.[dev]'          # dev включает OpenCV для оптического потока
-python -m pytest -q                        # 361 тест, около 45 секунд
+python -m pytest -q                        # 575 тестов, около полутора минут
 python -m harness.cli status               # что готово, что нет и почему — по коду
+python -m harness.cli params               # настройки без читателей (инвариант 30)
 
 python -m harness.cli backends             # что доступно на этой машине
 python -m harness.cli gen-corpus /tmp/s    # синтетическая сессия с известной истиной
