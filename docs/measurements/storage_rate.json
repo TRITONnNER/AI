@@ -1,26 +1,34 @@
 [
   {
     "kind": "шум",
-    "frames": 300,
-    "bytes": 622310985,
+    "frames": 200,
+    "bytes": 414873893,
     "kib_per_frame": 2025.8,
     "gib_per_hour": 208.65,
     "raw_gib_per_hour": 208.6
   },
   {
     "kind": "неподвижный экран",
-    "frames": 300,
-    "bytes": 706526,
+    "frames": 200,
+    "bytes": 472897,
     "kib_per_frame": 2.3,
     "gib_per_hour": 0.24,
     "raw_gib_per_hour": 208.6
   },
   {
     "kind": "экран с движением",
-    "frames": 300,
-    "bytes": 1109345,
+    "frames": 200,
+    "bytes": 741776,
     "kib_per_frame": 3.6,
     "gib_per_hour": 0.37,
+    "raw_gib_per_hour": 208.6
+  },
+  {
+    "kind": "рабочий стол",
+    "frames": 200,
+    "bytes": 13467445,
+    "kib_per_frame": 65.8,
+    "gib_per_hour": 6.77,
     "raw_gib_per_hour": 208.6
   }
 ]

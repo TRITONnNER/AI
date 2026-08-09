@@ -52,6 +52,20 @@ class Setting:
     # которую проект запрещает. Тест `test_every_setting_is_either_used_or_planned`
     # не даёт добавить такую ручку молча.
     planned: str = ""
+    # К какому источнику применима настройка. По умолчанию к любому.
+    #
+    # Профиль остаётся **одним** объектом с одним хешем, и настройки синтетического
+    # мира лежат в живой записи тоже. Решение принято сознательно (TASK-09, часть 4):
+    # профиль — это идентичность эксперимента, и выбрасывать из него ключи по
+    # источнику значило бы, что `profile_hash` в разных сессиях считается по разным
+    # словарям, то есть перестаёт быть сравнимым. Хуже того, запись потеряла бы
+    # способность описывать себя: по ней стало бы нельзя отличить «этой настройки
+    # тогда не было» от «эта настройка была неприменима».
+    #
+    # Вред, который задача называет, — ложные различия при сверке двух живых
+    # профилей — снимается не выбрасыванием, а **подписью**: `Profile.diff` помечает
+    # такие строки, и видно, что различие на живую запись повлиять не могло.
+    applies_to: tuple[str, ...] = ("synthetic", "live")
 
     def check(self, value: Any) -> bool | int | float | str:
         """Проверить значение и привести к объявленному типу."""
@@ -83,9 +97,25 @@ class Setting:
 
 def _s(key: str, kind: Kind, default: Any, unit: str, group: str, note: str,
        *, structural: bool = False, lo: float | None = None, hi: float | None = None,
-       choices: Iterable[str] = (), planned: str = "") -> Setting:
+       choices: Iterable[str] = (), planned: str = "",
+       applies_to: tuple[str, ...] = ("synthetic", "live")) -> Setting:
     return Setting(key, kind, default, unit, group, structural, note, lo, hi,
-                   tuple(choices), planned)
+                   tuple(choices), planned, applies_to)
+
+
+#: Настройки, которые может прочитать только синтетический мир: живому захвату они
+#: ничего не меняют. Объявлены списком, а не угадываются по префиксу `world_`:
+#: `randomize_world` префикса не имеет, а `world_layer_tolerance` читает разделитель
+#: слоёв, который работает и на живом.
+SYNTHETIC_ONLY: tuple[str, ...] = (
+    "world_variable_cost", "world_cost_min_ticks", "world_cost_max_ticks",
+    "world_cost_jitter", "world_bounded", "world_extent_px", "randomize_world",
+)
+
+
+def applies_to_live(key: str) -> bool:
+    """Может ли эта настройка что-то изменить в живой записи."""
+    return key not in SYNTHETIC_ONLY
 
 
 # ---------------------------------------------------------------------------

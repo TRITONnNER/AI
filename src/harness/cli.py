@@ -782,14 +782,29 @@ def cmd_record(args: argparse.Namespace) -> int:
             print("это не мешает записи; настроить вход поможет harness doctor",
                   file=sys.stderr)
 
+    # Первый кадр берётся до открытия записи: по нему строится профиль. Заявить в
+    # записи 320×180 над кадрами 1080p значит записать ложь о себе, и посчитанное по
+    # такому профилю ошибётся в тридцать шесть раз.
+    first = cap.read()
+    while first is UNCHANGED:
+        first = cap.read()
+    if first is None:
+        print("захват не отдал ни одного кадра", file=sys.stderr)
+        cap.stop()
+        return 2
+    profile = MILESTONE_0.for_frame(first.image)
+    if profile is not MILESTONE_0:
+        print(f"кадр {first.image.shape[1]}×{first.image.shape[0]}: профиль записи "
+              f"построен по нему, а не по значению из схемы")
+
     written = 0
     unchanged = 0
     audio_blocks = 0
     try:
-        with Recorder(args.path, profile=MILESTONE_0, source=cap.name,
+        with Recorder(args.path, profile=profile, source=cap.name,
                       synthetic=False, note=args.note, lineage_id=lid) as rec:
             while written + unchanged < frames:
-                frame = cap.read()
+                frame = first if written + unchanged == 0 else cap.read()
                 if frame is UNCHANGED:
                     # Экран не менялся. **Не пропуск.** На записи «неподвижность»
                     # это основной исход: считать его потерей значило бы объявить

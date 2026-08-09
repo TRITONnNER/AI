@@ -264,6 +264,22 @@ class LoopbackAudio:
             self._stream.close()
             self._stream = None
 
+    @property
+    def pending(self) -> int:
+        """Сколько отсчётов уже лежит в буфере и ждёт чтения.
+
+        Нужно затем, чтобы читать звук **в темпе кадров, не отставая**: `read()`
+        блокирует до набора блока, и цикл, читающий по одному блоку на кадр, отстаёт
+        от звука на разнице частот — 50 блоков в секунду против тридцати кадров, — и
+        буфер переполняется. С этим числом вызывающий выгребает всё накопленное.
+        """
+        if self._stream is None:
+            return 0
+        try:
+            return int(self._stream.read_available)
+        except Exception:
+            return 0
+
     def read(self) -> AudioBlock | None:
         if self._stream is None:
             raise BackendUnavailable("звук не запущен: сначала start()")

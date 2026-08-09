@@ -244,49 +244,50 @@ def fig_m3(out: Path, m3: dict[str, Any]) -> Path:
 
 
 def fig_storage(out: Path, rows: list[dict[str, Any]]) -> Path:
-    """Одно утверждение: расход зависит от содержимого, а оценка была из головы."""
-    import json as _json
-
-    fig, (ax1, ax2) = _fig(520, ncols=2)
-    order = ["неподвижный экран", "экран с движением", "шум"]
+    """Одно утверждение: три захода, и разница была в содержимом, а не в конвейере."""
+    fig, (ax1, ax2) = _fig(540, ncols=2)
+    order = ["неподвижный экран", "экран с движением", "рабочий стол", "шум"]
     by = {r["kind"]: r for r in rows}
-    vals = [by[k]["gib_per_hour"] for k in order]
+    vals = [by[k]["kib_per_frame"] for k in order if k in by]
+    # Подписи короткие: длинные при четырёх столбцах налезают друг на друга.
+    names = ["неподвижный", "нарисованный", "рабочий стол", "шум"]
+    colors = [VACUUM, ALARM, PROVEN, NEUTRAL]
 
-    # Панель 1: логарифмическая шкала — разброс тысячекратный, линейная его скроет.
-    ax1.bar(range(3), vals, color=[PROVEN, PROVEN, ALARM])
+    ax1.bar(range(len(vals)), vals, color=colors[:len(vals)])
     ax1.set_yscale("log")
-    ax1.set_xticks(range(3))
-    ax1.set_xticklabels(["неподвижный\nэкран", "экран\nс движением", "шум"],
-                        fontsize=TICK_PT)
-    ax1.set_ylabel("ГиБ в час, 1080p при 30 кадр/с", fontsize=LABEL_PT)
+    ax1.set_xticks(range(len(vals)))
+    ax1.set_xticklabels(names[:len(vals)], fontsize=TICK_PT)
+    ax1.set_ylabel("КиБ на кадр, 1080p", fontsize=LABEL_PT)
     for i, v in enumerate(vals):
-        ax1.text(i, v * 1.25, f"{v:g}", ha="center", fontsize=LABEL_PT)
-    ax1.set_xlabel("зелёный — экранное содержимое, красный — несжимаемый предел\n"
-                   "шкала логарифмическая: разброс тысячекратный",
+        ax1.text(i, v * 1.3, f"{v:g}", ha="center", fontsize=LABEL_PT)
+    # Живое число — линией: то, с чем всё сравнивается.
+    ax1.axhline(49.3, color=PROVEN, linestyle="--", linewidth=1.5)
+    ax1.text(-0.45, 60, "живой экран: 49.3", fontsize=LABEL_PT - 2, color=PROVEN)
+    ax1.set_xlabel("красный — синтетика, по которой оценка ошиблась в 14 раз\n"
+                   "зелёный — синтетика, доведённая до похожести",
                    fontsize=LABEL_PT - 2, color=NEUTRAL)
 
-    # Панель 2: что обещали оператору и что есть на самом деле.
-    screen = by["экран с движением"]["gib_per_hour"]
-    free_gib = 64.5
-    hours_claimed = free_gib / 9.2          # прежняя оценка доктора, 90 КиБ на кадр
-    hours_real = free_gib / screen
-    ax2.barh([0, 1], [hours_claimed, hours_real], color=[ALARM, PROVEN], height=0.5)
-    ax2.set_yticks([0, 1])
-    ax2.set_yticklabels(["оценка доктора\nдо TASK-08", "измерено"],
-                        fontsize=LABEL_PT)
-    ax2.set_xlabel(f"часов записи на {free_gib:g} ГиБ свободных", fontsize=LABEL_PT)
-    ax2.text(hours_claimed, 0, f"  {hours_claimed:.0f} ч", va="center",
-             fontsize=LABEL_PT, color=ALARM)
-    ax2.text(hours_real, 1, f"  {hours_real:.0f} ч", va="center", fontsize=LABEL_PT,
-             color=PROVEN)
-    ax2.set_xlim(0, hours_real * 1.25)
+    # Панель 2: три захода на одно число против живого замера.
+    passes = [("TASK-07\nиз головы", 90.0, ALARM),
+              ("TASK-08\nнарисованный", 3.6, ALARM),
+              ("TASK-09\nживой замер", 49.3, PROVEN)]
+    ax2.barh(range(3), [p[1] for p in passes], color=[p[2] for p in passes],
+             height=0.55)
+    ax2.set_yticks(range(3))
+    ax2.set_yticklabels([p[0] for p in passes], fontsize=LABEL_PT - 1)
+    ax2.invert_yaxis()
+    ax2.set_xlabel("КиБ на кадр, которые считали верными", fontsize=LABEL_PT)
+    for i, p in enumerate(passes):
+        ax2.text(p[1] + 2, i, f"{p[1]:g}", va="center", fontsize=LABEL_PT,
+                 color=p[2])
+    ax2.set_xlim(0, 100)
 
-    _stamp(fig, n="3 вида содержимого, по 300 кадров",
+    _stamp(fig, n=f"{len(vals)} вида содержимого, по 200 кадров, плюс живой замер",
            unit="вид содержимого",
-           compares="оценка по 90 КиБ на кадр против измеренных 3.6 КиБ")
+           compares="три оценки одной величины против замера на настоящем экране")
     return _save(fig, out / "17-raskhod-mesta.png",
-                 "Расход места был завышен в 25 раз: обещали 7 часов там, где влезает "
-                 "170.")
+                 "Расход зависит от содержимого: нарисованный экран сжимается в 14 раз "
+                 "лучше живого.")
 
 
 def main(argv: list[str]) -> int:

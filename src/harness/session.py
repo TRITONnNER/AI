@@ -83,7 +83,7 @@ class Recorder:
                  synthetic: bool, note: str | None = None,
                  governor: "ResourceGovernor | None" = None,
                  devices: Any = None, check_resources_every: int = 30,
-                 lineage_id: str = "") -> None:
+                 lineage_id: str | None = None) -> None:
         from . import __version__
 
         self.root = Path(root)
@@ -99,9 +99,10 @@ class Recorder:
             json.dumps(meta.as_dict(), ensure_ascii=False, indent=2, sort_keys=True) + "\n",
             encoding="utf-8")
         # Линия объявляется при создании и потом неизменна (`BranchMeta` frozen).
-        # Пустая линия у живой записи была бы неверной по существу: запись с чужой
-        # машины — это отдельная линия по построению, а пустое поле означает «про
-        # линию ничего не сказано», и от «своя линия» это неотличимо.
+        # `None` означает «линии нет, это пробный прогон» — и означает это **явно**:
+        # пустая строка, стоявшая здесь раньше, проходила любую проверку на
+        # присутствие поля и слила бы разные линии в одну. Запись с чужой машины —
+        # отдельная линия по построению, и её идентификатор ставит `harness record`.
         self.journal = Journal.create(self.root / "journal", profile,
                                       reason=f"новая сессия, источник {source}",
                                       lineage_id=lineage_id)
@@ -116,6 +117,8 @@ class Recorder:
                                 compress_level=int(p.get("frame_compress_level", 6)))
         self.clocks = Clocks()
         self._audio_channels = int(profile.structural.get("audio_channels", 2))
+        self._synthetic = bool(synthetic)
+        self._expect_shape: tuple[int, int] | None = None
         self.governor = governor
         self._check_every = max(1, int(check_resources_every))
         self._frames_written = 0
@@ -169,6 +172,24 @@ class Recorder:
                                  "frames_refused": self._frames_refused,
                                  "level_refused": 2, "level_kept": 0})
                 return None
+
+        # Заявленный размер кадра обязан совпадать с настоящим — иначе запись врёт о
+        # себе, и посчитанное по её профилю расходится с содержимым в тридцать шесть
+        # раз. Проверяется только у живых записей: у синтетических размер задаёт
+        # профиль и миры его читают, а здесь его задаёт экран.
+        if not self._synthetic and self._expect_shape is None:
+            want = (int(self.profile.parameters["capture_height"]),
+                    int(self.profile.parameters["capture_width"]))
+            got = (int(image.shape[0]), int(image.shape[1]))
+            if got != want:
+                raise SessionError(
+                    f"кадр {got[1]}×{got[0]}, а профиль записи заявляет "
+                    f"{want[1]}×{want[0]}. Живой захват отдаёт монитор целиком, и "
+                    "уменьшать его никто не просит, поэтому профиль надо строить по "
+                    "кадру: profile.for_frame(первый_кадр). Иначе запись врёт о "
+                    "себе, и любой расчёт по её профилю ошибётся во столько раз, во "
+                    "сколько различаются площади")
+            self._expect_shape = got
 
         self.clocks.tick_self()
         self.clocks.set_world(self.clocks.t_world + 1 if t_world is None else t_world)

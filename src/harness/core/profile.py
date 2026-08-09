@@ -124,6 +124,32 @@ class Profile:
 
     # --- изменения ----------------------------------------------------------
 
+    def for_frame(self, image: Any) -> Profile:
+        """Профиль, у которого заявленный размер кадра совпадает с настоящим.
+
+        Настройки `capture_width` и `capture_height` **не читает ни одна строка на
+        пути захвата экрана**: и mss, и dxcam отдают монитор целиком, а уменьшать
+        никто не просил. Читают их только синтетические миры — они по этим числам
+        кадр рисуют.
+
+        Из-за этого первая живая сессия оператора получила профиль с
+        `capture_width: 320, capture_height: 180` при кадрах 1920×1080. Вреда для
+        данных нет — кадры целы, — но запись **врёт о себе**: любой, кто посчитает по
+        `session.json` расход или размер, получит числа в тридцать шесть раз меньше.
+        Именно на этом сломался разбор расхода места: 49.3 КиБ на запись поделили на
+        56 КиБ сырого кадра 320×180 и получили «сжатие не работает», тогда как делить
+        надо было на 2025 КиБ, и сжатие работает в сорок один раз.
+
+        Объявленная и никем не читаемая настройка — это ложь о возможностях. Здесь она
+        попадала прямо в запись, поэтому живой захват обязан строить профиль по
+        первому кадру: размер кадра решает экран, а не пожелание в профиле.
+        """
+        h, w = int(image.shape[0]), int(image.shape[1])
+        if (int(self.parameters["capture_width"]) == w
+                and int(self.parameters["capture_height"]) == h):
+            return self
+        return self.with_parameters(capture_width=w, capture_height=h)
+
     def with_parameters(self, **changes: Scalar) -> Profile:
         """Повернуть ручки. Ветка журнала не меняется, `structure_hash` тот же."""
         unknown = set(changes) - set(self.parameters)
@@ -147,7 +173,15 @@ class Profile:
         return self.structure_hash != other.structure_hash
 
     def diff(self, other: Profile) -> list[dict[str, Any]]:
-        """Различия для человека: что было, что стало, структурное или нет."""
+        """Различия для человека: что было, что стало, структурное или нет.
+
+        У каждой строки есть `live`: могло ли это различие что-то изменить в живой
+        записи. Настройки синтетического мира лежат и в живом профиле — так решено
+        сознательно (`settings.SYNTHETIC_ONLY`), — и без этой подписи они давали бы
+        ложные различия при сверке двух живых сессий.
+        """
+        from .settings import applies_to_live
+
         out: list[dict[str, Any]] = []
         for group, hard in (("parameters", False), ("structural", True)):
             a: dict[str, Scalar] = getattr(self, group)
@@ -155,8 +189,13 @@ class Profile:
             for k in sorted(set(a) | set(b)):
                 if a.get(k) != b.get(k):
                     out.append({"key": k, "group": group, "structural": hard,
-                                "from": a.get(k), "to": b.get(k)})
+                                "from": a.get(k), "to": b.get(k),
+                                "live": applies_to_live(k)})
         return out
+
+    def live_diff(self, other: Profile) -> list[dict[str, Any]]:
+        """Только те различия, которые могли повлиять на живую запись."""
+        return [d for d in self.diff(other) if d["live"]]
 
     def is_clean_ablation(self, other: Profile) -> bool:
         """Ровно одно различие. Иначе сравнение прогонов ничего не доказывает."""

@@ -208,8 +208,7 @@ def _probe_with(source: Any) -> tuple[Any, str, Any, bool]:
 def test_free_space_is_reported_in_hours_not_gigabytes(tmp_path: Path) -> None:
     """Гигабайты оператору ничего не говорят: чтобы понять, хватит ли, нужен код."""
     check = doctor.check_disk(detect(), path=tmp_path, fps=30.0, size=(1920, 1080))
-    assert "ч записи" in check.detail
-    assert "кадр/с" in check.detail
+    assert "ч " in check.detail and "кадр/с" in check.detail
 
 
 def test_doctor_json_is_machine_readable() -> None:
@@ -643,9 +642,12 @@ def test_a_recording_carries_a_real_time_anchor(tmp_path: Path) -> None:
     r = np.random.default_rng(4)
     before = time.time()
     root = tmp_path / "live"
-    with Recorder(root, profile=MILESTONE_0, source="screen_mss",
+    frame = r.integers(0, 256, (64, 96), dtype=np.uint8)
+    # Профиль строится по кадру: живая запись с профилем, заявляющим другой размер,
+    # врёт о себе — на этом сломался разбор расхода места (TASK-09, часть 2).
+    with Recorder(root, profile=MILESTONE_0.for_frame(frame), source="screen_mss",
                   synthetic=False) as rec:
-        rec.record_frame(r.integers(0, 256, (64, 96), dtype=np.uint8), t_world=0)
+        rec.record_frame(frame, t_world=0)
     with ReadSession(root) as s:
         walls = [e.wall_clock for e in s.journal.frames()]
         assert walls and walls[0] >= before - 1
@@ -792,11 +794,10 @@ def test_unchanged_reuses_the_previous_frame_reference(tmp_path: Path) -> None:
     from harness.session import Recorder, Session as ReadSession
 
     root = tmp_path / "s"
-    with Recorder(root, profile=MILESTONE_0, source="screen_dxcam",
+    frame = np.random.default_rng(3).integers(0, 256, (48, 64), dtype=np.uint8)
+    with Recorder(root, profile=MILESTONE_0.for_frame(frame), source="screen_dxcam",
                   synthetic=False) as rec:
-        rec.record_frame(np.random.default_rng(3).integers(
-            0, 256, (48, 64), dtype=np.uint8),
-            actor=Actor.HUMAN, actor_layer=ActorLayer.HUMAN)
+        rec.record_frame(frame, actor=Actor.HUMAN, actor_layer=ActorLayer.HUMAN)
         for _ in range(4):
             rec.record_unchanged(actor=Actor.HUMAN, actor_layer=ActorLayer.HUMAN)
 
@@ -887,14 +888,51 @@ def test_doctor_says_which_mechanism_and_why() -> None:
 def test_storage_estimate_names_both_ends() -> None:
     """Одного числа расхода не существует: разброс тысячекратный по содержимому."""
     check = doctor.check_disk(detect(), path=Path("."), fps=30.0, size=(1920, 1080))
-    assert "ч записи экрана" in check.detail
-    assert "видео во весь экран" in check.detail, (
-        "предел для несжимаемого содержимого обязан быть назван рядом: разница "
-        "между 0.37 и 209 ГиБ/ч — это разница между неделей и двадцатью минутами")
-    # И константа теперь измерена, а не взята из головы.
-    assert doctor.BYTES_PER_FRAME_1080P < 8 * 1024, (
-        "прежние 90 КиБ на кадр были числом из головы, подписанным как замер: "
-        "измеренное — 3.6 КиБ")
+    assert "замера не было" in check.detail, (
+        "без замера оценка обязана называться оценкой, а не выдаваться за факт")
+    assert "несжимаемом" in check.detail and "экранном" in check.detail, (
+        "оба края обязаны быть названы: разница между 0.37 и 209 ГиБ/ч — это "
+        "разница между неделей и двадцатью минутами")
+    # Константа — живое число, и вилка обязана накрывать действительность: 3.6 КиБ
+    # были замером на нарисованном экране и не попадали в неё в четырнадцать раз.
+    assert 30 * 1024 <= doctor.BYTES_PER_FRAME_1080P <= 80 * 1024, (
+        f"{doctor.BYTES_PER_FRAME_1080P / 1024:.1f} КиБ на кадр: живой замер дал "
+        "49.3, синтетика, похожая на рабочий стол — 65.8. Оценка вне этого промежутка "
+        "снова не накроет обычный экран")
+
+
+def test_doctor_prefers_the_measurement_over_the_estimate(tmp_path: Path) -> None:
+    """`TASK-09`, часть 2, пункт 2: после selftest доктор берёт измеренное.
+
+    Расчёт по константе разошёлся с действительностью в 25 раз в TASK-08 и в 14 в
+    TASK-09. Замер на этой машине точнее любой константы по определению.
+    """
+    from harness.selftest import Measured
+
+    measured = Measured(bytes_per_frame=50483.0, frame_w=1920, frame_h=1080,
+                        fps=30.0, compression=41.1, mechanism="screen_dxcam",
+                        entries=300, at_unix=1_700_000_000.0)
+    check = doctor.check_disk(detect(), path=tmp_path, fps=30.0,
+                              size=(1920, 1080), measured=measured)
+    assert "по замеру" in check.detail
+    assert "41×" in check.detail, "степень сжатия обязана быть видна"
+    assert "screen_dxcam" in check.detail, "чем мерили — часть числа"
+    assert "замера не было" not in check.detail
+
+
+def test_a_measurement_survives_a_restart(tmp_path: Path) -> None:
+    """Замер хранится с отметкой времени, содержимого и механизма."""
+    from harness.selftest import Measured
+
+    one = Measured(1000.0, 640, 480, 30.0, 12.0, "screen_mss", 90, 1_700_000_000.0)
+    one.save(tmp_path)
+    back = Measured.load(tmp_path)
+    assert back is not None
+    assert back.as_dict() == one.as_dict()
+    # Испорченный файл — это отсутствие замера, а не замер.
+    (tmp_path / "storage-measured.json").write_text("{не json", encoding="utf-8")
+    assert Measured.load(tmp_path) is None
+    assert Measured.load(tmp_path / "нет-такого") is None
 
 
 def test_selftest_runs_everything_that_does_not_depend_on_the_failure(tmp_path: Path) -> None:
@@ -975,3 +1013,212 @@ def test_rate_failure_blames_the_mechanism_before_the_operator(tmp_path: Path) -
         "совет оператору стоит раньше причины в коде: именно так оператор и потратил "
         "заход впустую")
     assert "harness doctor" in where
+
+
+# ---------------------------------------------------------------------------
+# TASK-09: находки первого живого selftest
+# ---------------------------------------------------------------------------
+
+
+class Mic:
+    """Петлевой вход, у которого блоки накапливаются во времени.
+
+    Именно так ведёт себя настоящий: блоков в секунду больше, чем кадров, и читать
+    надо всё накопленное, а не по одному на кадр.
+    """
+
+    name = "тест-звук"
+
+    def __init__(self, rate: int = 48000, block_ms: float = 20.0,
+                 mono: bool = False) -> None:
+        self.rate = rate
+        self.block = int(rate * block_ms / 1000)
+        self.mono = mono
+        self._t0: float | None = None
+        self._given = 0
+
+    def start(self) -> None:
+        import time as _t
+
+        self._t0 = _t.monotonic()
+
+    def stop(self) -> None: ...
+
+    @property
+    def pending(self) -> int:
+        import time as _t
+
+        if self._t0 is None:
+            return 0
+        return max(0, int((_t.monotonic() - self._t0) * self.rate) - self._given)
+
+    def read(self) -> Any:
+        import time as _t
+
+        from harness.capture.base import AudioBlock
+
+        r = np.random.default_rng(self._given)
+        n = self.block
+        self._given += n
+        left = r.integers(-999, 999, n, dtype=np.int16)
+        right = left if self.mono else r.integers(-999, 999, n, dtype=np.int16)
+        return AudioBlock(np.stack([left, right], axis=1), self.rate,
+                          _t.monotonic_ns())
+
+
+class Screen:
+    name = "тест-экран"
+
+    def __init__(self, pause: float = 0.01) -> None:
+        self._i = 0
+        self._pause = pause
+
+    def start(self) -> None: ...
+    def stop(self) -> None: ...
+
+    def read(self) -> Any:
+        import time as _t
+
+        self._i += 1
+        _t.sleep(self._pause)
+        return Frame(np.random.default_rng(self._i).integers(
+            0, 256, (48, 64), dtype=np.uint8), self._i, _t.monotonic_ns())
+
+
+def test_audio_is_measured_by_duration_not_by_fact(tmp_path: Path) -> None:
+    """`TASK-09`, часть 1: звук пишется всю сессию, и проверка мерит длительность.
+
+    Прежняя проверка читала **один** блок и печатала «звук пишется: 960 отсчётов,
+    2 канала» на сессии длиной 6.7 с, где блоков должно быть около 335. Проверка
+    подтверждала факт и молчала о непрерывности — то есть проверяла не то.
+    """
+    res = selftest.run(tmp_path / "s", seconds=1.0, source=Screen(),
+                       audio_source=Mic())
+    names = [s.name for s in res.steps]
+    assert "покрытие звука" in names, "непрерывность не проверяется"
+    wrote = next(s for s in res.steps if s.name == "звук пишется")
+    assert "блоков" in wrote.detail and "с при" in wrote.detail, (
+        f"в строке про звук нет ни числа блоков, ни секунд: {wrote.detail!r}")
+    assert "1 блоков" not in wrote.detail, "снова прочитан один блок"
+    cover = next(s for s in res.steps if s.name == "покрытие звука")
+    assert cover.ok and "%" in cover.detail
+
+
+def test_audio_sync_tolerance_is_actually_checked(tmp_path: Path) -> None:
+    """`audio_sync_tolerance_ms` был в профиле и не проверялся ни одной строкой."""
+    res = selftest.run(tmp_path / "s", seconds=0.6, source=Screen(),
+                       audio_source=Mic())
+    step = next(s for s in res.steps if "сошёлся с кадрами" in s.name)
+    assert "мс при допуске" in step.detail
+    from harness.core.profile import MILESTONE_0
+
+    assert f"{MILESTONE_0.parameters['audio_sync_tolerance_ms']:g}" in step.detail, (
+        "допуск обязан быть взят из профиля, а не написан в коде")
+
+
+def test_mono_folded_by_the_driver_is_caught(tmp_path: Path) -> None:
+    """Стерео микшер Realtek умеет складывать каналы в моно на уровне драйвера."""
+    res = selftest.run(tmp_path / "s", seconds=0.5, source=Screen(),
+                       audio_source=Mic(mono=True))
+    step = next(s for s in res.steps if s.name == "каналы различаются")
+    assert not step.ok
+    assert "Realtek" in step.where, "самая частая причина обязана быть названа"
+
+
+def test_compression_ratio_is_printed_so_the_number_can_be_checked(tmp_path: Path) -> None:
+    """`TASK-09`, часть 2, пункт 4: «49.3 КиБ на запись» нечем было поверить.
+
+    Первый разбор поделил это на размер кадра **из профиля** — 320×180 — и получил
+    «сжатие не работает». Делить надо было на 1920×1080, и сжатие работает в сорок
+    один раз. Степень сжатия и настоящий размер кадра печатаются рядом с расходом.
+    """
+    res = selftest.run(tmp_path / "s", seconds=0.4, with_audio=False,
+                       source=Screen())
+    step = next(s for s in res.steps if s.name == "расход места измерен")
+    assert "при кадре 64×48" in step.detail, (
+        f"настоящий размер кадра не назван: {step.detail!r}")
+    assert "сырой" in step.detail and "сжатие" in step.detail
+
+
+def test_a_live_profile_cannot_lie_about_the_frame_size(tmp_path: Path) -> None:
+    """Профиль живой записи обязан совпадать с кадром — иначе запись врёт о себе."""
+    from harness.core.profile import MILESTONE_0
+    from harness.session import Recorder, SessionError
+
+    big = np.random.default_rng(1).integers(0, 256, (1080, 1920), dtype=np.uint8)
+    with Recorder(tmp_path / "lie", profile=MILESTONE_0, source="screen_dxcam",
+                  synthetic=False) as rec:
+        with pytest.raises(SessionError, match="профиль записи заявляет"):
+            rec.record_frame(big)
+
+    # А с профилем по кадру — записывается.
+    with Recorder(tmp_path / "true", profile=MILESTONE_0.for_frame(big),
+                  source="screen_dxcam", synthetic=False) as rec:
+        assert rec.record_frame(big) is not None
+
+    # У синтетики размер задаёт профиль, и миры его читают: там проверка не мешает.
+    with Recorder(tmp_path / "synth", profile=MILESTONE_0, source="synthetic",
+                  synthetic=True) as rec:
+        assert rec.record_frame(big) is not None
+
+
+def test_empty_lineage_is_impossible_by_construction() -> None:
+    """`TASK-09`, часть 3: пустая строка проходит любую проверку на присутствие."""
+    from harness.core.journal import BranchMeta, JournalError
+
+    def meta(lineage: str | None) -> BranchMeta:
+        return BranchMeta("000-x", "h", {}, None, None, None, "тест",
+                          lineage_id=lineage)
+
+    with pytest.raises(JournalError, match="пустой строкой"):
+        meta("")
+    with pytest.raises(JournalError, match="пустой строкой"):
+        meta("   ")
+    # `None` законен и означает «линии нет, это пробный прогон».
+    assert meta(None).lineage_id is None
+    assert meta("LIN_1").lineage_id == "LIN_1"
+
+
+def test_a_recording_writes_null_not_an_empty_string(tmp_path: Path) -> None:
+    from harness.core.profile import MILESTONE_0
+    from harness.session import Recorder
+
+    frame = np.zeros((8, 8), dtype=np.uint8)
+    with Recorder(tmp_path / "s", profile=MILESTONE_0.for_frame(frame),
+                  source="тест", synthetic=False) as rec:
+        rec.record_frame(frame)
+    branch = sorted((tmp_path / "s" / "journal" / "branches").glob("*"))[-1]
+    raw = json.loads((branch / "branch.json").read_text(encoding="utf-8"))
+    assert raw["lineage_id"] is None, (
+        f"в записи {raw['lineage_id']!r}: пустая строка тихо сольёт разные линии")
+    # И ни одного другого пустого поля.
+    empties = [k for k, v in raw.items() if v == ""]
+    assert not empties, f"пустые строки в branch.json: {empties}"
+
+
+def test_old_records_with_an_empty_lineage_still_open(tmp_path: Path) -> None:
+    """Записи с пустой линией уже существуют, и отказ их открыть терял бы данные."""
+    from harness.core.journal import BranchMeta
+
+    meta = BranchMeta.from_dict({"branch_id": "000-x", "structure_hash": "h",
+                                 "profile": {}, "lineage_id": ""})
+    assert meta.lineage_id is None, "пустая строка читается как «не объявлена»"
+
+
+def test_synthetic_world_settings_are_marked_not_removed() -> None:
+    """`TASK-09`, часть 4: решение — оставить в профиле и подписать применимость."""
+    from harness.core.profile import MILESTONE_0
+    from harness.core.settings import SYNTHETIC_ONLY, applies_to_live
+
+    assert "world_bounded" in SYNTHETIC_ONLY
+    assert not applies_to_live("world_bounded")
+    assert applies_to_live("capture_fps")
+
+    a = MILESTONE_0
+    b = a.with_structural(world_bounded=True).with_parameters(capture_fps=25.0)
+    keys = {d["key"]: d["live"] for d in a.diff(b)}
+    assert keys == {"world_bounded": False, "capture_fps": True}
+    assert [d["key"] for d in a.live_diff(b)] == ["capture_fps"], (
+        "различие, которое не могло повлиять на живую запись, обязано быть отделимо")
+    # Но из профиля не выброшено: запись остаётся самоописывающей.
+    assert "world_bounded" in MILESTONE_0.structural

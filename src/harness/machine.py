@@ -93,6 +93,17 @@ class Machine:
                 "capture_backend": self.capture_backend}
 
 
+def state_dir() -> "Path":
+    """Куда класть то, что переживает запуск: последний замер расхода.
+
+    Домашняя папка, а не каталог проекта: доктор и selftest могут запускаться из
+    разных мест, а замер относится к машине, а не к копии репозитория.
+    """
+    from pathlib import Path
+
+    return Path.home() / ".harness"
+
+
 def detect(env: dict[str, str] | None = None) -> Machine:
     """Определить машину. `env` подменяется в тестах — иначе их не написать."""
     e = os.environ if env is None else env

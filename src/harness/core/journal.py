@@ -68,6 +68,32 @@ class TamperError(JournalError):
     """Журнал правили. Это не восстанавливается — только форк от целой части."""
 
 
+def _clean_lineage(value: object) -> str | None:
+    """Прочитать линию из старой записи. Пустая строка читается как «не объявлена».
+
+    Читать — можно: записи с пустой линией уже существуют, и отказываться их открыть
+    значило бы потерять первую живую сессию оператора. Писать — нельзя: новые записи
+    обязаны иметь либо идентификатор, либо явный `null`.
+    """
+    if value is None:
+        return None
+    text = str(value)
+    return text or None
+
+
+def check_lineage(value: str | None, where: str) -> str | None:
+    """Пустая строка в идентификаторе — не значение. Либо `None`, либо имя."""
+    if value is None:
+        return None
+    if not str(value).strip():
+        raise JournalError(
+            f"{where}: линия задана пустой строкой. Пустая строка проходит любую "
+            "проверку на присутствие поля и сливает разные линии в одну, когда линии "
+            "начнут использоваться. Либо настоящий идентификатор, либо None со "
+            "смыслом «линии нет, это пробный прогон»")
+    return str(value)
+
+
 class FormatError(JournalError):
     """Запрошено то, чего в этом формате нет. Отказ, а не деградация.
 
@@ -237,7 +263,11 @@ class Entry:
     structure_hash: str
     # Заполняются журналом, а не вызывающим: это идентификация ветки, и
     # вызывающему её знать незачем.
-    lineage_id: str = ""
+    # `None` — «линия не объявлена, это пробный прогон». Пустая строка **запрещена**:
+    # она тихо проходит любую проверку на присутствие поля и сливает разные линии в
+    # одну, когда линии начнут использоваться. Проверяется конструктором, как
+    # `actor_layer`.
+    lineage_id: str | None = None
     branch_id: str = ""
     # Якорь реального времени. Не четвёртые часы: по нему нельзя упорядочивать
     # записи (скорость мира и скорость агента меняются независимо, а на разных
@@ -313,7 +343,7 @@ class Entry:
             actor_layer=ActorLayer(d["actor_layer"]),
             profile_hash=str(d["profile_hash"]),
             structure_hash=str(d["structure_hash"]),
-            lineage_id=str(d.get("lineage_id", "")),
+            lineage_id=_clean_lineage(d.get("lineage_id")),
             branch_id=str(d.get("branch_id", "")),
             wall_clock=float(d.get("wall_clock", 0.0)),
             state=(StateSnapshot.from_dict(d["state"]) if d.get("state")
@@ -400,11 +430,18 @@ class BranchMeta:
     forked_at_stamp: dict[str, Any] | None
     fork_reason: str | None
     format: str = FORMAT_V1      # у старых веток файла без поля — это и есть v1
-    lineage_id: str = ""
+    lineage_id: str | None = None
     # Ветка read-only на уровне данных, а не соглашения. Ставится для v1: дописать
     # в неё запись v2 значило бы получить журнал, половина которого отвечает на
     # вопрос о слое-инициаторе, а половина нет.
     read_only: bool = False
+
+    def __post_init__(self) -> None:
+        # Пустая строка в идентификаторе линии запрещена по построению, а не по
+        # соглашению: первая живая сессия оператора получила `"lineage_id": ""`, и
+        # такое поле тихо проходит любую проверку на присутствие.
+        object.__setattr__(self, "lineage_id",
+                           check_lineage(self.lineage_id, f"ветка {self.branch_id}"))
 
     @property
     def is_v1(self) -> bool:
@@ -430,7 +467,7 @@ class BranchMeta:
                    d.get("parent"), d.get("forked_at_seq"), d.get("forked_at_stamp"),
                    d.get("fork_reason"),
                    format=str(d.get("format", FORMAT_V1)),
-                   lineage_id=str(d.get("lineage_id", "")),
+                   lineage_id=_clean_lineage(d.get("lineage_id")),
                    read_only=bool(d.get("read_only", False)))
 
 
@@ -477,7 +514,8 @@ class Journal:
     def create(cls, root: str | Path, profile: Profile, *, reason: str | None = None,
                parent: str | None = None, forked_at_seq: int | None = None,
                forked_at_stamp: Stamp | None = None,
-               lineage_id: str = "") -> Journal:
+               lineage_id: str | None = None) -> Journal:
+        lineage_id = check_lineage(lineage_id, "новая ветка")
         root = Path(root)
         existing = sorted((root / "branches").glob("*")) if (root / "branches").is_dir() else []
         path = cls._branch_dir(root, profile, len(existing))
