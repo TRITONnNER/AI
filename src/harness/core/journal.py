@@ -553,11 +553,22 @@ class Journal:
         if not path.exists():
             return
         with path.open(encoding="utf-8") as fh:
-            for line in fh:
+            for lineno, line in enumerate(fh, 1):
                 line = line.strip()
                 if not line:
                     continue
-                e = Entry.from_line(line)
+                try:
+                    e = Entry.from_line(line)
+                except FormatError:
+                    raise
+                except Exception as exc:
+                    # Битая строка обязана давать внятную ошибку, а не сырой
+                    # ValueError из перечисления: открытие журнала — первое, что
+                    # делает всякий читатель, и по сообщению должно быть видно, что
+                    # именно испорчено и где.
+                    raise TamperError(
+                        f"{path}:{lineno}: запись не читается при открытии журнала: "
+                        f"{exc}") from exc
                 self._seq = e.seq + 1
                 self._last = e.digest
                 self._last_stamp = e.stamp

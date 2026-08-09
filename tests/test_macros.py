@@ -247,3 +247,43 @@ def test_macro_reaches_farther_at_the_same_search_depth() -> None:
         "без цепочки план в два шага дотянулся до трёх переходов — замер неверен")
     plan = Planner(limit, with_macro).plan(goal, "P1", "P4")
     assert plan is not None and plan.length == 1 and plan.steps[0].is_macro
+
+
+def test_second_outcome_of_one_action_keeps_its_own_macro_chain() -> None:
+    """Шаг для второго исхода того же действия не превращается в макрос из шагов.
+
+    Регресс на найденную ошибку. В планировщике одно имя держало две разные
+    «цепочки»: ключи действий внутри шага (навык) и последовательность шагов плана.
+    После первого исхода имя перебивалось кортежем `PlanStep`, и у второго исхода
+    того же действия шаг получал в качестве макроса шаги плана. Дальше `key()`
+    падал на разборе ключа, а `actions()` пытался исполнить объект вместо нажатия.
+
+    Одиночные исходы это не задевало, поэтому ошибка ждала первого места, где у
+    одного действия два подтверждённых исхода, — то есть ровно записи петель
+    (`place_record_loops`), которая такие места и создаёт.
+    """
+    from harness.behaviour.goals import Goal
+    from harness.behaviour.planner import Planner
+    from harness.core.profile import from_schema
+    from harness.model.beliefs import Origin, Provenance
+    from harness.model.forward import ForwardModel, Outcome
+
+    profile = from_schema("ТЕСТ-два-исхода", capture_width=64, capture_height=64)
+    model = ForwardModel()
+    # Одно действие из A даёт два подтверждённых исхода: половина туда, половина сюда.
+    model.transitions[("A", "OUT_0A11@200")] = [
+        Outcome("B", 6, 0.2, 0.01), Outcome("C", 6, 0.2, 0.01)]
+    model.transitions[("C", "OUT_0B22@200")] = [Outcome("T", 8, 0.2, 0.01)]
+
+    goal = Goal(id="g", kind="reach_place", target="T", test=lambda: True,
+                test_text="я в этом месте", budget_ticks=10,
+                provenance=Provenance(Origin.EXPERIENCE, "b", 0),
+                drive="curiosity", pressure=0.5)
+    plan = Planner(profile, model).plan(goal, "A", "T")
+    assert plan is not None, "маршрут A→C→T существует и обязан находиться"
+    for step in plan.steps:
+        assert all(isinstance(x, str) for x in step.chain), (
+            f"в цепочке шага не ключи действий: {step.chain!r}")
+        # Ключ обязан собираться и разбираться — на этом и падало.
+        assert isinstance(step.key(), str)
+        assert step.actions(), "шаг обязан давать хотя бы одно действие"

@@ -19,6 +19,7 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+from typing import Any
 from pathlib import Path
 
 
@@ -691,10 +692,27 @@ def cmd_bench(args: argparse.Namespace) -> int:
 
 
 def cmd_record(args: argparse.Namespace) -> int:
+    """Запись с живого экрана. С `--plan` только печатает, что записать.
+
+    `--actor human` ставит в записи `Actor.HUMAN` и `ActorLayer.HUMAN`: в
+    демонстрационной сессии действует оператор, и в журнале это должно быть видно.
+    Иначе живой корпус окажется неотличим по атрибуции от синтетического, где
+    кадры не начаты никем.
+    """
     from .capture.base import BackendUnavailable
     from .capture.screen import ScreenCapture
+    from .core.journal import Actor, ActorLayer
     from .core.profile import MILESTONE_0
+    from .corpus.live import plan_text
     from .session import Recorder
+
+    if args.plan:
+        print(plan_text())
+        return 0
+
+    human = args.actor == "human"
+    actor = Actor.HUMAN if human else Actor.NONE
+    layer = ActorLayer.HUMAN if human else ActorLayer.NONE
 
     cap = ScreenCapture(gray=MILESTONE_0.structural["frame_format"] == "gray8")
     try:
@@ -714,11 +732,97 @@ def cmd_record(args: argparse.Namespace) -> int:
                 if frame is None:
                     rec.record_gap("source_ended", {"after_frames": written})
                     break
-                rec.record_frame(frame.image, t_world=frame.t_world)
+                rec.record_frame(frame.image, t_world=frame.t_world,
+                                 actor=actor, actor_layer=layer)
                 written += 1
     finally:
         cap.stop()
     print(f"записано кадров: {written} → {args.path}")
+    print(f"слой-инициатор: {layer}. Дальше: harness ingest {args.path} --kind ВИД")
+    return 0
+
+
+def cmd_ingest(args: argparse.Namespace) -> int:
+    """Принять запись с чужой машины в живой корпус. Ничего не пересчитывая."""
+    from .corpus.live import KINDS, LiveError, ingest
+
+    if args.list:
+        for name, k in KINDS.items():
+            print(f"  {name:<12} {k['title']} — {k['duration']}")
+        return 0
+    try:
+        got = ingest(args.path, args.corpus, kind=args.kind, copy=not args.in_place)
+    except LiveError as e:
+        print(f"не принято: {e}", file=sys.stderr)
+        return 2
+    if args.json:
+        _print_json(got.as_dict())
+    else:
+        print(got.text())
+    return 0
+
+
+def cmd_mark(args: argparse.Namespace) -> int:
+    """Отметить область обрамления на живой записи. Истина исследователя.
+
+    Без этого IoU по живой записи не считается вовсе: на настоящем экране истины
+    нет, а сравнить ответ метода с маской, полученной тем же методом, значит
+    сравнить его с самим собой.
+    """
+    from .corpus.live import Region, read_regions, write_regions
+
+    regions = list(read_regions(args.path))
+    for quad in args.screen or []:
+        top, left, height, width = (int(x) for x in quad)
+        regions.append(Region(top, left, height, width, "screen"))
+    path = write_regions(args.path, regions, note=args.note or "")
+    print(f"разметка: {len(regions)} областей → {path}")
+    print("лежит в debug/: это истина исследователя, агентскому код у она недоступна")
+    return 0
+
+
+def cmd_bench_live(args: argparse.Namespace) -> int:
+    """Прогнать по живым записям тот же код разделения себя и мира."""
+    from pathlib import Path as _Path
+
+    from .corpus.live import LiveError, bench_live, compare_to_synthetic
+
+    root = _Path(args.path)
+    sessions = ([root] if (root / "session.json").exists()
+                else sorted(p for p in root.iterdir()
+                            if (p / "session.json").exists()))
+    if not sessions:
+        print(f"в {root} нет ни одной записи харнесса", file=sys.stderr)
+        return 2
+
+    from .corpus.live import METHOD_COMPARABLE, METHODS
+
+    methods = [args.method] if args.method != "both" else list(METHODS)
+    out: dict[str, Any] = {}
+    for method in methods:
+        scores = []
+        for path in sessions:
+            try:
+                score = bench_live(path, method=method)
+            except LiveError as e:
+                print(f"{path.name}: {e}", file=sys.stderr)
+                continue
+            scores.append(score)
+            print(score.text())
+            print()
+        # Синтетическая медиана своя у каждого пути: сравнивать арбитра с числом,
+        # снятым одиночным разделителем, значило бы сравнивать разное.
+        baseline = (args.synthetic_median if method == "arbiter"
+                    else args.synthetic_corpus_median)
+        cmp = compare_to_synthetic(scores, synthetic_median=baseline)
+        print(f"путь «{method}»: {METHOD_COMPARABLE[method]}")
+        print(f"  {cmp['verdict']}")
+        if cmp.get("unscored"):
+            print(f"  без разметки, в сравнение не вошли: {cmp['unscored']}")
+        print()
+        out[method] = {"scores": [s.as_dict() for s in scores], "comparison": cmp}
+    if args.json:
+        _print_json(out)
     return 0
 
 
@@ -828,10 +932,44 @@ def main(argv: list[str] | None = None) -> int:
     bn.set_defaults(fn=cmd_bench)
 
     rec = sub.add_parser("record", help="запись с живого экрана")
-    rec.add_argument("path", type=Path)
+    rec.add_argument("path", type=Path, nargs="?", default=Path("."))
     rec.add_argument("--frames", type=int, default=300)
     rec.add_argument("--note", default=None)
+    rec.add_argument("--actor", choices=("human", "none"), default="none",
+                     help="кто действует: human для демонстрации оператором")
+    rec.add_argument("--plan", action="store_true",
+                     help="только напечатать, что записать, и ничего не писать")
     rec.set_defaults(fn=cmd_record)
+
+    ing = sub.add_parser("ingest", help="принять запись с чужой машины в корпус")
+    ing.add_argument("path", type=Path, nargs="?", default=Path("."))
+    ing.add_argument("--corpus", type=Path, default=Path("corpus/live"))
+    ing.add_argument("--kind", default="play",
+                     help="вид записи; --list покажет все")
+    ing.add_argument("--in-place", action="store_true",
+                     help="не копировать, только проверить на месте")
+    ing.add_argument("--list", action="store_true", help="какие виды записей нужны")
+    ing.add_argument("--json", action="store_true")
+    ing.set_defaults(fn=cmd_ingest)
+
+    mk = sub.add_parser("mark", help="отметить область обрамления на живой записи")
+    mk.add_argument("path", type=Path)
+    mk.add_argument("--screen", nargs=4, action="append", metavar=("ВЕРХ", "ЛЕВО", "ВЫСОТА", "ШИРИНА"),
+                    help="прямоугольник экранного слоя; можно указать несколько раз")
+    mk.add_argument("--note", default=None)
+    mk.set_defaults(fn=cmd_mark)
+
+    bl = sub.add_parser("bench-live", help="прогнать тот же код по живым записям")
+    bl.add_argument("path", type=Path, default=Path("corpus/live"), nargs="?")
+    bl.add_argument("--method", choices=("arbiter", "parallax", "both"),
+                    default="both",
+                    help="какой из двух существующих путей прогнать")
+    bl.add_argument("--synthetic-median", type=float, default=0.667,
+                    help="медиана IoU арбитра по пяти доменам, n=5 (MEASUREMENT.md)")
+    bl.add_argument("--synthetic-corpus-median", type=float, default=0.9696,
+                    help="медиана IoU одиночного разделителя на корпусе, n=1")
+    bl.add_argument("--json", action="store_true")
+    bl.set_defaults(fn=cmd_bench_live)
 
     args = ap.parse_args(argv)
     return int(args.fn(args))

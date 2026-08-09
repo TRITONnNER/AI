@@ -260,7 +260,16 @@ class Planner:
                 if first is None:
                     continue
                 output, duration_ms = first[0], first[1]
-                chain = keys if len(keys) > 1 else ()
+                # Два разных «цепочки», и путать их нельзя. `macro` — ключи
+                # действий внутри одного шага (навык из библиотеки). `route` —
+                # последовательность шагов плана. До исправления оба лежали в одной
+                # переменной `chain`, и у **второго** исхода того же действия
+                # `macro` оказывался кортежем `PlanStep`: шаг становился макросом из
+                # шагов плана, `key()` падал на разборе, а `actions()` пытался
+                # исполнить объект вместо нажатия. Одиночные исходы это не задевало,
+                # поэтому ошибка ждала первого места с двумя исходами — то есть
+                # ровно записи петель.
+                macro = keys if len(keys) > 1 else ()
                 pred = self.model.predict(place, key)
                 if pred is None:
                     continue                    # «не знаю» ветку не строит
@@ -279,23 +288,23 @@ class Planner:
                     # обязан повторять то действие, на котором модель училась.
                     step = PlanStep(output, duration_ms, outcome.dst, p,
                                     outcome.mu_seconds, outcome.n, caution,
-                                    chain=chain)
-                    chain = steps + (step,)
+                                    chain=macro)
+                    route = steps + (step,)
                     total = seconds + outcome.mu_seconds
                     dst = outcome.dst
 
                     if dst == target:
-                        candidate = self._plan(goal, chain, target)
+                        candidate = self._plan(goal, route, target)
                         if (self.best is None
                                 or candidate.seconds < self.best.seconds):
                             self.best = candidate
                         continue
 
-                    key = (dst, length + 1)
-                    known = best_at.get(key)
+                    seen_at = (dst, length + 1)
+                    known = best_at.get(seen_at)
                     if known is None or total < known:
-                        best_at[key] = total
-                        heapq.heappush(frontier, (total, length + 1, dst, chain))
+                        best_at[seen_at] = total
+                        heapq.heappush(frontier, (total, length + 1, dst, route))
                 yield Progress(self.expansions, len(frontier), visited, self.best)
                 if self.expansions >= self.max_expansions:
                     break
@@ -443,6 +452,156 @@ def choose_probe(model: ForwardModel, place: str | None,
         if back is not None:
             return back
     return least_used(), hold_ms
+
+
+# ---------------------------------------------------------------------------
+# Замыкание петли: прийти в известное иначе, а не уйти в неизвестное
+# ---------------------------------------------------------------------------
+#
+# Зачем это отдельно от `choose_probe`. Прежняя разведка подтверждает переходы,
+# пробует непробованное и возвращается обратной парой — то есть **той же дорогой,
+# которой пришла**. Из-за этого подтверждённый подграф остаётся почти цепью со
+# степенью 1–2, а цепь двудольна: все обходы между парой вершин имеют фиксированную
+# чётность, поэтому достижимое за два шага **никогда** не достижимо за три. Замер
+# это и показал: целей, достижимых и за два, и за три шага, ровно ноль при 54
+# двухшаговых и 50 трёхшаговых путях. Сравнение планов при равной сложности при
+# такой форме графа неосуществимо в принципе, и виноват не планировщик и не
+# представление места, а то, что разведка ни разу не вернулась другой дорогой.
+#
+# Величина, которую надо максимизировать, — **прирост степени узлов**, а не число
+# новых узлов. Отсюда две поправки к порядку предпочтений:
+#
+# 1. Возврат обратной парой ставится **последним**, а не третьим. Обратная пара по
+#    построению не может добавить ребро: она ведёт туда, откуда пришли, тем же
+#    ребром, которое уже есть.
+# 2. Появляется предпочтение **недозамкнутого места**: если известен маршрут в
+#    место со степенью ниже порога, у которого есть непробованные выходы, — идти
+#    туда первым шагом этого маршрута. Ребро в известное место от нового
+#    предшественника поднимает степень сразу двух узлов.
+#
+# Чего здесь нет: попыток угадать, куда ведёт непробованный выход. Этого знать
+# нельзя, и подставить сюда догадку значило бы планировать по незнанию.
+
+
+def degrees(graph: Any) -> dict[str, int]:
+    """Степень каждого места по рёбрам, которые куда-то ведут. Петли не считаются.
+
+    Петля — законное наблюдение («нажал и остался»), но степени она не добавляет:
+    для маршрута она бесполезна, а цепь остаётся цепью при любом числе петель.
+    """
+    out: dict[str, set[str]] = {}
+    for edge in graph.edges.values():
+        if edge.dst == edge.src:
+            continue
+        out.setdefault(edge.src, set()).add(edge.dst)
+        out.setdefault(edge.dst, set()).add(edge.src)
+    return {k: len(v) for k, v in out.items()}
+
+
+def undersewn(graph: Any, model: ForwardModel, outputs: Sequence[str], *,
+              bar: int) -> list[tuple[int, int, str]]:
+    """Места, куда стоит вернуться: мало рёбер и есть что попробовать.
+
+    Возвращает `(степень, сколько непробовано, место)`, отсортированное так, что
+    первым идёт самое недозамкнутое. Место без непробованных выходов в список не
+    попадает: прийти туда можно, но добавить ребро оттуда нечем.
+    """
+    deg = degrees(graph)
+    out: list[tuple[int, int, str]] = []
+    for place in graph.places:
+        seen: set[str] = set()
+        for key in model.actions_from(place):
+            parsed = parse_action_key(key)
+            if parsed is not None:
+                seen.add(parsed[0])
+        untried = len([o for o in outputs if o not in seen])
+        if untried and deg.get(place, 0) < bar:
+            out.append((deg.get(place, 0), -untried, place))
+    return sorted(out)
+
+
+def choose_closing_probe(model: ForwardModel, graph: Any, place: str | None,
+                         outputs: Sequence[str], *, hold_ms: int,
+                         min_n: int = 2, degree_bar: int = 2,
+                         inverse: Mapping[str, str] | None = None,
+                         last_output: str | None = None) -> tuple[str, int]:
+    """Разведка, которая старается прийти в известное иначе.
+
+    Порядок предпочтения, и каждый пункт про степень, а не про новизну:
+
+    1. **Подтвердить здесь.** Как и раньше: пока переход не наблюдён `min_n` раз,
+       планировать по нему нельзя, и никакая топология этого не заменит.
+    2. **Попробовать непробованное здесь.** Единственный способ добавить ребро из
+       этого места.
+    3. **Идти в недозамкнутое место** — то, у которого мало рёбер и есть что
+       попробовать, — первым шагом известного маршрута. Это и есть «вернуться
+       другой дорогой»: маршрут ведёт в известное место, но приходим мы туда от
+       другого предшественника.
+    4. **Обратная пара** — последней, а не третьей. Она не может поднять степень.
+    5. Меньше всего пробованное, если ничего из перечисленного не нашлось.
+    """
+    if place is None or not model.actions_from(place):
+        return choose_probe(model, place, outputs, hold_ms=hold_ms, min_n=min_n,
+                            inverse=inverse, last_output=last_output)
+
+    # 1 и 2 — как в `choose_probe`, повторно, потому что порядок дальше другой.
+    for key in model.actions_from(place):
+        pred = model.predict(place, key)
+        if pred is None:
+            continue
+        if min(o.n for o, _ in pred.outcomes()) < min_n:
+            parsed = parse_action_key(key)
+            if parsed is not None:
+                return parsed[0], parsed[1]
+
+    seen_outputs: set[str] = set()
+    for key in model.actions_from(place):
+        parsed = parse_action_key(key)
+        if parsed is not None:
+            seen_outputs.add(parsed[0])
+    fresh = [o for o in outputs if o not in seen_outputs]
+    if fresh:
+        return fresh[0], hold_ms
+
+    # 3. Куда идти, чтобы поднять степень. Маршрут берётся из графа — это тот же
+    # Дейкстра по измеренным секундам, которым ходит планировщик.
+    for _deg, _untried, target in undersewn(graph, model, outputs, bar=degree_bar):
+        if target == place:
+            continue
+        route = graph.route(place, target)
+        if not route:
+            continue
+        first = parse_action_key(route[0].mode)
+        if first is None:
+            continue
+        # Не разворачиваться немедленно: шаг, отменяющий последнее действие, ведёт
+        # туда, откуда мы пришли, и ребра не добавляет.
+        if (inverse is not None and last_output is not None
+                and inverse.get(last_output) == first[0] and len(route) == 1):
+            continue
+        return first[0], first[1]
+
+    # 4 и 5 — как раньше.
+    return choose_probe(model, place, outputs, hold_ms=hold_ms, min_n=min_n,
+                        inverse=inverse, last_output=last_output)
+
+
+def probe_chooser(profile: Profile) -> Callable[..., tuple[str, int]]:
+    """Какая разведка включена профилем. Переключатель структурный: он форкает журнал.
+
+    Смешивать в одной ветке опыт двух разведок нельзя — у графа будет разная форма,
+    и любое сравнение по нему станет сравнением двух разных экспериментов.
+    """
+    if not bool(profile.parameters["explore_closes_loops"]):
+        return choose_probe
+    bar = int(profile.parameters["explore_close_degree_bar"])
+
+    def chooser(model: ForwardModel, graph: Any, place: str | None,
+                outputs: Sequence[str], **kw: Any) -> tuple[str, int]:
+        return choose_closing_probe(model, graph, place, outputs,
+                                    degree_bar=bar, **kw)
+
+    return chooser
 
 
 # ---------------------------------------------------------------------------

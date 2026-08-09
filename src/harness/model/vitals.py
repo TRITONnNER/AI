@@ -38,6 +38,7 @@ from typing import Any, Iterable
 from ..core.journal import Journal, Kind as EntryKind
 from ..core.profile import Profile
 from .rebuild import Rebuilt, rebuild_from_journal
+from .units import Independence, count, mean, share
 
 
 @dataclass(frozen=True, slots=True)
@@ -55,6 +56,10 @@ class Vital:
     unit: str
     source: str
     note: str = ""
+    # Единица независимости (инвариант 22). Обязательна: показатель без неё не
+    # создаётся. Для счёта заявляется тривиально, для доли и среднего — с числом
+    # единиц, и именно оно, а не число событий, стоит в знаменателе.
+    independence: Independence | None = None
 
     def __post_init__(self) -> None:
         if not self.source:
@@ -65,10 +70,30 @@ class Vital:
             raise ValueError(
                 f"показатель {self.code} отсутствует без объяснения. Пустое место в "
                 "сводке обязано быть подписано, иначе оно читается как ноль")
+        if (self.independence is not None and self.independence.is_claim
+                and self.independence.empty and self.value is not None):
+            raise ValueError(
+                f"показатель {self.code}: единиц ноль, а число выведено ({self.value}). "
+                "Доля по нулю единиц — это не ноль, это отсутствие данных, и "
+                "записывается она как None с причиной")
+        if self.independence is None:
+            raise ValueError(
+                f"показатель {self.code} без объявленной единицы независимости "
+                "(инвариант 22). Назовите, что варьируется независимо: прогон, "
+                "маршрут, домен, сессия. Метрика без единицы не создаётся, потому "
+                "что по числу нельзя отличить сто независимых наблюдений от двух, "
+                "пересчитанных пятьдесят раз")
+
+    @property
+    def thin(self) -> bool:
+        """Единиц слишком мало, чтобы доля что-то значила."""
+        return self.independence is not None and self.independence.thin
 
     def as_dict(self) -> dict[str, Any]:
         return {"code": self.code, "value": self.value, "unit": self.unit,
-                "source": self.source, "note": self.note}
+                "source": self.source, "note": self.note,
+                "independence": (None if self.independence is None
+                                 else self.independence.as_dict())}
 
 
 @dataclass(slots=True)
@@ -79,8 +104,17 @@ class Vitals:
     rebuilt: Rebuilt | None = None
 
     def add(self, code: str, value: float | int | None, unit: str, source: str,
-            note: str = "") -> None:
-        self.vitals.append(Vital(code, value, unit, source, note))
+            note: str = "", independence: Independence | None = None) -> None:
+        self.vitals.append(Vital(code, value, unit, source, note, independence))
+
+    def claims(self) -> list[Vital]:
+        """Показатели, делающие вывод за пределы пересчитанного: доли и средние."""
+        return [v for v in self.vitals
+                if v.independence is not None and v.independence.is_claim]
+
+    def thin(self) -> list[Vital]:
+        """Показатели, под которыми меньше трёх независимых единиц."""
+        return [v for v in self.vitals if v.thin]
 
     def get(self, code: str) -> Vital | None:
         return next((v for v in self.vitals if v.code == code), None)
@@ -95,7 +129,8 @@ class Vitals:
 
     def as_dict(self) -> dict[str, Any]:
         return {"vitals": [v.as_dict() for v in self.vitals],
-                "absent": [v.code for v in self.absent()]}
+                "absent": [v.code for v in self.absent()],
+                "thin": [v.code for v in self.thin()]}
 
     def render_text(self, *, width: int = 78) -> str:
         lines: list[str] = []
@@ -107,9 +142,17 @@ class Vitals:
             else:
                 shown = str(v.value)
             head = f"  {v.code:<28} {shown:>10} {v.unit:<10}"
+            # Единица независимости печатается только у долей и средних: у счёта
+            # она тривиальна, и строка «счёт в единицах записи» была бы шумом.
+            # А вот доля без числа единиц — то, из-за чего вывод был неверен
+            # дважды, поэтому у неё она видна всегда (инвариант 22).
+            if v.independence is not None and v.independence.is_claim:
+                head += f"  [{v.independence.text()}]"
             lines.append(head.rstrip())
             if v.note:
                 lines.append(f"      {v.note[:width - 6]}")
+            if v.independence is not None and v.independence.note:
+                lines.append(f"      единица: {v.independence.note[:width - 15]}")
         return "\n".join(lines)
 
 
@@ -200,72 +243,114 @@ def from_journal(journal: Journal, *, profile: Profile,
     J = "журнал"
 
     # --- сколько прожито ----------------------------------------------------
-    out.add("entries", sum(by_kind.values()), "записей", J)
+    out.add("entries", sum(by_kind.values()), "записей", J,
+            independence=count("запись", sum(by_kind.values())))
     out.add("lived_self", (last_self - first_self) if first_self is not None else None,
-            "циклов", J, "" if first_self is not None else "журнал пуст")
+            "циклов", J, "" if first_self is not None else "журнал пуст",
+            independence=count("запись", sum(by_kind.values())))
     out.add("lived_world", (last_world - first_world) if first_world is not None else None,
-            "тиков", J, "" if first_world is not None else "журнал пуст")
-    out.add("frames", frames, "кадров", J)
+            "тиков", J, "" if first_world is not None else "журнал пуст",
+            independence=count("запись", sum(by_kind.values())))
+    out.add("frames", frames, "кадров", J,
+            independence=count("запись", frames))
 
     # --- целостность записи -------------------------------------------------
     # Не «показатель качества», а условие осмысленности всех остальных: по журналу с
     # дырами слои, сдвиг и ошибка считаются по разным моментам времени.
-    out.add("capture_gaps", gaps, "разрывов", f"{J}: capture_gap")
+    out.add("capture_gaps", gaps, "разрывов", f"{J}: capture_gap",
+            independence=count("запись", gaps))
+    # Доля потерянных кадров — единственная доля, у которой единица законно есть
+    # запись: утверждение здесь ровно о записях этой сессии и ни о чём больше.
     out.add("frames_lost_share", _share(frames_missed, frames + frames_missed),
             "доля", f"{J}: capture_gap.missed",
-            "" if frames or frames_missed else "кадров не было")
+            "" if frames or frames_missed else "кадров не было",
+            independence=share("запись", frames + frames_missed,
+                               "утверждение о целостности этой записи, а не о методе"))
 
     # --- тело ---------------------------------------------------------------
-    out.add("actions", actions, "попыток", f"{J}: action")
+    out.add("actions", actions, "попыток", f"{J}: action",
+            independence=count("запись", actions))
     out.add("masked_share", _share(masked, actions), "доля", f"{J}: action.masked",
-            "" if actions else "попыток действия не было")
+            "" if actions else "попыток действия не было",
+            independence=share("запись", actions,
+                               "доля заглушённых в этой записи; про метод маски "
+                               "ничего не утверждает"))
     out.add("delivered_share", _share(delivered, actions), "доля",
-            f"{J}: action.code", "" if actions else "попыток действия не было")
+            f"{J}: action.code", "" if actions else "попыток действия не было",
+            independence=share("запись", actions))
     out.add("responded_share", _share(responded, delivered), "доля",
             f"{J}: action.responded",
-            "" if delivered else "ни одна попытка не доехала до устройства")
+            "" if delivered else "ни одна попытка не доехала до устройства",
+            independence=share("запись", delivered))
 
     # --- цели: это и есть компетентность -----------------------------------
     # Компетентность считается по пройденным тестам целей, а не по словам агента о
     # себе и не по числу нажатий: тест цели — единственная объективная проверка
     # «получилось», какая в системе есть (инвариант 10).
-    out.add("goals_set", goals_set, "целей", f"{J}: goal.set")
+    out.add("goals_set", goals_set, "целей", f"{J}: goal.set",
+            independence=count("цель", goals_set))
+    # Единица здесь — цель, и это **не** годится для утверждения «механизм целей
+    # работает»: цели одного прогона выведены из одной карты тела, вторая
+    # существует потому, что первая что-то изменила. Для утверждения о механизме
+    # единица — прогон, и считать его надо между прогонами, а не внутри. См.
+    # MEASUREMENT.md.
     out.add("competence", _share(goals_passed, goals_passed + goals_abandoned),
             "доля", f"{J}: goal.passed / (passed+abandoned)",
-            "" if goals_passed + goals_abandoned else "ни одна цель ещё не закрылась")
-    out.add("goals_abandoned", goals_abandoned, "целей", f"{J}: goal.abandoned")
+            "" if goals_passed + goals_abandoned else "ни одна цель ещё не закрылась",
+            independence=share("цель", goals_passed + goals_abandoned,
+                               "цели одного прогона зависимы; для утверждений о "
+                               "механизме единица — прогон"))
+    out.add("goals_abandoned", goals_abandoned, "целей", f"{J}: goal.abandoned",
+            independence=count("цель", goals_abandoned))
     out.add("ticks_to_abandon",
             round(sum(abandon_spent) / len(abandon_spent), 2) if abandon_spent else None,
             "циклов", f"{J}: goal.spent_ticks",
-            "" if abandon_spent else "брошенных целей ещё нет")
+            "" if abandon_spent else "брошенных целей ещё нет",
+            independence=mean("цель", len(abandon_spent)))
 
     # --- планы --------------------------------------------------------------
-    out.add("plan_steps", plan_steps, "шагов", f"{J}: plan")
+    out.add("plan_steps", plan_steps, "шагов", f"{J}: plan",
+            independence=count("запись", plan_steps))
+    # Единица — шаг, и для утверждения «планировщик работает» она **не годится**:
+    # шаги одного плана зависимы, а повторные попытки на одном маршруте зависимы
+    # тем сильнее, что приход инкрементирует силу ребра. Правильная единица там —
+    # различный маршрут; замер живёт в tools/measure_plan_arrival.py.
     out.add("plan_agreement", _share(plan_agreed, plan_steps), "доля",
-            f"{J}: plan.agreed", "" if plan_steps else "планы ещё не исполнялись")
+            f"{J}: plan.agreed", "" if plan_steps else "планы ещё не исполнялись",
+            independence=share("запись", plan_steps,
+                               "шаги одного плана зависимы; для утверждений о "
+                               "планировщике единица — маршрут"))
 
     # --- сон и сверка с реальностью -----------------------------------------
-    out.add("sleeps", sleeps, "прогонов", f"{J}: sleep")
+    out.add("sleeps", sleeps, "прогонов", f"{J}: sleep",
+            independence=count("прогон", sleeps))
     if last_sleep_self is not None and last_self is not None:
         out.add("since_sleep_self", last_self - last_sleep_self, "циклов",
-                f"{J}: sleep")
+                f"{J}: sleep", independence=count("запись", 1))
     else:
         out.add("since_sleep_self", None, "циклов", f"{J}: sleep",
-                "консолидация ещё не запускалась")
+                "консолидация ещё не запускалась",
+                independence=count("запись", 0))
 
     # --- вмешательства и слова ----------------------------------------------
     out.add("interventions", by_kind.get(str(EntryKind.INTERVENTION), 0),
-            "вмешательств", f"{J}: intervention")
+            "вмешательств", f"{J}: intervention",
+            independence=count("запись", by_kind.get(str(EntryKind.INTERVENTION), 0)))
     out.add("thoughts", by_kind.get(str(EntryKind.THOUGHT), 0), "записей",
-            f"{J}: thought")
+            f"{J}: thought",
+            independence=count("запись", by_kind.get(str(EntryKind.THOUGHT), 0)))
     out.add("self_reports", by_kind.get(str(EntryKind.SELF_REPORT), 0), "отчётов",
-            f"{J}: self_report")
+            f"{J}: self_report",
+            independence=count("запись", by_kind.get(str(EntryKind.SELF_REPORT), 0)))
     out.add("testimonies", by_kind.get(str(EntryKind.TESTIMONY), 0), "свидетельств",
-            f"{J}: testimony")
+            f"{J}: testimony",
+            independence=count("запись", by_kind.get(str(EntryKind.TESTIMONY), 0)))
     out.add("stops", by_kind.get(str(EntryKind.STOP), 0), "остановов",
-            f"{J}: stop")
+            f"{J}: stop",
+            independence=count("запись", by_kind.get(str(EntryKind.STOP), 0)))
     out.add("resource_breaches", sum(breaches.values()), "упоров",
-            f"{J}: resource")
+            f"{J}: resource",
+            independence=count("запись", sum(breaches.values())))
 
     # --- то, что видно только после пересборки ------------------------------
     if "beliefs" not in skipped:
@@ -281,20 +366,26 @@ def from_journal(journal: Journal, *, profile: Profile,
         bs = rebuilt.beliefs.stats()
         body = rebuilt.body.stats()
         total = int(bs["beliefs"])
-        out.add("beliefs", total, "убеждений", "пересборка журнала")
+        out.add("beliefs", total, "убеждений", "пересборка журнала",
+                independence=count("запись", total))
         out.add("hearsay_share", _share(int(bs["hearsay"]), total), "доля",
                 "пересборка: provenance",
-                "" if total else "убеждений ещё нет")
+                "" if total else "убеждений ещё нет",
+                independence=share("запись", total))
         out.add("body_known", int(body["known_outputs"]), "выходов",
-                "пересборка: карта тела")
+                "пересборка: карта тела",
+                independence=count("выход", int(body["known_outputs"])))
         out.add("body_live", int(body["live"]), "выходов",
-                "пересборка: карта тела")
+                "пересборка: карта тела",
+                independence=count("выход", int(body["live"])))
         out.add("body_unclear", int(body["unclear"]), "выходов",
                 "пересборка: карта тела",
-                "выход отвечал, но реже, чем требует порог — не молчит и не жив")
+                "выход отвечал, но реже, чем требует порог — не молчит и не жив",
+                independence=count("выход", int(body["unclear"])))
         out.add("undo_unknown", int(body["unknown_reversibility"]), "выходов",
                 "пересборка: обратимость",
-                "чего агент не умеет откатывать: осторожность здесь максимальна")
+                "чего агент не умеет откатывать: осторожность здесь максимальна",
+                independence=count("выход", int(body["unknown_reversibility"])))
 
     # --- чего в журнале нет -------------------------------------------------
     # Ниже — не заготовки под будущее, а честное перечисление: показатель назван,
@@ -309,31 +400,39 @@ def from_journal(journal: Journal, *, profile: Profile,
                 f"срез состояния: {len(errors)} записей",
                 "средняя ошибка предсказания по тем записям, где она измерялась. "
                 "Записи без неё в среднее не входят: ноль там означал бы идеальное "
-                "предсказание, а не отсутствие предсказателя")
+                "предсказание, а не отсутствие предсказателя",
+                independence=mean("запись", len(errors),
+                                  "соседние записи одной сессии зависимы; для "
+                                  "сравнения прогонов единица — сессия"))
     else:
         out.add("prediction_error_mean", None, "0..1", "нет источника",
                 "ни одна запись не несёт ошибки предсказания в срезе состояния. "
                 "Поле в формате есть (v2), измерять его пока некому: предсказателя "
-                "в этом прогоне не было")
+                "в этом прогоне не было",
+                independence=count("запись", 0))
     if valences:
         out.add("mood_valence", sum(valences) / len(valences), "-1..1",
                 f"срез состояния: {len(valences)} записей",
                 "средняя валентность по записям, где настроение снималось. Оно "
-                "выведено из объективных величин, а не заявлено агентом")
+                "выведено из объективных величин, а не заявлено агентом",
+                independence=mean("запись", len(valences)))
     else:
         out.add("mood_valence", None, "-1..1", "нет источника",
                 "настроение не снималось ни в одной записи. Поле в формате есть, "
                 "но драйвов в этом прогоне не было — а подставить сюда нуль значило "
-                "бы сообщить о ровном настроении там, где его никто не мерил")
+                "бы сообщить о ровном настроении там, где его никто не мерил",
+                independence=count("запись", 0))
     out.add("places", None, "мест", "нет источника",
             "граф мест в журнал не пишется отдельным видом записи: он строится по "
-            "кадрам, а кадры в журнале лежат ссылками на хранилище")
+            "кадрам, а кадры в журнале лежат ссылками на хранилище",
+            independence=count("место", 0))
     # Распределение по слою-инициатору: без него доля конфабуляции обманчива.
     for name in sorted(layers):
         out.add(f"layer_{name}", layers[name], "записей",
                 "actor_layer записей",
                 f"сколько записей начал слой {name}. Рядом с метрикой конфабуляции "
                 "это обязательно: 20 % расхождений при девяноста процентах записей "
-                "от планировщика и при девяноста от рефлекса — разные прогоны")
+                "от планировщика и при девяноста от рефлекса — разные прогоны",
+                independence=count("запись", layers[name]))
 
     return out
