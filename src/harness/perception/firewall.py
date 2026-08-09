@@ -34,7 +34,7 @@ from typing import Any, Callable, Protocol, runtime_checkable
 
 from ..core.clocks import Stamp
 from ..core.profile import Profile
-from ..core.symbols import assert_no_plain_text, is_symbol
+from ..core.symbols import SYMBOL_RE, assert_no_plain_text, is_symbol
 
 # Единственный вопрос, который этот модуль умеет задавать. Константа, не шаблон.
 QUESTION = "Что я вижу? Перечисли, что есть на изображении, и где это находится."
@@ -145,8 +145,14 @@ def check_answer(raw: str) -> tuple[list[str], list[str]]:
     return imperatives, valuations
 
 
+# Форма символа берётся из одного места, а не переписывается здесь. Дублировать её
+# уже пришлось однажды: ширина символа стала настройкой профиля, а этот разбор
+# продолжал требовать ровно четыре цифры — и молча отбрасывал **все** строки
+# описателя, потому что непонятая строка здесь законно считается мусором. Отчёт при
+# этом оставался зелёным: «описатель ничего не увидел» — тоже валидный ответ.
+_SYMBOL = SYMBOL_RE.pattern.strip("^$")
 _LINE = re.compile(
-    r"^\s*(?P<symbol>SYM_[0-9A-F]{4})\s*\|\s*(?P<zone>[^|]+?)\s*\|\s*(?P<size>[^|]+?)\s*$")
+    rf"^\s*(?P<symbol>{_SYMBOL})\s*\|\s*(?P<zone>[^|]+?)\s*\|\s*(?P<size>[^|]+?)\s*$")
 
 
 def parse_answer(raw: str, *, max_symbols: int) -> tuple[list[Sighting], int]:

@@ -25,15 +25,35 @@ from __future__ import annotations
 import hashlib
 import re
 import unicodedata
+from enum import StrEnum
+from typing import Mapping
 from typing import Any
 
-SYMBOL_RE = re.compile(r"^SYM_[0-9A-F]{4}$")
+# Ширина не фиксирована: она живёт в структурном профиле (`symbol_digits`), потому
+# что от неё зависит, сколько разных надписей агент увидит как одну. Здесь — только
+# допустимые границы формы.
+SYMBOL_RE = re.compile(r"^SYM_[0-9A-F]{4,16}$")
+#: Метка источника. Отдельный префикс, чтобы в записи было видно, что это не
+#: надпись, а канал; расшифровывается той же отладочной таблицей.
+SOURCE_RE = re.compile(r"^SRC_[0-9A-F]{4,16}$")
 _WS = re.compile(r"\s+")
 
-# Сколько шестнадцатеричных цифр в символе. 4 → 65 536 значений. Для одного
-# интерфейса игры этого хватает с запасом; коллизии считаются и логируются
-# исследователем, а не игнорируются.
-SYMBOL_DIGITS = 4
+# Сколько шестнадцатеричных цифр в символе **по умолчанию**. Настоящее значение
+# приходит из структурного профиля (`symbol_digits`): ширина символа решает, сколько
+# разных надписей агент увидит как одну, то есть меняет его опыт, а такие числа живут
+# в схеме и попадают в `profile_hash` (инвариант 23).
+#
+# Почему 8, а не 4. При N различных надписей ожидаемое число коллизий — N²/(2·16^d).
+# Замер на корпусе документации (2058 надписей) дал при d=4 ровно то, что обещает
+# формула: 31 коллизию при ожидаемых 32. Тридцать одна пара разных надписей,
+# слипшихся в один символ, — это порча опыта, и она не чинится подсчётом: агент уже
+# увидел «Инвентарь полон» и «Дверь закрыта» как одно и то же. При d=8 та же формула
+# даёт 5·10⁻⁴ на этом корпусе и около единицы на сотне тысяч надписей — то есть
+# запас на веб, где надписей заведомо десятки тысяч.
+#
+# Прежнее значение 4 держалось на оценке «для одного интерфейса игры хватает». Оценка
+# была не проверена: даже для 500 надписей она даёт две коллизии, а не ноль.
+SYMBOL_DIGITS = 8
 
 
 class SymbolError(ValueError):
@@ -49,6 +69,39 @@ def normalize(text: str) -> str:
     return t
 
 
+class Namespace(StrEnum):
+    """Откуда взялась надпись. Набор закрыт: новый источник — новое доверие.
+
+    Пространства имён нужны затем, что **одна и та же строка из разных источников
+    не должна давать один символ**. «Осталось 3 патрона» на экране игры и «осталось
+    3 патрона» в чате от другого игрока — разные утверждения с разным доверием, и
+    склеивать их в один символ значило бы дать агенту повод верить чужим словам
+    ровно так же, как своим глазам.
+
+    Разделение делается солью: пространство подмешивается в ключ хеша. Поэтому один
+    текст в двух пространствах даёт два разных символа, а таблицы заземления не
+    пересекаются.
+    """
+
+    WORLD = "world"      # экран самой игры: то, что показывает мир
+    UI = "ui"            # интерфейс приложения: меню, кнопки, поля
+    CHAT = "chat"        # чужая речь
+    WEB = "web"          # внешние страницы
+
+
+#: Доверие по источнику. Не «насколько текст правдив», а **насколько он вообще
+#: свидетельство**: показания мира агент видит сам, чужую речь — нет. Числа живут
+#: здесь, а не в профиле, потому что это не ручка поведения, а свойство канала:
+#: подкрутить доверие к своим глазам относительно чужих слов означало бы менять не
+#: настройку, а устройство эксперимента.
+SOURCE_TRUST: Mapping[Namespace, float] = {
+    Namespace.WORLD: 1.0,    # своими глазами
+    Namespace.UI: 1.0,       # тоже своими глазами, но про приложение
+    Namespace.CHAT: 0.4,     # чужие слова: свидетельство, требующее перепроверки
+    Namespace.WEB: 0.3,      # чужие слова без даже собеседника
+}
+
+
 class Symbolizer:
     """Односторонняя замена надписи на символ.
 
@@ -57,7 +110,7 @@ class Symbolizer:
     отладочный поток, а не этот объект.
     """
 
-    __slots__ = ("_salt_id", "_key", "_enabled")
+    __slots__ = ("_salt_id", "_key", "_enabled", "_digits")
 
     @classmethod
     def from_profile(cls, profile: Any, secret: bytes | None = None) -> "Symbolizer":
@@ -70,14 +123,21 @@ class Symbolizer:
         никем не читаемая настройка — это ложь о возможностях.
         """
         return cls(str(profile.structural["symbol_salt_id"]), secret,
-                   enabled=bool(profile.structural["text_symbolized"]))
+                   enabled=bool(profile.structural["text_symbolized"]),
+                   digits=int(profile.structural["symbol_digits"]))
 
     def __init__(self, salt_id: str, secret: bytes | None = None, *,
-                 enabled: bool = True) -> None:
+                 enabled: bool = True, digits: int = SYMBOL_DIGITS) -> None:
         if not salt_id:
             raise SymbolError("salt_id обязателен: он часть структурного профиля")
+        if not 4 <= int(digits) <= 16:
+            raise SymbolError(
+                f"ширина символа {digits}: допустимо от 4 до 16 цифр. Меньше четырёх "
+                "склеивает почти всё, больше шестнадцати не даёт blake2b с этим "
+                "digest_size")
         self._salt_id = salt_id
         self._enabled = bool(enabled)
+        self._digits = int(digits)
         # Секрет по умолчанию выводится из salt_id. Этого достаточно, чтобы
         # символы не совпадали между профилями, но недостаточно против того, у
         # кого есть исходники и словарь. Настоящий секрет задаётся явно, и тогда
@@ -89,11 +149,40 @@ class Symbolizer:
         return self._salt_id
 
     @property
+    def digits(self) -> int:
+        """Ширина символа. Видна в отчётах: от неё зависит число коллизий."""
+        return self._digits
+
+    def expected_collisions(self, distinct_captions: int) -> float:
+        """Сколько пар надписей ожидаемо слипнётся при таком корпусе.
+
+        Нужна затем, что «коллизий не было» на маленьком корпусе ничего не значит:
+        при 4 цифрах и 100 надписях их ожидается 0.08, и ноль — это не свойство
+        ширины, а свойство размера корпуса. Число из формулы говорит, чего ждать, и
+        отличает «повезло» от «хватает».
+        """
+        n = max(0, int(distinct_captions))
+        return n * (n - 1) / (2 * 16 ** self._digits)
+
+    @property
     def enabled(self) -> bool:
         """Хеширует ли этот символизатор вообще. Видно в отчётах и в тестах."""
         return self._enabled
 
-    def symbolize(self, text: str) -> str:
+    def symbolize(self, text: str,
+                  namespace: Namespace = Namespace.WORLD) -> str:
+        """Надпись → символ. Пространство имён подмешивается в ключ.
+
+        Пространство обязательно участвует в хеше, а **не** в самом символе: если бы
+        оно было видно в строке (`SYM_CHAT_7A3F`), агент получил бы читаемую
+        классификацию источников, то есть разметку — а разметки он не получает ни
+        одним каналом (инвариант 4). Откуда пришёл символ, знает наблюдение, которое
+        его несёт, и знает отладочная таблица; сам символ остаётся непрозрачным.
+        """
+        if not isinstance(namespace, Namespace):
+            raise SymbolError(
+                f"пространство имён должно быть Namespace, пришло {namespace!r}. "
+                "Набор закрыт: новый источник — это новое доверие, а не строка")
         norm = normalize(text)
         if not norm:
             raise SymbolError("пустая надпись символом не становится")
@@ -102,15 +191,63 @@ class Symbolizer:
             # непрозрачность её не пропустит, и это правильно — прогон с читаемым
             # текстом обязан быть отличим от обычного на всех уровнях.
             return norm
-        h = hashlib.blake2b(norm.encode("utf-8"), key=self._key, digest_size=8)
-        return "SYM_" + h.hexdigest()[:SYMBOL_DIGITS].upper()
+        h = hashlib.blake2b(norm.encode("utf-8"),
+                            key=self._key + b"|" + str(namespace).encode(),
+                            digest_size=8)  # 8 байт = 16 цифр, потолок ширины
+        return "SYM_" + h.hexdigest()[:self._digits].upper()
 
-    def symbolize_all(self, texts: list[str]) -> list[str]:
-        return [self.symbolize(t) for t in texts]
+    def symbolize_all(self, texts: list[str],
+                      namespace: Namespace = Namespace.WORLD) -> list[str]:
+        return [self.symbolize(t, namespace) for t in texts]
+
+    def source_tag(self, namespace: Namespace) -> str:
+        """Пространство имён → непрозрачная метка источника (`SRC_1A2B`).
+
+        Зачем метка вместо самого имени. Наблюдению нужно нести **что-то**, по чему
+        символы из разных источников не склеиваются в один поток: без этого «осталось
+        3 патрона» с экрана и то же в чате различались бы только доверием, а два
+        источника с равным доверием (мир и интерфейс) не различались бы вовсе.
+
+        Но нести туда слово `chat` нельзя: это готовая классификация источников, то
+        есть разметка, а разметки агент не получает ни одним каналом (инвариант 4).
+        Что «вот эти надписи приходят пачкой и им стоит верить меньше» — вывод,
+        который делается из последствий, а не подсказка на входе. Поэтому наружу
+        уходит метка, непрозрачная так же, как символ, и стабильная в пределах соли;
+        расшифровка — в отладочной таблице.
+        """
+        if not isinstance(namespace, Namespace):
+            raise SymbolError(
+                f"пространство имён должно быть Namespace, пришло {namespace!r}")
+        if not self._enabled:
+            # Ablation: как и `symbolize`, отдаёт читаемое имя. Прогон с читаемым
+            # языком обязан быть отличим от обычного на всех уровнях, а не только
+            # на уровне надписей.
+            return str(namespace)
+        h = hashlib.blake2b(str(namespace).encode("utf-8"),
+                            key=self._key + b"|source", digest_size=8)
+        return "SRC_" + h.hexdigest()[:self._digits].upper()
+
+    def source_tags(self) -> Mapping[str, str]:
+        """Обратная таблица метка → имя источника. **Только для исследователя.**
+
+        Возвращает читаемые имена и поэтому в наблюдение попасть не может: её
+        результат не проходит `assert_no_plain_text`. Пишется в отладочный поток
+        границей восприятия при первой встрече источника.
+        """
+        return {self.source_tag(ns): str(ns) for ns in Namespace}
+
+    @staticmethod
+    def trust(namespace: Namespace) -> float:
+        """Доверие к источнику. Своим глазам — единица, чужим словам — меньше."""
+        return SOURCE_TRUST[namespace]
 
 
 def is_symbol(value: object) -> bool:
     return isinstance(value, str) and bool(SYMBOL_RE.match(value))
+
+
+def is_source_tag(value: object) -> bool:
+    return isinstance(value, str) and bool(SOURCE_RE.match(value))
 
 
 def assert_no_plain_text(payload: object, *, path: str = "") -> None:
@@ -126,7 +263,8 @@ def assert_no_plain_text(payload: object, *, path: str = "") -> None:
     восприятия, но не смысл надписей в ней.
     """
     if isinstance(payload, str):
-        if is_symbol(payload) or re.match(r"^(OUT|MOD|BTN|ENT|PLACE|SND)_[0-9A-F]{2,4}$", payload):
+        if (is_symbol(payload) or is_source_tag(payload)
+                or re.match(r"^(OUT|MOD|BTN|ENT|PLACE|SND)_[0-9A-F]{2,4}$", payload)):
             return
         raise SymbolError(
             f"читаемый текст на пути к агенту{' в ' + path if path else ''}: {payload!r}. "

@@ -1,0 +1,26 @@
+{
+  "n_distinct_captions": 2058,
+  "unit": "различная надпись",
+  "reader": "scripted",
+  "symbolized": 2058,
+  "empty": 0,
+  "distinct_symbols": 2058,
+  "collisions": 0,
+  "digits": 8,
+  "collisions_expected": 0.0005,
+  "collisions_expected_narrow": 32.3,
+  "table_refused": "",
+  "leaks_through_boundary": 0,
+  "leaks_naive_path": 2058,
+  "journal_check": {
+    "boundary": "прошла",
+    "naive": "отказ: читаемый текст на пути к агенту в perception.symbols[0].text: '# ARCHITECTURE.md"
+  },
+  "decryptable": 2058,
+  "debug_text_rows": 2058,
+  "debug_source_rows": 4,
+  "source_names_visible": [],
+  "sources_split": 4,
+  "sources_total": 4,
+  "all_opaque": true
+}

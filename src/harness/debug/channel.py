@@ -103,14 +103,21 @@ class DebugChannel:
                                   separators=(",", ":")) + "\n")
         self._fh.flush()
 
-    def write_symbol(self, symbol: str, text: str, *, salt_id: str) -> None:
-        """Строка таблицы расшифровки: символ → настоящая надпись."""
+    def write_symbol(self, symbol: str, text: str, *, salt_id: str,
+                     kind: str = "text") -> None:
+        """Строка таблицы расшифровки: непрозрачный токен → настоящая строка.
+
+        `kind` отличает надпись (`text`) от метки источника (`source`). Обе
+        расшифровываются одинаково и лежат в одном файле, потому что это одна и та
+        же сущность — таблица расшифровки, — но исследователю нужно уметь спросить
+        «покажи только надписи», не угадывая по префиксу токена.
+        """
         if self.mode != "a":
             raise DebugChannelError("поток открыт только на чтение")
         if not self.enabled:
             return
         self._sym_fh.write(json.dumps(
-            {"symbol": symbol, "text": text, "salt_id": salt_id},
+            {"symbol": symbol, "text": text, "salt_id": salt_id, "kind": kind},
             ensure_ascii=False, sort_keys=True, separators=(",", ":")) + "\n")
         self._sym_fh.flush()
 
