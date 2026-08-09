@@ -668,9 +668,20 @@ def probe_chooser(profile: Profile) -> Callable[..., tuple[str, int]]:
     и любое сравнение по нему станет сравнением двух разных экспериментов.
     """
     share = float(profile.structural["explore_closing_share"])
-    if share <= 0.0:
-        return choose_probe
     bar = int(profile.parameters["explore_close_degree_bar"])
+    if share <= 0.0:
+        # Обёртка, а не сам `choose_probe`: у него нет параметра `graph`, и без
+        # обёртки функция возвращала бы разные подписи в зависимости от значения
+        # ручки. Вызывающему пришлось бы знать, какая ручка стоит в профиле, — то
+        # есть ровно то, от чего его избавляет эта функция. Замер кривой баланса на
+        # это и наступил на первом же прогоне.
+        def deep_only(model: ForwardModel, graph: Any, place: str | None,
+                      outputs: Sequence[str], **kw: Any) -> tuple[str, int]:
+            deep_only.counts["deep"] += 1        # type: ignore[attr-defined]
+            return choose_probe(model, place, outputs, **kw)
+
+        deep_only.counts = {"credit": 0.0, "closing": 0, "deep": 0}  # type: ignore[attr-defined]
+        return deep_only
     # Доля отрабатывается счётчиком, а не случайностью: прогон обязан
     # воспроизводиться от сида, и кривая баланса не должна зависеть от того, какому
     # генератору достался этот вызов. Накопитель тот же, что у темпа лепета.
