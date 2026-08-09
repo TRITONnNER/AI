@@ -18,11 +18,19 @@ from .base import AudioBlock, BackendUnavailable, Frame, to_gray
 
 
 class ScreenCapture:
-    """Захват области экрана через mss (X11) — Linux.
+    """Захват области экрана через mss. Работает на X11, Windows и macOS.
 
     В CLAUDE.md для Windows предложен dxcam (Desktop Duplication), для macOS —
-    ScreenCaptureKit. Ниже отдельные классы; каждый честно сообщает, что он
-    не реализован, вместо того чтобы делать вид, что работает.
+    ScreenCaptureKit. Они быстрее и остаются отдельными классами, каждый из которых
+    честно сообщает, что не реализован. Но mss кроссплатформенна, и раньше её здесь
+    запирал на Linux не механизм, а проверка переменных окружения: `DISPLAY` на
+    Windows не выставлен никогда. Из-за одной строки проверки оператор с Windows или
+    macOS не мог записать ничего, хотя рабочий путь был на месте.
+
+    **Wayland отказывается, а не пробуется.** Под Wayland mss либо видит только окна
+    XWayland, либо отдаёт чёрный кадр, и второе выглядит как успешная запись. Разница
+    между «отказался» и «записал мусор» — это разница между потерянной минутой и
+    потерянным днём разбирательств, почему живые числа не похожи ни на что.
     """
 
     name = "screen_mss"
@@ -36,19 +44,27 @@ class ScreenCapture:
         self._t_world = 0
 
     def start(self) -> None:
+        from ..machine import Session, detect, install_capture, switch_to_x11
+
+        machine = detect()
+        if machine.session is Session.NONE:
+            raise BackendUnavailable(
+                "графической сессии нет: захватывать нечего "
+                f"({machine.session_source}). Запускайте на машине с экраном; "
+                "по ssh без проброса X это не работает")
+        if machine.session is Session.WAYLAND:
+            raise BackendUnavailable(
+                "сеанс Wayland: захвата под него в проекте нет. Нужен PipeWire с "
+                "портальным разрешением, и этот backend не написан. mss под Wayland "
+                "отдала бы чёрный кадр или только окна XWayland — то есть запись, "
+                "неотличимую по формату от настоящей и мусорную по содержанию. "
+                f"Что делать: {switch_to_x11()}")
         try:
             import mss  # noqa: PLC0415 — импорт по требованию: это платформенная зависимость
         except ImportError as e:
             raise BackendUnavailable(
-                "нет пакета mss. Поставьте: pip install 'harness[linux]' "
-                "или pip install mss"
+                f"нет пакета mss. Поставьте: {install_capture(machine)}"
             ) from e
-        import os
-        if not (os.environ.get("DISPLAY") or os.environ.get("WAYLAND_DISPLAY")):
-            raise BackendUnavailable(
-                "нет ни DISPLAY, ни WAYLAND_DISPLAY: захватывать нечего. "
-                "Запускайте на машине с графической сессией"
-            )
         self._sct = mss.mss()
         if self.region is None:
             self._monitor = self._sct.monitors[1]

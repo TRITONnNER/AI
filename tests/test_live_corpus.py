@@ -63,8 +63,18 @@ def test_unknown_kind_is_refused_with_the_closed_list(tmp_path: Path) -> None:
     src = _record(tmp_path / "demo", synthetic=False)
     with pytest.raises(LiveError, match="Набор закрыт"):
         ingest(src, tmp_path / "corpus", kind="что-нибудь")
-    assert set(KINDS) == {"stillness", "camera_only", "play", "menu", "death",
+    # Набор закрыт, но не заморожен: TASK-07 добавил три вида, которым игра не
+    # нужна, — прокрутку, видео и перетаскивание окон. Проверяется закрытость, а не
+    # конкретный список: **каждый** объявленный вид обязан входить хотя бы в один
+    # набор записи, иначе он объявлен и никем не записывается.
+    from harness.corpus.live import SETS
+
+    assert set(KINDS) >= {"stillness", "camera_only", "play", "menu", "death",
                           "unfamiliar"}
+    in_sets = {k for spec in SETS.values() for k in spec["kinds"]}
+    assert in_sets == set(KINDS), (
+        f"виды вне наборов: {set(KINDS) - in_sets}. Вид, которого нет ни в одном "
+        "наборе, никто не запишет")
 
 
 def test_recording_without_human_layer_is_warned_not_refused(tmp_path: Path) -> None:
@@ -188,11 +198,22 @@ def test_nothing_to_compare_says_so(tmp_path: Path) -> None:
     assert "единственный честный ответ" in cmp["verdict"]
 
 
-def test_plan_names_all_six_recordings() -> None:
-    text = plan_text()
-    for name, k in KINDS.items():
-        assert name in text and k["title"] in text and k["duration"] in text
-    assert "harness mark" in text, "без разметки IoU не посчитается — это надо сказать"
+def test_plan_names_every_recording_of_its_set() -> None:
+    """План печатает свой набор целиком. Наборов два, и по умолчанию минимальный.
+
+    Прежняя редакция теста требовала все шесть видов в одном выводе. Это перестало
+    быть верным по замыслу: план по умолчанию печатает минимальный набор, потому что
+    план, первой строкой требующий установить игру, откладывается на выходные.
+    """
+    from harness.corpus.live import SETS
+
+    for set_name, spec in SETS.items():
+        text = plan_text(set_name)
+        for name in spec["kinds"]:
+            k = KINDS[name]
+            assert name in text and k["title"] in text and k["duration"] in text
+        assert "harness mark" in text, (
+            "без разметки IoU не посчитается — это надо сказать в каждом наборе")
 
 
 def test_truth_mask_is_built_from_rectangles() -> None:

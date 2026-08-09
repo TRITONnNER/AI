@@ -99,17 +99,23 @@ def describe_backends() -> dict[str, dict[str, object]]:
     def has(mod: str) -> bool:
         return importlib.util.find_spec(mod) is not None
 
+    from ..machine import Session, detect
+
     system = platform.system()
-    display = bool(os.environ.get("DISPLAY") or os.environ.get("WAYLAND_DISPLAY"))
+    machine = detect()
+    # Реестр отвечает по тому же знанию, что и сам backend (`harness.machine`).
+    # Раньше здесь была своя копия проверки, и она уже расходилась с backend'ом:
+    # реестр считал Wayland годным, backend на нём отдавал бы чёрный кадр.
+    display = machine.session is not Session.NONE
     return {
         "synthetic": {"available": True,
                       "why": "не требует ничего; помечает записи как синтетические"},
         "replay": {"available": True, "why": "читает записанную сессию с диска"},
         "screen_mss": {
-            "available": system == "Linux" and has("mss") and display,
-            "why": f"нужны Linux + пакет mss + DISPLAY/WAYLAND_DISPLAY "
-                   f"(система {system}, mss {'есть' if has('mss') else 'нет'}, "
-                   f"дисплей {'есть' if display else 'нет'})",
+            "available": machine.capture_backend == "screen_mss" and has("mss"),
+            "why": f"нужны графическая сессия (не Wayland) и пакет mss "
+                   f"(система {machine.os_name}, сессия {machine.session}, "
+                   f"mss {'есть' if has('mss') else 'нет'})",
         },
         "screen_dxcam": {
             "available": system == "Windows" and has("dxcam"),

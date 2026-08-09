@@ -82,7 +82,8 @@ class Recorder:
     def __init__(self, root: str | Path, *, profile: Profile, source: str,
                  synthetic: bool, note: str | None = None,
                  governor: "ResourceGovernor | None" = None,
-                 devices: Any = None, check_resources_every: int = 30) -> None:
+                 devices: Any = None, check_resources_every: int = 30,
+                 lineage_id: str = "") -> None:
         from . import __version__
 
         self.root = Path(root)
@@ -97,8 +98,13 @@ class Recorder:
         (self.root / SESSION_META).write_text(
             json.dumps(meta.as_dict(), ensure_ascii=False, indent=2, sort_keys=True) + "\n",
             encoding="utf-8")
+        # Линия объявляется при создании и потом неизменна (`BranchMeta` frozen).
+        # Пустая линия у живой записи была бы неверной по существу: запись с чужой
+        # машины — это отдельная линия по построению, а пустое поле означает «про
+        # линию ничего не сказано», и от «своя линия» это неотличимо.
         self.journal = Journal.create(self.root / "journal", profile,
-                                      reason=f"новая сессия, источник {source}")
+                                      reason=f"новая сессия, источник {source}",
+                                      lineage_id=lineage_id)
 
         p = profile.parameters
         self.frames = FrameStore(self.root / "frames", mode="a",
@@ -133,7 +139,8 @@ class Recorder:
                      audio_offset_ms: float = 0.0,
                      actor: Actor = Actor.NONE,
                      actor_layer: ActorLayer = ActorLayer.NONE,
-                     state: StateSnapshot | None = None) -> Entry | None:
+                     state: StateSnapshot | None = None,
+                     wall_clock: float | None = None) -> Entry | None:
         """Кадр (и, если есть, синхронный блок звука) как одна запись журнала.
 
         Возвращает `None`, если ограничитель ресурсов отказал в записи: место или
@@ -190,9 +197,13 @@ class Recorder:
         self._frames_written += 1
         # Кадр не начат никаким контуром: он приходит от источника, а не от
         # решения. Поэтому слой none, и это выбранное значение, а не пропущенное.
+        # `wall_clock` передаётся насквозь и по умолчанию не задаётся: системные
+        # часы ставит сам журнал (`Journal.append`). Явное значение нужно ровно для
+        # одного — изготовить запись «с чужой машины», у которой часы идут иначе:
+        # взять такую запись негде, а проверить приём чужих записей без неё нельзя.
         return self.journal.append(EntryKind.FRAME, stamp, actor, actor_layer,
                                    frame=frame_ref, audio=audio_ref, event=event,
-                                   state=state)
+                                   state=state, wall_clock=wall_clock)
 
     def record_gap(self, code: str, detail: dict[str, Any]) -> Entry:
         """Пропуск кадров, рассинхрон, отвал источника. Молчать об этом нельзя."""

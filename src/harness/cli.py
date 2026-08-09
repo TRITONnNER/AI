@@ -708,15 +708,25 @@ def cmd_record(args: argparse.Namespace) -> int:
     кадры не начаты никем.
     """
     from .capture.base import BackendUnavailable
-    from .capture.screen import ScreenCapture
+    from .capture.screen import AudioOverflow, ScreenCapture
     from .core.journal import Actor, ActorLayer
     from .core.profile import MILESTONE_0
     from .corpus.live import plan_text
     from .session import Recorder
 
     if args.plan:
-        print(plan_text())
+        print(plan_text(getattr(args, "plan_set", "minimal")))
         return 0
+
+    # Секунды переводятся в кадры здесь, а не оператором в голове.
+    frames = args.frames
+    if frames is None:
+        seconds = args.seconds if args.seconds is not None else 10.0
+        frames = max(1, int(seconds * float(MILESTONE_0.parameters["capture_fps"])))
+        print(f"{seconds:g} с при {MILESTONE_0.parameters['capture_fps']:g} кадр/с "
+              f"= {frames} кадров")
+    elif args.seconds is not None:
+        print("указаны и --frames, и --seconds; беру --frames", file=sys.stderr)
 
     human = args.actor == "human"
     actor = Actor.HUMAN if human else Actor.NONE
@@ -727,27 +737,124 @@ def cmd_record(args: argparse.Namespace) -> int:
         cap.start()
     except BackendUnavailable as e:
         print(f"захват недоступен: {e}", file=sys.stderr)
-        print("\nчто доступно:", file=sys.stderr)
-        cmd_backends(args)
+        # Не список backend'ов, а имя команды, которая скажет, что делать: список
+        # отвечает «чего нет», а оператору нужно «что ввести».
+        print("\nЧто именно чинить и какой командой: harness doctor",
+              file=sys.stderr)
         return 2
 
+    # Линия записи оператора выводится из его машины, а не берётся у контейнера:
+    # экран, оператор и часы здесь другие, и это отдельная линия по построению.
+    from .core.lineage import lineage_id
+    from .machine import detect
+
+    machine = detect()
+    lid = lineage_id(MILESTONE_0, seed=None,
+                     note=f"живая запись: {machine.os_name}/{machine.session}")
+
+    # Звук: пишется, если петлевой вход открылся, и **не блокирует**, если нет.
+    # Молча его пропускать нельзя — доктор велел оператору настроить стерео, и
+    # запись без звука после этого выглядела бы как выполненная настройка.
+    audio_src = None
+    audio_note = "без звука"
+    if not args.no_audio:
+        from .capture.screen import LoopbackAudio
+
+        try:
+            audio_src = LoopbackAudio(
+                rate=int(MILESTONE_0.parameters["audio_rate"]),
+                channels=int(MILESTONE_0.structural["audio_channels"]),
+                block_ms=float(MILESTONE_0.parameters["audio_block_ms"]),
+                device=args.audio_device)
+            audio_src.start()
+            audio_note = "со звуком"
+        except Exception as e:                 # sounddevice бросает своё
+            audio_src = None
+            audio_note = f"без звука ({e})"
+            print(f"звук не пишется: {e}", file=sys.stderr)
+            print("это не мешает записи; настроить вход поможет harness doctor",
+                  file=sys.stderr)
+
     written = 0
+    audio_blocks = 0
     try:
         with Recorder(args.path, profile=MILESTONE_0, source=cap.name,
-                      synthetic=False, note=args.note) as rec:
-            while written < args.frames:
+                      synthetic=False, note=args.note, lineage_id=lid) as rec:
+            while written < frames:
                 frame = cap.read()
                 if frame is None:
                     rec.record_gap("source_ended", {"after_frames": written})
                     break
+                block = None
+                if audio_src is not None:
+                    try:
+                        got = audio_src.read()
+                        block = None if got is None else got.samples
+                    except AudioOverflow as over:
+                        # Переполнение — разрыв синхронизации, и он идёт в журнал.
+                        block = over.block.samples
+                        rec.record_gap("audio_overflow", {"after_frames": written})
+                    except Exception as e:
+                        rec.record_gap("audio_failed", {"after_frames": written,
+                                                        "reason": str(e)[:120]})
+                        audio_src = None
+                if block is not None:
+                    audio_blocks += 1
                 rec.record_frame(frame.image, t_world=frame.t_world,
-                                 actor=actor, actor_layer=layer)
+                                 audio=block, actor=actor, actor_layer=layer)
                 written += 1
     finally:
         cap.stop()
-    print(f"записано кадров: {written} → {args.path}")
-    print(f"слой-инициатор: {layer}. Дальше: harness ingest {args.path} --kind ВИД")
+        if audio_src is not None:
+            audio_src.stop()
+    print(f"записано кадров: {written} → {args.path} ({audio_note})")
+    if audio_blocks:
+        print(f"блоков звука: {audio_blocks}")
+    print(f"слой-инициатор: {layer}, линия {lid} (своя, не контейнерная)")
+    corpus = Path(args.path).resolve().parent / "corpus"
+    print(f"Дальше: harness ingest {args.path} --corpus {corpus} --kind ВИД")
+    print(f"        какие бывают виды: harness ingest --list")
     return 0
+
+
+def cmd_doctor(args: argparse.Namespace) -> int:
+    """Осмотр машины. Код возврата: 0 — записывать можно, 1 — нельзя.
+
+    Ненулевой код именно при «нельзя», а не при ошибке самой команды: по нему можно
+    поставить проверку в сценарий, и «машина не готова» будет отличимо от «команда
+    сломалась» (для второго кода 2, как у остальных).
+    """
+    from . import doctor
+
+    rep = doctor.run(path=args.path)
+    if args.json:
+        _print_json(rep.as_dict())
+    else:
+        print(rep.render_text())
+    return 0 if rep.can_record else 1
+
+
+def cmd_selftest(args: argparse.Namespace) -> int:
+    """Десять секунд захвата и проверка результата. 0 — всё прошло, 1 — сломалось."""
+    import tempfile
+
+    from . import selftest
+
+    root = args.path
+    tmp = None
+    if root is None:
+        tmp = tempfile.mkdtemp(prefix="harness-selftest-")
+        root = Path(tmp) / "session"
+    res = selftest.run(Path(root), seconds=args.seconds,
+                       with_audio=not args.no_audio)
+    if args.json:
+        _print_json(res.as_dict())
+    else:
+        print(res.render_text())
+        if tmp and res.ok:
+            print(f"\nПробная запись во временном каталоге: {root}\n"
+                  f"Её можно удалить: rm -rf {tmp}")
+    return 0 if res.ok else 1
 
 
 def cmd_ingest(args: argparse.Namespace) -> int:
@@ -834,7 +941,13 @@ def cmd_bench_live(args: argparse.Namespace) -> int:
     return 0
 
 
-def main(argv: list[str] | None = None) -> int:
+def build_parser() -> argparse.ArgumentParser:
+    """Разбор аргументов отдельно от запуска: иначе список команд не проверить.
+
+    Нужно для теста, который сверяет `SETUP.md` с действительностью: документ,
+    обещающий несуществующую команду, отправляет оператора читать код — то есть
+    делает ровно то, от чего этот документ должен избавлять.
+    """
     ap = argparse.ArgumentParser(prog="harness", description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = ap.add_subparsers(dest="cmd", required=True)
@@ -941,13 +1054,42 @@ def main(argv: list[str] | None = None) -> int:
 
     rec = sub.add_parser("record", help="запись с живого экрана")
     rec.add_argument("path", type=Path, nargs="?", default=Path("."))
-    rec.add_argument("--frames", type=int, default=300)
+    rec.add_argument("--frames", type=int, default=None,
+                     help="сколько кадров; по умолчанию считается из --seconds")
+    # Секунды, а не только кадры: «3 мин» приходилось умножать на частоту в голове,
+    # и это ровно то место, где человек ошибается на порядок и получает запись на
+    # четыре секунды вместо трёх минут.
+    rec.add_argument("--seconds", type=float, default=None,
+                     help="сколько секунд записывать (удобнее, чем кадры)")
     rec.add_argument("--note", default=None)
     rec.add_argument("--actor", choices=("human", "none"), default="none",
                      help="кто действует: human для демонстрации оператором")
     rec.add_argument("--plan", action="store_true",
                      help="только напечатать, что записать, и ничего не писать")
+    rec.add_argument("--set", dest="plan_set", default="minimal",
+                     choices=("minimal", "full"),
+                     help="какой набор записей печатать при --plan: minimal без "
+                          "игры (по умолчанию) или full с игрой")
+    rec.add_argument("--audio-device", default=None,
+                     help="петлевое устройство звука; harness doctor покажет, какое")
+    rec.add_argument("--no-audio", action="store_true",
+                     help="не писать звук вовсе (записи он не блокирует)")
     rec.set_defaults(fn=cmd_record)
+
+    doc = sub.add_parser("doctor", help="что на этой машине мешает записывать")
+    doc.add_argument("--path", type=Path, default=None,
+                     help="куда собираетесь писать: по нему считается место")
+    doc.add_argument("--json", action="store_true")
+    doc.set_defaults(fn=cmd_doctor)
+
+    st = sub.add_parser("selftest", help="десять секунд захвата с проверкой результата")
+    st.add_argument("path", type=Path, nargs="?", default=None,
+                    help="куда положить пробную запись; по умолчанию во временный каталог")
+    st.add_argument("--seconds", type=float, default=10.0)
+    st.add_argument("--no-audio", action="store_true",
+                    help="без звука: он записи не блокирует")
+    st.add_argument("--json", action="store_true")
+    st.set_defaults(fn=cmd_selftest)
 
     ing = sub.add_parser("ingest", help="принять запись с чужой машины в корпус")
     ing.add_argument("path", type=Path, nargs="?", default=Path("."))
@@ -979,7 +1121,11 @@ def main(argv: list[str] | None = None) -> int:
     bl.add_argument("--json", action="store_true")
     bl.set_defaults(fn=cmd_bench_live)
 
-    args = ap.parse_args(argv)
+    return ap
+
+
+def main(argv: list[str] | None = None) -> int:
+    args = build_parser().parse_args(argv)
     return int(args.fn(args))
 
 
