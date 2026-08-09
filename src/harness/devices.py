@@ -34,7 +34,7 @@ from typing import Any, Iterable, Sequence
 import numpy as np
 
 from .core.clocks import Stamp
-from .core.journal import Actor, Journal, Kind as EntryKind
+from .core.journal import Actor, ActorLayer, Journal, Kind as EntryKind
 
 SCOPES = ("device", "app", "profile", "window")
 
@@ -192,7 +192,7 @@ class Registry:
                 f"видимых источников стало больше предела {self.max_sources}; "
                 "поднимите device_max_sources в профиле")
         if self.journal is not None and stamp is not None and before != (d.see, d.control):
-            self.journal.append(EntryKind.DEVICE, stamp, Actor.HUMAN,
+            self.journal.append(EntryKind.DEVICE, stamp, Actor.HUMAN, ActorLayer.HUMAN,
                                 event={"code": "rights", "device": d.id,
                                        "see": d.see, "control": d.control,
                                        "was_see": before[0], "was_control": before[1],
@@ -203,7 +203,8 @@ class Registry:
         return d
 
     def switch(self, device_id: str, stamp: Stamp | None = None, *,
-               actor: Actor = Actor.AGENT) -> Device:
+               actor: Actor = Actor.AGENT,
+               actor_layer: ActorLayer = ActorLayer.NONE) -> Device:
         """Перевести фокус на источник.
 
         При `switch_is_action` это действие агента и пишется от его имени: он сам
@@ -215,11 +216,16 @@ class Registry:
             raise DeviceError(f"{device_id} не виден: переключаться некуда")
         was, self.active = self.active, d.id
         if self.journal is not None and stamp is not None and was != d.id:
+            # Когда переключение — действие агента, слой приходит от того, кто
+            # переключил: посмотреть в другое место может решить и планировщик, и
+            # драйв. Когда это настройка снаружи, инициатор — человек.
             self.journal.append(
                 EntryKind.DEVICE, stamp,
                 actor if self.switch_is_action else Actor.HUMAN,
+                actor_layer if self.switch_is_action else ActorLayer.HUMAN,
                 event={"code": "switch", "device": d.id, "was": was,
-                       "as_action": self.switch_is_action})
+                       "as_action": self.switch_is_action,
+                       "actor_layer": str(actor_layer)})
         return d
 
     # --- кадр ---------------------------------------------------------------

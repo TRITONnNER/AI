@@ -30,7 +30,7 @@ from pathlib import Path
 from typing import Callable, Protocol, runtime_checkable
 
 from .clocks import Stamp
-from .journal import Actor, Journal, Kind as EntryKind
+from .journal import Actor, ActorLayer, Journal, Kind as EntryKind
 from .profile import Profile
 
 # Что именно упёрлось. Набор закрыт: новый вид предела — это новая настройка в
@@ -46,6 +46,14 @@ BREACH_MODEL_RATE = "model_rate"
 OP_FRAME = "frame"          # записать кадр
 OP_MODEL = "model_call"     # обратиться к большой модели
 OP_BELIEF = "belief"        # завести карточку
+OP_TRACE = "trace"          # дописать причинную запись — нулевой уровень
+OP_SEGMENT = "segment"      # положить сегмент уровней 1–3
+
+# Какой уровень журнала затрагивает операция. Нужно затем, чтобы отказ по месту
+# был отказом **по уровням 1–3**, а нулевой уровень не отказывался никогда: он в
+# отдельном резерве, и при его исчерпании система останавливает запись и сообщает,
+# а не чистит (`STORAGE.md`, раздел 2).
+OP_LEVEL = {OP_FRAME: 2, OP_SEGMENT: 1, OP_TRACE: 0}
 
 
 class ResourceError(RuntimeError):
@@ -243,7 +251,7 @@ class ResourceGovernor:
             return
         self._seen.add(breach.code)
         self.journal.append(EntryKind.RESOURCE, stamp, Actor.NONE,
-                            event={"code": breach.code, **breach.as_dict()})
+                            ActorLayer.INTERRUPT, event={"code": breach.code, **breach.as_dict()})
 
     def forget_breach(self, code: str) -> None:
         """Разрешить снова сообщить об этом упоре — после того, как отпустило."""
@@ -252,7 +260,19 @@ class ResourceGovernor:
     # --- разрешения ---------------------------------------------------------
 
     def admit(self, op: str) -> Admission:
-        """Можно ли выполнить операцию прямо сейчас."""
+        """Можно ли выполнить операцию прямо сейчас.
+
+        Нулевой уровень пропускается **всегда**, и это не поблажка, а инвариант 14:
+        нехватка места никогда не запускает удаление следа и никогда не мешает его
+        дописать. Отказ по месту относится к уровням 1–3, то есть к сенсорной
+        роскоши. Резерв нулевого уровня выделен отдельно и в потолок не входит;
+        когда кончится он, система останавливает запись и сообщает — но не чистит,
+        и делается это не здесь.
+        """
+        if OP_LEVEL.get(op) == 0:
+            return Admission(True)
+        if op == OP_SEGMENT and self._refuse_frames:
+            return Admission(False, self._refuse_frames)
         if op == OP_FRAME and self._refuse_frames:
             return Admission(False, self._refuse_frames)
         if op == OP_MODEL and self._refuse_model:

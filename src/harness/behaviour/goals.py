@@ -34,7 +34,7 @@ from enum import StrEnum
 from typing import Any, Callable, Iterable
 
 from ..core.clocks import Stamp
-from ..core.journal import Actor, Journal, Kind as EntryKind
+from ..core.journal import Actor, ActorLayer, Journal, Kind as EntryKind
 from ..core.profile import Profile
 from ..model.beliefs import Origin, Provenance
 from ..model.drives import Motivation
@@ -272,6 +272,7 @@ class GoalStack:
         self.rejected += 1
         if self.journal is not None and stamp is not None:
             self.journal.append(EntryKind.INTERVENTION, stamp, Actor.HUMAN,
+                                ActorLayer.HUMAN,
                                 event={"code": "goal_rejected", "goal": goal.id,
                                        "kind": goal.kind, "reason": reason})
         self._promote(stamp)
@@ -285,7 +286,12 @@ class GoalStack:
         if reason:
             event["reason"] = reason
         event.pop("test", None)         # текст теста — для исследователя, не для журнала
-        self.journal.append(EntryKind.GOAL, stamp, Actor.AGENT, event=event)
+        # Переход цели начинает контур драйвов: цель существует потому, что
+        # какой-то драйв вне коридора, и никакой другой слой её не заводит.
+        # Забракованная исследователем цель пишется отдельным вызовом со слоем
+        # human — там инициатор действительно другой.
+        self.journal.append(EntryKind.GOAL, stamp, Actor.AGENT, ActorLayer.DRIVE,
+                            event=event)
 
     # --- сводка -------------------------------------------------------------
 

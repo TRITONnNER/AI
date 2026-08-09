@@ -24,7 +24,7 @@ from typing import Callable, Protocol, runtime_checkable
 
 from ..core.action import Action, Kind
 from ..core.clocks import Stamp
-from ..core.journal import Actor, Journal, Kind as EntryKind
+from ..core.journal import Actor, ActorLayer, Journal, Kind as EntryKind
 
 
 class InjectionUnavailable(RuntimeError):
@@ -162,24 +162,32 @@ class Injector:
         self.stop = stop
         self.actor = actor
 
-    def submit(self, action: Action, stamp: Stamp, *, scope: str = "window") -> Outcome:
+    def submit(self, action: Action, stamp: Stamp, actor_layer: ActorLayer, *,
+               scope: str = "window") -> Outcome:
+        """Доставить действие. `actor_layer` — какой контур его начал.
+
+        Слой обязателен и приходит снаружи, потому что здесь его знать неоткуда:
+        инъекция видит `(key, duration_ms, modifiers)` и не видит, кто решил. Вывести
+        его тут по косвенным признакам значило бы угадывать инициатора, а метрика
+        конфабуляции считается ровно по разнице между заявленным и настоящим.
+        """
         outputs = list(action.outputs_touched())
 
         # 1. СТОП. Проверяется первым: он важнее всего остального.
         if self.stop is not None and self.stop.is_engaged:
-            return self._record(action, stamp, Outcome(
+            return self._record(action, stamp, actor_layer, Outcome(
                 False, True, True, f"stop:{self.stop.reason or 'engaged'}", 0.0))
 
         # 2. Маска ввода. Заглушённая попытка пишется в журнал наравне с дошедшей.
         if self.mask is not None:
             blocked = self.mask.blocked_outputs(outputs, scope=scope)
             if blocked:
-                return self._record(action, stamp, Outcome(
+                return self._record(action, stamp, actor_layer, Outcome(
                     False, True, False, f"mask:{scope}:{','.join(sorted(blocked))}", 0.0))
 
         # 3. Устройство.
         if isinstance(self.sink.device, NullDevice):
-            return self._record(action, stamp, Outcome(
+            return self._record(action, stamp, actor_layer, Outcome(
                 False, False, False, "no_device", 0.0))
 
         abort = (lambda: self.stop.is_engaged) if self.stop is not None else (lambda: False)
@@ -192,15 +200,16 @@ class Injector:
             completed, latency = self.sink.hold(outputs, action.duration_ms, abort)
 
         stopped = not completed
-        return self._record(action, stamp, Outcome(
+        return self._record(action, stamp, actor_layer, Outcome(
             completed, False, stopped,
             None if completed else f"stop:{getattr(self.stop, 'reason', None) or 'aborted'}",
             latency))
 
-    def _record(self, action: Action, stamp: Stamp, outcome: Outcome) -> Outcome:
+    def _record(self, action: Action, stamp: Stamp, actor_layer: ActorLayer,
+                outcome: Outcome) -> Outcome:
         recorded = action.masked_as(outcome.reason) if outcome.masked else action
         self.journal.append(
-            EntryKind.ACTION, stamp, self.actor, action=recorded,
+            EntryKind.ACTION, stamp, self.actor, actor_layer, action=recorded,
             event={"code": outcome.code, "reason": outcome.reason,
                    "latency_ms": round(outcome.latency_ms, 3), "device": self.sink.name},
         )

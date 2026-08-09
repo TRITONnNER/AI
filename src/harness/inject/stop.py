@@ -25,7 +25,7 @@ import threading
 from typing import Callable
 
 from ..core.clocks import Stamp
-from ..core.journal import Actor, Journal, Kind as EntryKind
+from ..core.journal import Actor, ActorLayer, Journal, Kind as EntryKind
 
 
 class StopSwitch:
@@ -47,19 +47,27 @@ class StopSwitch:
         return self._reason
 
     def engage(self, reason: str, stamp: Stamp | None = None, *,
-               actor: Actor = Actor.HUMAN) -> None:
-        """Оборвать инъекцию. Повторный вызов не считается новым событием."""
+               actor: Actor = Actor.HUMAN,
+               actor_layer: ActorLayer = ActorLayer.HUMAN) -> None:
+        """Оборвать инъекцию. Повторный вызов не считается новым событием.
+
+        Слой по умолчанию human, потому что обычный СТОП жмёт человек. Сторож
+        передаёт `actor=NONE, actor_layer=INTERRUPT`: он не человек, и записывать
+        его срабатывание как чьё-то решение нельзя — иначе доля вмешательств
+        человека в журнале окажется завышенной ровно на число отвалов машины.
+        """
         with self._lock:
             if self._event.is_set():
                 return
             self._reason = reason
             self._event.set()
         if self._journal is not None and stamp is not None:
-            self._journal.append(EntryKind.STOP, stamp, actor,
+            self._journal.append(EntryKind.STOP, stamp, actor, actor_layer,
                                  event={"code": "stop", "reason": reason})
         self._notify()
 
-    def release(self, stamp: Stamp | None = None, *, actor: Actor = Actor.HUMAN) -> None:
+    def release(self, stamp: Stamp | None = None, *, actor: Actor = Actor.HUMAN,
+                actor_layer: ActorLayer = ActorLayer.HUMAN) -> None:
         with self._lock:
             if not self._event.is_set():
                 return
@@ -67,7 +75,7 @@ class StopSwitch:
             self._reason = None
             self._event.clear()
         if self._journal is not None and stamp is not None:
-            self._journal.append(EntryKind.RESUME, stamp, actor,
+            self._journal.append(EntryKind.RESUME, stamp, actor, actor_layer,
                                  event={"code": "resume", "after": was})
         self._notify()
 

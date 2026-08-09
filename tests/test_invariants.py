@@ -20,7 +20,8 @@ import pytest
 
 from harness.core.action import Action, ActionError, Reversibility
 from harness.core.clocks import ClockError, Clocks, Stamp
-from harness.core.journal import Actor, Journal, JournalError, Kind, TamperError
+from harness.core.journal import (Actor, ActorLayer, FormatError, Journal,
+                                  JournalError, Kind, TamperError)
 from harness.core.profile import MILESTONE_0, Profile, ProfileError
 from harness.core.symbols import SymbolError, Symbolizer, is_symbol
 from harness.session import Recorder, Session
@@ -106,7 +107,8 @@ def test_invariant_2_entry_without_stamp_is_impossible(tmp_path: Path) -> None:
     with Recorder(tmp_path / "s", profile=MILESTONE_0, source="test",
                   synthetic=True) as rec:
         with pytest.raises(JournalError, match="без трёх часов"):
-            rec.journal.append(Kind.NOTE, None, Actor.NONE)  # type: ignore[arg-type]
+            rec.journal.append(Kind.NOTE, None, Actor.HUMAN,  # type: ignore[arg-type]
+                               ActorLayer.HUMAN)
 
 
 def test_invariant_2_t_content_may_be_none() -> None:
@@ -138,7 +140,8 @@ def test_invariant_3_stop_does_not_pause_journal(tmp_path: Path) -> None:
                        stop=stop)
         rec.record_frame(np.zeros((8, 8), dtype=np.uint8))
         stop.engage("тест", rec.clocks.stamp())
-        out = inj.submit(Action.key("OUT_0A11", 100), rec.clocks.stamp())
+        out = inj.submit(Action.key("OUT_0A11", 100), rec.clocks.stamp(),
+                         ActorLayer.REFLEX)
         assert out.stopped and not out.delivered
         # мир идёт: кадры продолжают писаться после стопа
         rec.record_frame(np.ones((8, 8), dtype=np.uint8))
@@ -582,3 +585,117 @@ def test_invariant_12_debug_stream_is_separate_file(corpus: Path) -> None:
     assert (corpus / "debug" / "symbols.jsonl").exists()
     journal_files = list((corpus / "journal").rglob("*"))
     assert not any("truth" in p.name for p in journal_files)
+
+
+# --- инвариант 13: у каждой записи есть слой-инициатор ----------------------
+
+
+def test_invariant_13_no_entry_without_actor_layer(tmp_path: Path) -> None:
+    """Ни одной записи без `actor_layer`, и проверяется это типом.
+
+    Инвариант 13 из `CLAUDE.md` и строка «Ни одной записи без actor_layer» из
+    таблицы тестов инвариантов в `ARCHITECTURE.md`. Реализован подписью
+    `Journal.append`: аргумент позиционный и без значения по умолчанию, поэтому
+    вызов без него не собирается. Значение `none` законно, но выбирается вслух —
+    иначе «не заполнили» стало бы неотличимо от «начато ничем», и метрика
+    конфабуляции считалась бы по записям, про которые никто ничего не заявлял.
+    """
+    from harness.core.profile import MILESTONE_0
+    from harness.session import Recorder, Session
+
+    with Recorder(tmp_path / "s", profile=MILESTONE_0, source="t",
+                  synthetic=True) as rec:
+        with pytest.raises(TypeError, match="actor_layer"):
+            rec.journal.append(Kind.NOTE, rec.clocks.stamp(), Actor.HUMAN)  # type: ignore[call-arg]
+        rec.record_note("с указанным слоем")
+
+    with Session.open(tmp_path / "s") as s:
+        entries = list(s.journal)
+    assert entries
+    assert all(isinstance(e.actor_layer, ActorLayer) for e in entries)
+
+
+def test_invariant_13_confabulation_is_measured_not_prevented(tmp_path: Path) -> None:
+    """Конфабуляция не чинится, а измеряется — и модуль для этого существует.
+
+    Проверяется именно наличие числа: инвариант требует измеримости, а не нуля.
+    """
+    from harness.core.profile import MILESTONE_0
+    from harness.core.journal import StateSnapshot
+    from harness.model.confabulation import journal_reason, measure
+    from harness.session import Recorder, Session
+
+    with Recorder(tmp_path / "s", profile=MILESTONE_0, source="t",
+                  synthetic=True) as rec:
+        journal_reason(rec.journal, rec.clocks.stamp(), "R1",
+                       claims_layer=ActorLayer.PLANNER)
+        rec.journal.append(Kind.PLAN, rec.clocks.stamp(), Actor.AGENT,
+                           ActorLayer.REFLEX,
+                           state=StateSnapshot(stated_reason_id="R1"),
+                           event={"code": "plan_step"})
+    with Session.open(tmp_path / "s") as s:
+        c = measure(s.journal)
+    assert c.rate == 1.0, "заявил планировщик, начал рефлекс — это расхождение"
+
+
+# --- инвариант 14: нулевой уровень неприкосновенен --------------------------
+
+
+def test_invariant_14_disk_pressure_never_deletes_the_trace(tmp_path: Path) -> None:
+    """Заполнение диска останавливает уровни 2–3 и не трогает нулевой.
+
+    Прямая проверка инварианта 14 и критерия 5 из `TASK-02-JOURNAL.md`: отказ по
+    месту относится к сенсорной роскоши, а причинная запись и дописывается, и
+    остаётся целой. Обратный порядок — выкинуть старое, чтобы записать новое —
+    сделал бы журнал невоспроизводимым.
+    """
+    import numpy as np
+
+    from harness.core.profile import from_schema
+    from harness.core.resources import (OP_FRAME, OP_SEGMENT, OP_TRACE,
+                                        ResourceGovernor)
+    from harness.session import Recorder, Session
+
+    profile = from_schema("предел места", capture_width=32, capture_height=32,
+                          session_disk_cap_mb=0)
+    with Recorder(tmp_path / "s", profile=profile, source="t",
+                  synthetic=True) as rec:
+        gov = ResourceGovernor(profile, journal=rec.journal,
+                              session_root=tmp_path / "s")
+        rec.governor = gov
+        for i in range(3):
+            rec.record_frame(np.full((32, 32), i * 5, dtype=np.uint8))
+        entries_before = len(list(rec.journal))
+
+        # Место кончилось. Кадрам и сегментам отказано, следу — нет.
+        gov._refuse_frames = "диск кончился (замер)"
+        assert not gov.admit(OP_FRAME)
+        assert not gov.admit(OP_SEGMENT)
+        assert gov.admit(OP_TRACE), "причинной записи отказали по месту"
+
+        refused = rec.record_frame(np.zeros((32, 32), dtype=np.uint8))
+        assert refused is None, "кадр записался при исчерпанном месте"
+
+    with Session.open(tmp_path / "s") as s:
+        entries_after = list(s.journal)
+        s.journal.verify()
+    # Журнал вырос — записью о пропуске, — и ни одна прежняя запись не исчезла.
+    assert len(entries_after) > entries_before
+    assert any(e.kind is Kind.CAPTURE_GAP
+               and e.event.get("code") == "resource_refused"
+               and e.event.get("level_kept") == 0
+               for e in entries_after)
+
+
+def test_invariant_14_eviction_has_no_reference_to_the_reserve(tmp_path: Path) -> None:
+    """Разделение архитектурное: вытеснению неоткуда узнать про нулевой уровень."""
+    import inspect
+
+    from harness.core import levels
+
+    source = inspect.getsource(levels.SegmentStore)
+    assert "TraceReserve" not in source, (
+        "хранилище сегментов упоминает резерв нулевого уровня: у механизма "
+        "вытеснения появилась ссылка, которую можно передать дальше")
+    assert not levels.Level.TRACE.evictable
+    assert levels.Level.TRACE not in levels.LADDER

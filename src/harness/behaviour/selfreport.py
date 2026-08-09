@@ -41,7 +41,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from ..core.clocks import Stamp
-from ..core.journal import Actor, Journal, Kind as EntryKind
+from ..core.journal import Actor, ActorLayer, Journal, Kind as EntryKind
 from ..core.symbols import assert_known_words
 from ..model.drives import DRIVE_NAMES, EMOTIONS, emotion_label
 from ..model.rebuild import BodyMap
@@ -249,5 +249,9 @@ def journal_report(journal: Journal, report: SelfReport, stamp: Stamp) -> Any:
     слова агента о себе, а не наблюдение и не пометка человека. Пересборка такие
     записи пропускает — сказанное о себе не становится знанием о мире.
     """
-    return journal.append(EntryKind.SELF_REPORT, stamp, Actor.AGENT,
+    # Слой NONE, а не какой-нибудь «речевой»: самоотчёт не начат ни одним
+    # контуром, его вызвали снаружи по расписанию. Приписать его планировщику
+    # значило бы записать, что планировщик решил заговорить, — и метрика
+    # конфабуляции стала бы считать по выдуманному инициатору.
+    return journal.append(EntryKind.SELF_REPORT, stamp, Actor.AGENT, ActorLayer.NONE,
                           event=report.as_event())

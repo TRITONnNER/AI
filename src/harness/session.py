@@ -34,7 +34,8 @@ import numpy as np
 from .core.action import Action
 from .core.blobstore import AudioStore, BlobRef, FrameStore
 from .core.clocks import Clocks, Stamp
-from .core.journal import Actor, Entry, Journal, Kind as EntryKind, branch_chain
+from .core.journal import (Actor, ActorLayer, Entry, Journal, Kind as EntryKind,
+                           StateSnapshot, branch_chain)
 from .core.profile import Profile, short
 
 if TYPE_CHECKING:  # только для аннотации: ограничитель необязателен
@@ -121,6 +122,7 @@ class Recorder:
             # Состав устройств пишется в журнал, а не только в session.json:
             # журнал — источник истины, и «чем это было записано» — часть опыта.
             self.journal.append(EntryKind.DEVICE, self.clocks.stamp(), Actor.HUMAN,
+                                ActorLayer.HUMAN,
                                 event={"code": "registry", **devices.summary()})
 
     # --- запись -------------------------------------------------------------
@@ -129,7 +131,9 @@ class Recorder:
                      t_content: float | None = None,
                      audio: np.ndarray | None = None,
                      audio_offset_ms: float = 0.0,
-                     actor: Actor = Actor.NONE) -> Entry | None:
+                     actor: Actor = Actor.NONE,
+                     actor_layer: ActorLayer = ActorLayer.NONE,
+                     state: StateSnapshot | None = None) -> Entry | None:
         """Кадр (и, если есть, синхронный блок звука) как одна запись журнала.
 
         Возвращает `None`, если ограничитель ресурсов отказал в записи: место или
@@ -143,10 +147,15 @@ class Recorder:
             from .core.resources import OP_FRAME
             admission = self.governor.admit(OP_FRAME)
             if not admission:
+                # Кадр — второй уровень, сенсорная роскошь: в него отказывают. А
+                # `record_gap` пишет причинную запись нулевого уровня, и она
+                # проходит всегда — иначе журнал выглядел бы непрерывным там, где
+                # запись оборвалась по месту, и это была бы худшая из потерь.
                 self._frames_refused += 1
                 self.record_gap("resource_refused",
                                 {"reason": admission.reason,
-                                 "frames_refused": self._frames_refused})
+                                 "frames_refused": self._frames_refused,
+                                 "level_refused": 2, "level_kept": 0})
                 return None
 
         self.clocks.tick_self()
@@ -179,18 +188,22 @@ class Recorder:
                 self._gaps_noticed += 1
         self._last_frame_world = int(stamp.t_world)
         self._frames_written += 1
-        return self.journal.append(EntryKind.FRAME, stamp, actor,
-                                   frame=frame_ref, audio=audio_ref, event=event)
+        # Кадр не начат никаким контуром: он приходит от источника, а не от
+        # решения. Поэтому слой none, и это выбранное значение, а не пропущенное.
+        return self.journal.append(EntryKind.FRAME, stamp, actor, actor_layer,
+                                   frame=frame_ref, audio=audio_ref, event=event,
+                                   state=state)
 
     def record_gap(self, code: str, detail: dict[str, Any]) -> Entry:
         """Пропуск кадров, рассинхрон, отвал источника. Молчать об этом нельзя."""
-        return self.journal.append(EntryKind.CAPTURE_GAP, self.clocks.stamp(), Actor.NONE,
+        return self.journal.append(EntryKind.CAPTURE_GAP, self.clocks.stamp(),
+                                   Actor.NONE, ActorLayer.NONE,
                                    event={"code": code, **detail})
 
     def record_perception(self, payload: dict[str, Any]) -> Entry:
         """Результат границы восприятия. Проверяется на читаемый текст журналом."""
-        return self.journal.append(EntryKind.PERCEPTION, self.clocks.stamp(), Actor.NONE,
-                                   perception=payload)
+        return self.journal.append(EntryKind.PERCEPTION, self.clocks.stamp(),
+                                   Actor.NONE, ActorLayer.NONE, perception=payload)
 
     def record_intervention(self, code: str, detail: dict[str, Any]) -> Entry:
         """Вмешательство исследователя: браковка цели, подтверждение шага, ответ.
@@ -198,11 +211,13 @@ class Recorder:
         Пишется отдельным видом записи, чтобы прогоны с вмешательствами не
         сравнивались с чистыми как равные (см. DESIGN-REVIEW-CONSOLE.md, пункт 6).
         """
-        return self.journal.append(EntryKind.INTERVENTION, self.clocks.stamp(), Actor.HUMAN,
+        return self.journal.append(EntryKind.INTERVENTION, self.clocks.stamp(),
+                                   Actor.HUMAN, ActorLayer.HUMAN,
                                    event={"code": code, **detail})
 
     def record_note(self, text: str) -> Entry:
         return self.journal.append(EntryKind.NOTE, self.clocks.stamp(), Actor.HUMAN,
+                                   ActorLayer.HUMAN,
                                    event={"code": "note", "text": text})
 
     def change_parameters(self, new_profile: Profile, *, reason: str) -> None:

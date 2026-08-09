@@ -31,7 +31,7 @@ import numpy as np
 
 from ..core.action import Action, output_id
 from ..core.clocks import Stamp
-from ..core.journal import Actor, Kind as EntryKind
+from ..core.journal import Actor, ActorLayer, Kind as EntryKind
 from ..core.profile import MILESTONE_0, Profile
 from ..core.symbols import Symbolizer
 from ..debug.channel import DebugChannel
@@ -308,7 +308,7 @@ def generate_session(root: str | Path, *, profile: Profile | None = None,
                     else:
                         act = Action.key(mouse_out, duration_ms=int(1000 / fps))
                     rec.journal.append(EntryKind.ACTION, rec.clocks.stamp(), Actor.HUMAN,
-                                       action=act,
+                                       ActorLayer.HUMAN, action=act,
                                        event={"code": "delivered", "reason": None,
                                               "latency_ms": 0.0, "device": "synthetic"})
 

@@ -16,7 +16,7 @@ import numpy as np
 import pytest
 
 from harness.core.action import Action
-from harness.core.journal import Actor, Kind
+from harness.core.journal import Actor, ActorLayer, Kind
 from harness.core.profile import MILESTONE_0
 from harness.session import Recorder, Session
 
@@ -206,7 +206,8 @@ def test_0_2_masked_attempt_is_journaled(tmp_path: Path) -> None:
                   synthetic=True) as rec:
         inj = Injector(InjectionSink(NullDevice(), sleep=lambda _: None), rec.journal,
                        mask=mask)
-        out = inj.submit(Action.key("OUT_0A11", 120), rec.clocks.stamp())
+        out = inj.submit(Action.key("OUT_0A11", 120), rec.clocks.stamp(),
+                         ActorLayer.REFLEX)
         assert out.masked and not out.delivered
 
     with Session.open(tmp_path / "s") as s:

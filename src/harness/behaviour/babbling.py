@@ -30,7 +30,7 @@ from typing import Any, Callable, Sequence
 
 from ..core.action import Action, Reversibility
 from ..core.clocks import Stamp
-from ..core.journal import Actor, Journal, Kind as EntryKind
+from ..core.journal import Actor, ActorLayer, Journal, Kind as EntryKind
 from ..core.profile import Profile
 from ..model.rebuild import BodyMap
 
@@ -291,8 +291,13 @@ class Babbler:
 
         if self.journal is not None and stamp is not None:
             action = probe.to_action(self.reversibility_of(probe.output))
+            # Лепет — не рефлекс, не навык и не план: ни один из них ещё не
+            # существует. Он происходит потому, что любопытство вне коридора и
+            # больше ответить нечем, поэтому инициатор — контур драйвов. Если
+            # когда-нибудь появится отдельный контур лепета, изменится набор
+            # слоёв (структурное изменение), а не эта атрибуция.
             self.journal.append(EntryKind.ACTION, stamp, Actor.AGENT,
-                                action=action,
+                                ActorLayer.DRIVE, action=action,
                                 event={**result.as_event(), "device": "babble",
                                        "latency_ms": float(probe.duration_ms)})
 

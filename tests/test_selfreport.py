@@ -25,7 +25,7 @@ from harness.behaviour.selfreport import (CODES, VOCABULARY, Line, SelfReport,
 from harness.core.action import (Action, Kind as ActionKind, action_key,
                                  output_id)
 from harness.core.clocks import Stamp
-from harness.core.journal import Actor, Kind
+from harness.core.journal import Actor, ActorLayer, Kind
 from harness.core.profile import MILESTONE_0, from_schema
 from harness.core.symbols import SymbolError
 from harness.model import vitals
@@ -136,6 +136,7 @@ def test_invariant_10_rebuild_ignores_self_reports(tmp_path: Path) -> None:
         out = output_id("OUT", 1)
         for i in range(4):
             rec.journal.append(Kind.ACTION, Stamp(i, i), Actor.AGENT,
+                               ActorLayer.DRIVE,
                                action=Action(ActionKind.KEY, 200, output=out),
                                event={"code": "delivered", "responded": True})
         before = rebuild_from_journal(rec.journal)
@@ -268,19 +269,20 @@ def _journal_with_life(tmp_path: Path):
         out = output_id("OUT", 1)
         for i in range(100, 106):
             rec.journal.append(Kind.ACTION, Stamp(i, i), Actor.AGENT,
+                               ActorLayer.DRIVE,
                                action=Action(ActionKind.KEY, 200, output=out),
                                event={"code": "delivered", "responded": i % 2 == 0})
-        rec.journal.append(Kind.GOAL, Stamp(107, 107), Actor.AGENT,
+        rec.journal.append(Kind.GOAL, Stamp(107, 107), Actor.AGENT, ActorLayer.DRIVE,
                            event={"code": "set", "id": "G1", "kind": "learn_output"})
-        rec.journal.append(Kind.GOAL, Stamp(108, 108), Actor.AGENT,
+        rec.journal.append(Kind.GOAL, Stamp(108, 108), Actor.AGENT, ActorLayer.DRIVE,
                            event={"code": "passed", "id": "G1"})
-        rec.journal.append(Kind.GOAL, Stamp(109, 109), Actor.AGENT,
+        rec.journal.append(Kind.GOAL, Stamp(109, 109), Actor.AGENT, ActorLayer.DRIVE,
                            event={"code": "abandoned", "id": "G2", "spent_ticks": 40})
-        rec.journal.append(Kind.PLAN, Stamp(110, 110), Actor.AGENT,
+        rec.journal.append(Kind.PLAN, Stamp(110, 110), Actor.AGENT, ActorLayer.PLANNER,
                            event={"code": "plan_step", "agreed": True})
-        rec.journal.append(Kind.PLAN, Stamp(111, 111), Actor.AGENT,
+        rec.journal.append(Kind.PLAN, Stamp(111, 111), Actor.AGENT, ActorLayer.PLANNER,
                            event={"code": "plan_step", "agreed": False})
-        rec.journal.append(Kind.SLEEP, Stamp(112, 112), Actor.NONE,
+        rec.journal.append(Kind.SLEEP, Stamp(112, 112), Actor.NONE, ActorLayer.NONE,
                            event={"code": "consolidation"})
     return profile
 

@@ -16,7 +16,7 @@ import pytest
 
 from harness.core.action import Action, Reversibility
 from harness.core.clocks import Clocks, Stamp
-from harness.core.journal import Kind
+from harness.core.journal import ActorLayer, Kind
 from harness.core.profile import BABBLE, DEFAULT, MILESTONE_0, from_schema
 from harness.session import Recorder, Session
 
@@ -180,7 +180,7 @@ def test_see_and_control_are_separate_rights() -> None:
 
 def test_device_switch_is_agent_action(tmp_path: Path) -> None:
     """Переключение источника — действие агента и пишется от его имени."""
-    from harness.core.journal import Actor
+    from harness.core.journal import Actor, ActorLayer
     from harness.devices import Device, Kind as DKind, Registry
 
     with Recorder(tmp_path / "s", profile=MILESTONE_0, source="t",
@@ -383,10 +383,20 @@ def test_own_experience_beats_hearsay_in_confidence() -> None:
     assert own.confidence > heard.confidence
 
 
-def test_hypothesis_needs_a_test() -> None:
+def test_hypothesis_empty_test_string_is_a_forgotten_field() -> None:
+    """Пустая строка вместо теста — забытое поле, а не вопрос.
+
+    Заменяет прежний `test_hypothesis_needs_a_test`, который требовал, чтобы
+    гипотеза без теста не создавалась вообще. Требование снято по `TASK-02`,
+    часть 5: по `MIND.md` вопрос — это в точности гипотеза, для которой тест не
+    конструируется, и запрет структурно исключал `deferred`, детектор недостающей
+    категории и всю археологию. Различение осталось, но оно теперь между
+    `test=None` с указанной причиной (законный вопрос) и `test=""` (забыли
+    заполнить), а не между «есть тест» и «нет теста».
+    """
     from harness.model.beliefs import BeliefError, Hypothesis, Origin, Provenance
 
-    with pytest.raises(BeliefError, match="без способа проверки"):
+    with pytest.raises(BeliefError, match="забытое поле"):
         Hypothesis("что-то", test="", prior=0.5,
                    provenance=Provenance(Origin.HUNCH, "b", 1))
 
@@ -419,6 +429,7 @@ def test_own_experience_not_overwritten_by_testimony() -> None:
 
 def test_rebuild_is_deterministic(tmp_path: Path) -> None:
     """Две пересборки одного журнала обязаны дать одинаковый отпечаток."""
+    from harness.core.journal import Actor
     from harness.model.rebuild import rebuild_twice_matches
 
     with Recorder(tmp_path / "s", profile=MILESTONE_0, source="t",
@@ -426,8 +437,7 @@ def test_rebuild_is_deterministic(tmp_path: Path) -> None:
         for i in range(6):
             rec.record_frame(np.full((16, 16), i * 7, dtype=np.uint8))
             rec.journal.append(
-                Kind.ACTION, rec.clocks.stamp(), __import__(
-                    "harness.core.journal", fromlist=["Actor"]).Actor.AGENT,
+                Kind.ACTION, rec.clocks.stamp(), Actor.AGENT, ActorLayer.DRIVE,
                 action=Action.key("OUT_0A11", 100 + i),
                 event={"code": "delivered", "responded": i % 2 == 0,
                        "undone": i % 4 == 0, "device": "test"})
@@ -438,7 +448,7 @@ def test_rebuild_is_deterministic(tmp_path: Path) -> None:
 
 
 def test_rebuild_recovers_body_map(tmp_path: Path) -> None:
-    from harness.core.journal import Actor
+    from harness.core.journal import Actor, ActorLayer
     from harness.model.rebuild import rebuild_from_journal
 
     with Recorder(tmp_path / "s", profile=MILESTONE_0, source="t",
@@ -446,6 +456,7 @@ def test_rebuild_recovers_body_map(tmp_path: Path) -> None:
         for out, responded in (("OUT_0A11", True), ("OUT_0B22", False)):
             for _ in range(3):
                 rec.journal.append(Kind.ACTION, rec.clocks.stamp(), Actor.AGENT,
+                                   ActorLayer.DRIVE,
                                    action=Action.key(out, 120),
                                    event={"code": "delivered", "responded": responded,
                                           "device": "test"})
@@ -458,12 +469,13 @@ def test_rebuild_recovers_body_map(tmp_path: Path) -> None:
 
 def test_masked_attempts_are_visible_after_rebuild(tmp_path: Path) -> None:
     """Заглушённая попытка видна в пересборке — потому и пишется в журнал."""
-    from harness.core.journal import Actor
+    from harness.core.journal import Actor, ActorLayer
     from harness.model.rebuild import rebuild_from_journal
 
     with Recorder(tmp_path / "s", profile=MILESTONE_0, source="t",
                   synthetic=True) as rec:
         rec.journal.append(Kind.ACTION, rec.clocks.stamp(), Actor.AGENT,
+                           ActorLayer.DRIVE,
                            action=Action.key("OUT_0A11", 90).masked_as("mask:window"),
                            event={"code": "masked", "device": "test"})
 
@@ -475,12 +487,13 @@ def test_masked_attempts_are_visible_after_rebuild(tmp_path: Path) -> None:
 
 def test_thoughts_do_not_teach_about_world(tmp_path: Path) -> None:
     """Воображаемое не обновляет убеждения о мире."""
-    from harness.core.journal import Actor
+    from harness.core.journal import Actor, ActorLayer
     from harness.model.rebuild import rebuild_from_journal
 
     with Recorder(tmp_path / "s", profile=MILESTONE_0, source="t",
                   synthetic=True) as rec:
         rec.journal.append(Kind.THOUGHT, rec.clocks.stamp(), Actor.AGENT,
+                           ActorLayer.PLANNER,
                            action=Action.key("OUT_0A11", 100),
                            event={"code": "imagine", "responded": True})
 
@@ -985,7 +998,7 @@ def test_firewall_can_be_disabled_only_structurally() -> None:
 
 
 def test_sleep_rebuilds_and_forgets(tmp_path: Path) -> None:
-    from harness.core.journal import Actor
+    from harness.core.journal import Actor, ActorLayer
     from harness.model.consolidation import Consolidator
 
     profile = from_schema("сон", forget_below_value=0.9, capture_width=32,
@@ -993,6 +1006,7 @@ def test_sleep_rebuilds_and_forgets(tmp_path: Path) -> None:
     with Recorder(tmp_path / "s", profile=profile, source="t", synthetic=True) as rec:
         for i in range(8):
             rec.journal.append(Kind.ACTION, rec.clocks.stamp(), Actor.AGENT,
+                               ActorLayer.DRIVE,
                                action=Action.key(f"OUT_00{i:02X}", 100),
                                event={"code": "delivered", "responded": True,
                                       "device": "t"})
@@ -1025,7 +1039,7 @@ def test_sleep_warns_when_reality_check_is_overdue(tmp_path: Path) -> None:
 
 def test_sleep_invents_nothing(tmp_path: Path) -> None:
     """После сна не появляется ни одного утверждения без основания в журнале."""
-    from harness.core.journal import Actor
+    from harness.core.journal import Actor, ActorLayer
     from harness.model.consolidation import Consolidator
     from harness.model.rebuild import rebuild_from_journal
 
@@ -1033,6 +1047,7 @@ def test_sleep_invents_nothing(tmp_path: Path) -> None:
                   synthetic=True) as rec:
         for i in range(5):
             rec.journal.append(Kind.ACTION, rec.clocks.stamp(), Actor.AGENT,
+                               ActorLayer.DRIVE,
                                action=Action.key("OUT_0A11", 100),
                                event={"code": "delivered", "responded": True,
                                       "device": "t"})

@@ -32,7 +32,7 @@ from typing import Any, Callable, Sequence
 from ..core.action import (Action, ActionError, Reversibility, action_key,
                           macro_key)
 from ..core.clocks import Stamp
-from ..core.journal import Journal, Kind as EntryKind
+from ..core.journal import Actor, ActorLayer, Journal, Kind as EntryKind
 from ..model.beliefs import Origin, Provenance
 
 
@@ -259,9 +259,8 @@ def verify(skill: Skill, world: Any, *, expect: Callable[[Any, Any], bool],
         action = step.to_action(skill.reversibility)
         world.step(action, with_audio=False)
         if journal is not None and stamp_of is not None:
-            journal.append(EntryKind.ACTION, stamp_of(), __import__(
-                "harness.core.journal", fromlist=["Actor"]).Actor.AGENT,
-                action=action,
+            journal.append(EntryKind.ACTION, stamp_of(), Actor.AGENT,
+                ActorLayer.SKILL, action=action,
                 event={"code": "delivered", "responded": True, "device": "skill",
                        "skill": skill.id})
         if clocks is not None:

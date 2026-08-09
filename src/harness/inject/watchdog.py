@@ -23,7 +23,7 @@ from typing import Any, Callable
 import numpy as np
 
 from ..core.clocks import Stamp
-from ..core.journal import Actor, Journal, Kind as EntryKind
+from ..core.journal import Actor, ActorLayer, Journal, Kind as EntryKind
 from .stop import StopSwitch
 
 
@@ -122,7 +122,11 @@ class Watchdog:
         self._tripped = trip
         if self.journal is not None:
             self.journal.append(EntryKind.WATCHDOG, stamp, Actor.NONE,
-                                event={"code": code, **detail})
+                                ActorLayer.INTERRUPT, event={"code": code, **detail})
         if self.stop is not None:
-            self.stop.engage(f"watchdog:{code}", stamp)
+            # Сторож не человек: слой interrupt, действующий — никто. До этой
+            # правки срабатывание сторожа писалось от имени человека, и доля
+            # вмешательств исследователя в журнале была завышена на число отвалов.
+            self.stop.engage(f"watchdog:{code}", stamp, actor=Actor.NONE,
+                             actor_layer=ActorLayer.INTERRUPT)
         return trip

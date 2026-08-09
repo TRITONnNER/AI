@@ -151,30 +151,147 @@ class Belief:
                    int(d.get("last_seq", 0)))
 
 
+class State(StrEnum):
+    """Три исхода конвейера убеждений, а не два (инвариант 16).
+
+    `DEFERRED` — не «пока не проверили», а «проверить нечем»: теста не
+    существует. Такая гипотеза не тратит бюджет, не удаляется и переоткрывается
+    при появлении новой возможности — нового места, нового навыка, умения читать,
+    встречи с новым типом сущностей.
+
+    Без третьего исхода отказ по перерасходу выбросил бы все загадки агента, и он
+    вечно забывал бы, чего не понял.
+    """
+
+    VERIFIED = "verified"
+    REFUTED = "refuted"
+    DEFERRED = "deferred"
+
+
 @dataclass(frozen=True, slots=True)
 class Hypothesis:
     """Ещё не убеждение. «Гипотеза знанием не является»: нужна проверка в мире.
 
     `test` — что надо сделать, чтобы проверить, в терминах действий агента.
-    Гипотеза без проверки бесполезна и потому запрещена.
+    **`None` — законное состояние, и означает оно вопрос.**
+
+    Прежде здесь стоял запрет: гипотеза без теста не создавалась. Запрет выглядел
+    дисциплиной, а был структурным исключением всего интересного. По `MIND.md`,
+    раздел 5, **вопрос — это в точности гипотеза, для которой агент не может
+    построить тест**, и распознаётся он именно по отсутствию конструируемой
+    проверки. Пока такое состояние было запрещено, кода не существовало ни для
+    `deferred`, ни для детектора недостающей категории, ни для гипотез
+    `absent_agent`, ни для археологии: всё это начинается с утверждения, которое
+    агент сформулировал и проверить не смог.
+
+    Характерная сигнатура вопроса — расходимость двух кривых по одной сущности:
+    аффордансы насыщаются нормально (`sigma` сужается), а происхождение не
+    двигается вообще, потому что свидетельство лежит вне достижимого опыта.
+
+    Что осталось обязательным: `claim` и `provenance`. Утверждение без
+    происхождения в хранилище не попадает (инвариант 7), и на вопросы это
+    распространяется — «откуда у меня взялся этот вопрос» не менее важно, чем
+    откуда взялся ответ.
     """
 
     claim: str
-    test: str
+    test: str | None
     prior: float
     provenance: Provenance
     checked: bool = False
+    # Чем кончилась проверка. `None` — проверка есть, но её ещё не проводили; это
+    # не исход конвейера, а работа в процессе, и путать одно с другим нельзя.
+    outcome: bool | None = None
+    # Почему теста нет. Обязательно при `test is None`: «не смог построить проверку»
+    # без причины неотличимо от «забыл её написать», и множество отложенных
+    # превратилось бы в свалку вместо перечня непонятого.
+    deferred_reason: str = ""
+    # Что могло бы дать проверку: новое место, навык, умение читать. Пустое —
+    # законно и означает «не знаю даже того, чего мне не хватает».
+    reopens_on: tuple[str, ...] = ()
 
     def __post_init__(self) -> None:
-        if not self.test:
+        if not self.claim:
+            raise BeliefError("гипотеза без формулировки")
+        if self.provenance is None:
             raise BeliefError(
-                f"гипотеза {self.claim!r} без способа проверки. Гипотеза, которую "
-                "нельзя проверить действием, не участвует в работе")
+                "гипотеза без происхождения не хранится (инвариант 7): вопрос тоже "
+                "откуда-то взялся")
+        if self.test is None and not self.deferred_reason:
+            raise BeliefError(
+                f"гипотеза {self.claim!r} без теста и без причины. Отсутствие теста "
+                "законно — это вопрос, — но причина обязательна: без неё множество "
+                "отложенного станет свалкой, а оно должно быть перечнем того, что "
+                "агент считает непонятым")
+        if self.test is not None and not self.test:
+            raise BeliefError(
+                f"гипотеза {self.claim!r} с пустой строкой вместо теста. Пустая "
+                "строка — это не «теста нет», это забытое поле. Вопрос пишется "
+                "как test=None с указанной причиной")
+        if self.test is not None and self.deferred_reason:
+            raise BeliefError(
+                f"гипотеза {self.claim!r} с тестом и с причиной отложить одновременно: "
+                "либо проверка есть, либо её нет")
         if not 0.0 <= self.prior <= 1.0:
             raise BeliefError(f"prior вне [0,1]: {self.prior}")
 
+    @property
+    def is_question(self) -> bool:
+        """Формальный признак вопроса: теста не существует, а не «пока не сделан»."""
+        return self.test is None
+
+    @property
+    def state(self) -> State | None:
+        """Исход конвейера, или `None`, если исхода ещё нет.
+
+        Три исхода — `verified`, `refuted`, `deferred`. Гипотеза с тестом, который
+        ещё не проводили, ни в один из них не попадает: она в работе. Вернуть для
+        неё `deferred` значило бы записать «проверить нечем» там, где просто ещё не
+        дошли руки, — и множество отложенного, то есть перечень непонятого, тут же
+        забилось бы обычной очередью дел.
+        """
+        if self.is_question:
+            return State.DEFERRED
+        if self.outcome is None:
+            return None
+        return State.VERIFIED if self.outcome else State.REFUTED
+
+    def with_test(self, test: str) -> Hypothesis:
+        """Вопрос стал гипотезой: появилась возможность его проверить.
+
+        Именно так работает переоткрытие: множество отложенного не удаляется, и
+        когда у агента появляется новое место или новый навык, вопрос выходит из
+        него обратно в работу. Обратного перехода нет: раз проверка нашлась, она
+        не пропадает.
+
+        `reopens_on` сохраняется: то, что дало проверку, — часть истории вопроса,
+        и по нему потом видно, какая именно возможность разрешила загадку.
+        """
+        if not self.is_question:
+            raise BeliefError(
+                f"у гипотезы {self.claim!r} тест уже есть: {self.test!r}")
+        if not test:
+            raise BeliefError("переоткрытие без теста ничего не меняет")
+        return Hypothesis(self.claim, test, self.prior, self.provenance,
+                          checked=False, outcome=None, deferred_reason="",
+                          reopens_on=self.reopens_on)
+
+    def resolved(self, outcome: bool) -> Hypothesis:
+        """Зафиксировать исход проверки: `verified` или `refuted`."""
+        if self.is_question:
+            raise BeliefError(
+                f"вопрос {self.claim!r} не имеет исхода: проверять нечем")
+        return Hypothesis(self.claim, self.test, self.prior, self.provenance,
+                          checked=True, outcome=bool(outcome),
+                          reopens_on=self.reopens_on)
+
     def confirm(self, outcome: bool, prov: Provenance) -> Belief:
         """Проверили в мире — стало убеждением с происхождением «опыт»."""
+        if self.is_question:
+            raise BeliefError(
+                f"вопрос {self.claim!r} нельзя подтвердить: теста нет, и подтверждать "
+                f"нечем. Причина, по которой он отложен: {self.deferred_reason}. "
+                "Сначала with_test(), когда появится возможность")
         if prov.origin is not Origin.EXPERIENCE:
             raise BeliefError(
                 "гипотеза становится убеждением только после собственной проверки; "
@@ -183,7 +300,23 @@ class Hypothesis:
 
     def as_dict(self) -> dict[str, Any]:
         return {"claim": self.claim, "test": self.test, "prior": self.prior,
-                "checked": self.checked, "provenance": self.provenance.as_dict()}
+                "checked": self.checked, "outcome": self.outcome,
+                "state": None if self.state is None else str(self.state),
+                "is_question": self.is_question,
+                "deferred_reason": self.deferred_reason,
+                "reopens_on": list(self.reopens_on),
+                "provenance": self.provenance.as_dict()}
+
+    @classmethod
+    def question(cls, claim: str, prior: float, provenance: Provenance, *,
+                 because: str, reopens_on: tuple[str, ...] = ()) -> Hypothesis:
+        """Завести вопрос: утверждение, для которого проверка не строится.
+
+        Отдельный конструктор, потому что это не «гипотеза с пропущенным полем», а
+        другое эпистемическое состояние, и в коде оно должно читаться как таковое.
+        """
+        return cls(claim, None, prior, provenance, deferred_reason=because,
+                   reopens_on=tuple(reopens_on))
 
 
 @dataclass(frozen=True, slots=True)

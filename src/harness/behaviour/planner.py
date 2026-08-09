@@ -44,7 +44,8 @@ from typing import Any, Callable, Iterator, Mapping, Sequence
 from ..core.action import (UNKNOWN, Action, Reversibility, action_key,
                           macro_key, parse_action_key, parse_any_key)
 from ..core.clocks import Stamp
-from ..core.journal import Actor, Journal, Kind as EntryKind
+from ..core.journal import (Actor, ActorLayer, Journal, Kind as EntryKind,
+                          StateSnapshot)
 from ..core.profile import Profile
 from ..model.forward import ForwardModel
 from .goals import Goal
@@ -506,7 +507,8 @@ class Execution:
 def execute(plan: Plan, *, act: Callable[[Action], str],
             goal: Goal | None = None, journal: Journal | None = None,
             stamp_of: Callable[[int], Stamp] | None = None,
-            model: ForwardModel | None = None) -> Execution:
+            model: ForwardModel | None = None,
+            reason_id: str | None = None) -> Execution:
     """Применить план в мире, сверяя каждый шаг с предсказанием.
 
     `act` исполняет одно действие и возвращает место, в котором мир оказался. Шаг из
@@ -517,6 +519,11 @@ def execute(plan: Plan, *, act: Callable[[Action], str],
     Расхождение — не поломка, а данные. Оно записывается в журнал и есть та же
     ошибка предсказания, что и везде: планировщик не отдельный механизм со своей
     валютой, он работает на общей.
+
+    `reason_id` — ссылка на реплику, в которой планировщик объяснил, зачем он это
+    делает (`state_reason`). Исполнение её не читает и не сравнивает: сопоставление
+    заявленной причины с настоящим инициатором — работа метрик, а не контроллера
+    (`ARCHITECTURE.md`, правила модулей). Здесь только проставляется ссылка.
     """
     ex = Execution(plan)
     for i, step in enumerate(plan.steps):
@@ -533,7 +540,9 @@ def execute(plan: Plan, *, act: Callable[[Action], str],
             ex.surprises += 1
         if journal is not None and stamp_of is not None:
             journal.append(
-                EntryKind.PLAN, stamp_of(i), Actor.AGENT,
+                EntryKind.PLAN, stamp_of(i), Actor.AGENT, ActorLayer.PLANNER,
+                state=StateSnapshot(goal_id=plan.goal_id,
+                                    stated_reason_id=reason_id),
                 event={"code": "plan_step", "goal": plan.goal_id, "index": i,
                        "expected": step.expected_place, "observed": place,
                        "agreed": agreed, "p": round(step.p, 4),

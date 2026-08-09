@@ -395,16 +395,23 @@ def cmd_report(args: argparse.Namespace) -> int:
     подтверждается; сравнить это можно только глядя на обе колонки одновременно.
     """
     from .core.journal import Kind
-    from .model import vitals
+    from .model import confabulation, vitals
     from .session import Session
 
     with Session.open(args.path) as s:
         v = vitals.from_journal(s.journal, profile=s.profile,
                                 skip=() if args.beliefs else ("beliefs",))
         reports = [e for e in s.journal if e.kind is Kind.SELF_REPORT]
+        # Метрика конфабуляции — третья величина в отчёте, и она про **разницу**
+        # между колонками: заявленный слой против настоящего инициатора. Считается
+        # тут же по журналу, потому что контроллеру сопоставлять нельзя.
+        conf = confabulation.measure(s.journal)
+        layers = confabulation.layer_histogram(s.journal)
 
     if args.json:
         _print_json({"vitals": v.as_dict(),
+                     "confabulation": conf.as_dict(),
+                     "actor_layers": layers,
                      "self_report": reports[-1].event if reports else None,
                      "self_reports": len(reports)})
         return 0
@@ -417,6 +424,16 @@ def cmd_report(args: argparse.Namespace) -> int:
         print(f"\nчего в журнале нет ({len(absent)}): "
               + ", ".join(x.code for x in absent))
         print("  причины — в json-выводе; это не заготовки, а честные пропуски")
+
+    print("\nатрибуция действий")
+    print(f"  {conf.line()}")
+    if layers:
+        print("  записей по слою-инициатору: "
+              + ", ".join(f"{k} {n}" for k, n in layers.items()))
+        print("  доля расхождений без этого распределения обманчива: 20 % при "
+              "девяноста процентах записей от планировщика")
+    for m in conf.examples[:3]:
+        print(f"    запись {m.seq}: заявлен {m.claimed}, начал {m.actual}")
 
     print(f"\nсамоотчёты агента: {len(reports)}")
     if not reports:

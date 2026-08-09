@@ -18,7 +18,7 @@ from harness.behaviour.goals import (Candidate, Goal, GoalError, GoalStack,
                                      candidates_from_places, choose)
 from harness.behaviour.skills import Library, Skill, SkillError, Step, mine, try_undo, verify
 from harness.core.action import Action, Reversibility
-from harness.core.journal import Kind
+from harness.core.journal import ActorLayer, Kind
 from harness.core.profile import BABBLE, MILESTONE_0, from_schema
 from harness.corpus.world import Effect, InteractiveWorld
 # Testimony импортируется под другим именем: pytest пытается собрать класс,
@@ -233,7 +233,7 @@ def test_skill_shorter_than_two_steps_is_not_a_skill() -> None:
 
 
 def test_mine_finds_repeated_chain(tmp_path: Path) -> None:
-    from harness.core.journal import Actor
+    from harness.core.journal import Actor, ActorLayer
 
     chain = [("OUT_0A11", 100), ("OUT_0B22", 200)]
     with Recorder(tmp_path / "s", profile=MILESTONE_0, source="t",
@@ -241,7 +241,7 @@ def test_mine_finds_repeated_chain(tmp_path: Path) -> None:
         for _ in range(4):
             for out, ms in chain:
                 rec.journal.append(Kind.ACTION, rec.clocks.stamp(), Actor.AGENT,
-                                   action=Action.key(out, ms),
+                                   ActorLayer.DRIVE, action=Action.key(out, ms),
                                    event={"code": "delivered", "responded": True,
                                           "device": "t"})
             # разрыв: цепочка кончилась
@@ -258,16 +258,17 @@ def test_mine_finds_repeated_chain(tmp_path: Path) -> None:
 
 def test_mine_ignores_silent_and_masked(tmp_path: Path) -> None:
     """Макрос из молчащих шагов ничего не делает, сколько бы раз ни повторился."""
-    from harness.core.journal import Actor
+    from harness.core.journal import Actor, ActorLayer
 
     with Recorder(tmp_path / "s", profile=MILESTONE_0, source="t",
                   synthetic=True) as rec:
         for _ in range(6):
             rec.journal.append(Kind.ACTION, rec.clocks.stamp(), Actor.AGENT,
-                               action=Action.key("OUT_0A11", 100),
+                               ActorLayer.DRIVE, action=Action.key("OUT_0A11", 100),
                                event={"code": "delivered", "responded": False,
                                       "device": "t"})
             rec.journal.append(Kind.ACTION, rec.clocks.stamp(), Actor.AGENT,
+                               ActorLayer.DRIVE,
                                action=Action.key("OUT_0B22", 100).masked_as("mask:window"),
                                event={"code": "masked", "device": "t"})
 
@@ -276,14 +277,14 @@ def test_mine_ignores_silent_and_masked(tmp_path: Path) -> None:
 
 
 def test_mine_prefers_longer_chain_over_its_prefix(tmp_path: Path) -> None:
-    from harness.core.journal import Actor
+    from harness.core.journal import Actor, ActorLayer
 
     with Recorder(tmp_path / "s", profile=MILESTONE_0, source="t",
                   synthetic=True) as rec:
         for _ in range(4):
             for out in ("OUT_0A11", "OUT_0B22", "OUT_0C33"):
                 rec.journal.append(Kind.ACTION, rec.clocks.stamp(), Actor.AGENT,
-                                   action=Action.key(out, 100),
+                                   ActorLayer.DRIVE, action=Action.key(out, 100),
                                    event={"code": "delivered", "responded": True,
                                           "device": "t"})
             rec.record_note("пауза")
@@ -296,14 +297,14 @@ def test_mine_prefers_longer_chain_over_its_prefix(tmp_path: Path) -> None:
 
 
 def test_skill_stays_a_guess_until_applied(tmp_path: Path) -> None:
-    from harness.core.journal import Actor
+    from harness.core.journal import Actor, ActorLayer
 
     with Recorder(tmp_path / "s", profile=MILESTONE_0, source="t",
                   synthetic=True) as rec:
         for _ in range(3):
             for out in ("OUT_0A11", "OUT_0B22"):
                 rec.journal.append(Kind.ACTION, rec.clocks.stamp(), Actor.AGENT,
-                                   action=Action.key(out, 100),
+                                   ActorLayer.DRIVE, action=Action.key(out, 100),
                                    event={"code": "delivered", "responded": True,
                                           "device": "t"})
             rec.record_note("пауза")

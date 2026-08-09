@@ -37,7 +37,7 @@ from typing import Any, Callable, Iterator
 
 from ..core.action import Action
 from ..core.clocks import Stamp
-from ..core.journal import Actor, Journal, Kind as EntryKind
+from ..core.journal import Actor, ActorLayer, Journal, Kind as EntryKind
 
 
 class Mode(StrEnum):
@@ -115,8 +115,17 @@ class Loop:
 
     # --- шаг ----------------------------------------------------------------
 
-    def step(self, action: Action, stamp: Stamp | None = None) -> Step:
-        """Сделать шаг. Один и тот же вызов и для действия, и для мысли."""
+    def step(self, action: Action, stamp: Stamp | None = None, *,
+             actor_layer: ActorLayer = ActorLayer.PLANNER) -> Step:
+        """Сделать шаг. Один и тот же вызов и для действия, и для мысли.
+
+        Слой по умолчанию planner: воображение — это и есть работа планировщика,
+        и почти всякий его вызов идёт оттуда. Рефлекс и навык, если им понадобится
+        прокрутить действие мысленно, передают свой слой сами. Значение по
+        умолчанию здесь допустимо потому, что оно не «неизвестно», а «обычный
+        случай», и оно указано явно — в отличие от `none`, которое означало бы
+        «ничей».
+        """
         mode = self.breaker.mode
         if mode is Mode.ACT:
             consequence = self.execute(action)
@@ -132,7 +141,7 @@ class Loop:
         step = Step(action, mode, consequence, predicted)
         self.history.append(step)
         if self.journal is not None and stamp is not None:
-            self.journal.append(kind, stamp, Actor.AGENT, action=action,
+            self.journal.append(kind, stamp, Actor.AGENT, actor_layer, action=action,
                                 event={"code": str(mode), "predicted": predicted,
                                        "device": "loop"})
         return step
@@ -140,23 +149,29 @@ class Loop:
     # --- готовые режимы -----------------------------------------------------
 
     def imagine(self, actions: list[Action], stamp_of: Callable[[int], Stamp] | None = None,
-                mode: Mode = Mode.IMAGINE) -> list[Step]:
+                mode: Mode = Mode.IMAGINE, *,
+                actor_layer: ActorLayer = ActorLayer.PLANNER) -> list[Step]:
         """Прокрутить цепочку действий, не трогая мир. Это и есть планирование."""
         out: list[Step] = []
         with self.disconnected(mode):
             for i, a in enumerate(actions):
-                out.append(self.step(a, stamp_of(i) if stamp_of else None))
+                out.append(self.step(a, stamp_of(i) if stamp_of else None,
+                                     actor_layer=actor_layer))
         return out
 
     def counterfactual(self, actions: list[Action],
-                       stamp_of: Callable[[int], Stamp] | None = None) -> list[Step]:
+                       stamp_of: Callable[[int], Stamp] | None = None, *,
+                       actor_layer: ActorLayer = ActorLayer.PLANNER) -> list[Step]:
         """«А если бы я тогда сделал иначе». Тот же цикл, другой режим."""
-        return self.imagine(actions, stamp_of, mode=Mode.COUNTERFACT)
+        return self.imagine(actions, stamp_of, mode=Mode.COUNTERFACT,
+                            actor_layer=actor_layer)
 
     def remember(self, actions: list[Action],
-                 stamp_of: Callable[[int], Stamp] | None = None) -> list[Step]:
+                 stamp_of: Callable[[int], Stamp] | None = None, *,
+                 actor_layer: ActorLayer = ActorLayer.PLANNER) -> list[Step]:
         """Проиграть прошлое как мысль. Тот же цикл."""
-        return self.imagine(actions, stamp_of, mode=Mode.REMEMBER)
+        return self.imagine(actions, stamp_of, mode=Mode.REMEMBER,
+                            actor_layer=actor_layer)
 
     def stats(self) -> dict[str, Any]:
         return {"acted": self.acted, "imagined": self.imagined,

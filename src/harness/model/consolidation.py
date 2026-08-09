@@ -26,7 +26,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from ..core.clocks import Stamp
-from ..core.journal import Actor, Journal, Kind as EntryKind
+from ..core.journal import Actor, ActorLayer, Journal, Kind as EntryKind
 from ..core.profile import Profile
 from .beliefs import BeliefStore, Entity
 from .rebuild import Rebuilt, rebuild_from_journal
@@ -219,7 +219,7 @@ class Consolidator:
 
         target = self.journal or journal
         if target.mode == "a":
-            target.append(EntryKind.SLEEP, stamp, Actor.NONE,
+            target.append(EntryKind.SLEEP, stamp, Actor.NONE, ActorLayer.NONE,
                           event={"code": "consolidation", **report.as_dict()})
         return rebuilt, report
 

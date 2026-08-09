@@ -21,6 +21,7 @@ import pytest
 
 from harness.core.action import Action, Reversibility
 from harness.core.profile import MILESTONE_0
+from harness.core.journal import ActorLayer
 from harness.inject.base import Injector, InjectionSink
 from harness.inject.mask import InputMask
 from harness.inject.stop import StopSwitch
@@ -58,7 +59,7 @@ def test_modifiers_are_pressed_first_and_released_last(tmp_path: Path) -> None:
     with _rec(tmp_path) as rec:
         inj = Injector(InjectionSink(dev, sleep=lambda _: None), rec.journal)
         out = inj.submit(Action.key("OUT_0A11", 40, modifiers=("MOD_1B2C", "MOD_3D4E")),
-                         rec.clocks.stamp())
+                         rec.clocks.stamp(), ActorLayer.REFLEX)
     assert out.delivered and not out.masked and not out.stopped
     assert dev.calls == [
         ("down", "MOD_1B2C"), ("down", "MOD_3D4E"), ("down", "OUT_0A11"),
@@ -72,7 +73,7 @@ def test_delivered_action_is_journaled_with_device(tmp_path: Path) -> None:
         inj = Injector(InjectionSink(dev, sleep=lambda _: None), rec.journal)
         inj.submit(Action.key("OUT_0A11", 120,
                               reversibility=Reversibility(0.9, 0.05, 12)),
-                   rec.clocks.stamp())
+                   rec.clocks.stamp(), ActorLayer.REFLEX)
 
     with Session.open(tmp_path / "s") as s:
         (entry, act), = list(s.actions())
@@ -88,7 +89,7 @@ def test_mouse_move_reaches_device(tmp_path: Path) -> None:
     dev = FakeDevice()
     with _rec(tmp_path) as rec:
         inj = Injector(InjectionSink(dev, sleep=lambda _: None), rec.journal)
-        out = inj.submit(Action.mouse(15, -7, 16), rec.clocks.stamp())
+        out = inj.submit(Action.mouse(15, -7, 16), rec.clocks.stamp(), ActorLayer.REFLEX)
     assert out.delivered
     assert dev.calls == [("move", (15, -7))]
 
@@ -98,7 +99,7 @@ def test_nothing_is_delivered_and_recorded(tmp_path: Path) -> None:
     dev = FakeDevice()
     with _rec(tmp_path) as rec:
         inj = Injector(InjectionSink(dev, sleep=lambda _: None), rec.journal)
-        out = inj.submit(Action.nothing(50), rec.clocks.stamp())
+        out = inj.submit(Action.nothing(50), rec.clocks.stamp(), ActorLayer.REFLEX)
     assert out.delivered
     assert dev.calls == [], "бездействие не должно шевелить устройством"
     with Session.open(tmp_path / "s") as s:
@@ -114,7 +115,8 @@ def test_masked_action_never_touches_device(tmp_path: Path) -> None:
     mask.block("OUT_0A11", scope="app")
     with _rec(tmp_path) as rec:
         inj = Injector(InjectionSink(dev, sleep=lambda _: None), rec.journal, mask=mask)
-        out = inj.submit(Action.key("OUT_0A11", 60), rec.clocks.stamp(), scope="window")
+        out = inj.submit(Action.key("OUT_0A11", 60), rec.clocks.stamp(),
+                         ActorLayer.REFLEX, scope="window")
     assert out.masked and not out.delivered
     assert dev.calls == [], "маска пропустила приказ до устройства"
     with Session.open(tmp_path / "s") as s:
@@ -134,7 +136,7 @@ def test_masked_modifier_blocks_whole_action(tmp_path: Path) -> None:
     with _rec(tmp_path) as rec:
         inj = Injector(InjectionSink(dev, sleep=lambda _: None), rec.journal, mask=mask)
         out = inj.submit(Action.key("OUT_0A11", 60, modifiers=("MOD_1B2C",)),
-                         rec.clocks.stamp())
+                         rec.clocks.stamp(), ActorLayer.REFLEX)
     assert out.masked and dev.calls == []
     assert "MOD_1B2C" in out.reason
 
@@ -145,7 +147,7 @@ def test_stop_before_submit_never_touches_device(tmp_path: Path) -> None:
         stop = StopSwitch(rec.journal)
         stop.engage("аварийно", rec.clocks.stamp())
         inj = Injector(InjectionSink(dev, sleep=lambda _: None), rec.journal, stop=stop)
-        out = inj.submit(Action.key("OUT_0A11", 500), rec.clocks.stamp())
+        out = inj.submit(Action.key("OUT_0A11", 500), rec.clocks.stamp(), ActorLayer.REFLEX)
     assert out.stopped and dev.calls == []
     assert out.reason.startswith("stop:")
 
@@ -156,9 +158,11 @@ def test_stop_release_lets_actions_through_again(tmp_path: Path) -> None:
         stop = StopSwitch(rec.journal)
         inj = Injector(InjectionSink(dev, sleep=lambda _: None), rec.journal, stop=stop)
         stop.engage("пауза", rec.clocks.stamp())
-        assert inj.submit(Action.key("OUT_0A11", 30), rec.clocks.stamp()).stopped
+        assert inj.submit(Action.key("OUT_0A11", 30), rec.clocks.stamp(),
+                          ActorLayer.REFLEX).stopped
         stop.release(rec.clocks.stamp())
-        assert inj.submit(Action.key("OUT_0A11", 30), rec.clocks.stamp()).delivered
+        assert inj.submit(Action.key("OUT_0A11", 30), rec.clocks.stamp(),
+                          ActorLayer.REFLEX).delivered
 
     with Session.open(tmp_path / "s") as s:
         codes = [e.event.get("code") for e in s.journal]
@@ -194,10 +198,10 @@ def test_journal_records_every_attempt_exactly_once(tmp_path: Path) -> None:
         stop = StopSwitch(rec.journal)
         inj = Injector(InjectionSink(dev, sleep=lambda _: None), rec.journal,
                        mask=mask, stop=stop)
-        inj.submit(Action.key("OUT_0A11", 20), rec.clocks.stamp())     # дошло
-        inj.submit(Action.key("OUT_0B22", 20), rec.clocks.stamp())     # маска
+        inj.submit(Action.key("OUT_0A11", 20), rec.clocks.stamp(), ActorLayer.REFLEX)
+        inj.submit(Action.key("OUT_0B22", 20), rec.clocks.stamp(), ActorLayer.REFLEX)
         stop.engage("тест", rec.clocks.stamp())
-        inj.submit(Action.key("OUT_0A11", 20), rec.clocks.stamp())     # стоп
+        inj.submit(Action.key("OUT_0A11", 20), rec.clocks.stamp(), ActorLayer.REFLEX)
 
     with Session.open(tmp_path / "s") as s:
         s.journal.verify()

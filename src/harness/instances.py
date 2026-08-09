@@ -27,7 +27,7 @@ from pathlib import Path
 from typing import Any, Iterable
 
 from .core.clocks import Stamp
-from .core.journal import Actor, Journal, Kind as EntryKind
+from .core.journal import Actor, ActorLayer, Journal, Kind as EntryKind
 from .core.profile import Profile, short
 from .model.beliefs import BeliefStore, Testimony, merge_testimony
 
@@ -157,7 +157,7 @@ class Colony:
         for i, item in enumerate(mine):
             seq = inst.journal.seq if inst.journal is not None else i
             if inst.journal is not None and inst.journal.mode == "a":
-                inst.journal.append(EntryKind.TESTIMONY, stamp, Actor.NONE,
+                inst.journal.append(EntryKind.TESTIMONY, stamp, Actor.NONE, ActorLayer.NONE,
                                     event={"code": "from_instance", "claim": item.claim,
                                            "source": item.from_instance,
                                            "trust": item.trust,
