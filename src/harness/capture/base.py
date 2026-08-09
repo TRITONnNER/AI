@@ -27,6 +27,39 @@ class BackendUnavailable(RuntimeError):
     """Backend на этой машине не работает. Текст обязан говорить, что сделать."""
 
 
+class Unchanged:
+    """Экран не изменился. **Это данные, а не пропуск.**
+
+    Desktop Duplication (dxcam на Windows) устроен так, что неизменённый кадр не
+    выдаётся вовсе: `grab()` возвращает `None`. Механизм правильный — зачем
+    пересылать то же самое, — но у него есть ловушка, и она дорогая.
+
+    Первая запись минимального набора — «неподвижность, 60 с» — статична по замыслу.
+    Наивный счётчик отрапортует «потеряно 1700 кадров из 1800» на записи, прошедшей
+    безупречно: изменений ровно ноль, и это искомый ответ. Опорный замер, к которому
+    приводятся все остальные, сломался бы первым.
+    
+    Поэтому «кадра не пришло» и «кадр тот же, что прежде» — **разные** ответы:
+    `None` означает первое (источник кончился или сломался), `UNCHANGED` — второе.
+    Второе пишется в журнал отметкой со временем, а ссылка на кадр берётся у
+    предыдущей записи: содержимое дублировать не надо, а момент времени — надо.
+    """
+
+    __slots__ = ()
+
+    def __repr__(self) -> str:
+        return "UNCHANGED"
+
+    def __bool__(self) -> bool:
+        # Ложное значение нарочно: `if frame:` без явной проверки на UNCHANGED
+        # обрабатывает его как «кадра нет», и это безопасная сторона ошибки.
+        return False
+
+
+#: Единственный экземпляр. Сравнивать надо через `is`, как с `None`.
+UNCHANGED = Unchanged()
+
+
 @dataclass(frozen=True, slots=True)
 class Frame:
     image: np.ndarray          # (h, w) uint8 для gray8 или (h, w, 3) для rgb8
@@ -69,7 +102,7 @@ class CaptureSource(Protocol):
 
     def start(self) -> None: ...
     def stop(self) -> None: ...
-    def read(self) -> Frame | None: ...
+    def read(self) -> "Frame | Unchanged | None": ...
     def frames(self) -> Iterator[Frame]: ...
 
 
@@ -112,14 +145,17 @@ def describe_backends() -> dict[str, dict[str, object]]:
                       "why": "не требует ничего; помечает записи как синтетические"},
         "replay": {"available": True, "why": "читает записанную сессию с диска"},
         "screen_mss": {
-            "available": machine.capture_backend == "screen_mss" and has("mss"),
+            "available": machine.has_capture and has("mss"),
             "why": f"нужны графическая сессия (не Wayland) и пакет mss "
                    f"(система {machine.os_name}, сессия {machine.session}, "
-                   f"mss {'есть' if has('mss') else 'нет'})",
+                   f"mss {'есть' if has('mss') else 'нет'}). На Windows это "
+                   f"запасной путь: полноэкранные игры через него не видны",
         },
         "screen_dxcam": {
             "available": system == "Windows" and has("dxcam"),
-            "why": "нужны Windows + пакет dxcam (Desktop Duplication)",
+            "why": "нужны Windows + пакет dxcam (Desktop Duplication). "
+                   "Предпочтительный путь на Windows: видит полноэкранные "
+                   "приложения и держит 30+ кадров при 1080p",
         },
         "audio_loopback": {
             "available": has("sounddevice"),

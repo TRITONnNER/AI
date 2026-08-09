@@ -121,6 +121,11 @@ class Recorder:
         self._frames_written = 0
         self._drop_tolerance = int(profile.parameters["capture_drop_tolerance"])
         self._last_frame_world: int | None = None
+        # Ссылка на последний записанный кадр: её переиспользует `record_unchanged`.
+        # Хранится ссылка, а не изображение: содержимое дублировать не надо, оно уже
+        # лежит в хранилище и адресуется по содержимому.
+        self._last_frame_ref: BlobRef | None = None
+        self.unchanged_written = 0
         self._gaps_noticed = 0
         self._frames_refused = 0
 
@@ -171,6 +176,7 @@ class Recorder:
         stamp = self.clocks.stamp()
 
         frame_ref = self.frames.append_frame(image)
+        self._last_frame_ref = frame_ref
         audio_ref: BlobRef | None = None
         if audio is not None:
             audio_ref = self.audio.append_block(audio, channels=self._audio_channels)
@@ -204,6 +210,46 @@ class Recorder:
         return self.journal.append(EntryKind.FRAME, stamp, actor, actor_layer,
                                    frame=frame_ref, audio=audio_ref, event=event,
                                    state=state, wall_clock=wall_clock)
+
+    def record_unchanged(self, *, t_world: int | None = None,
+                         t_content: float | None = None,
+                         actor: Actor = Actor.NONE,
+                         actor_layer: ActorLayer = ActorLayer.NONE,
+                         wall_clock: float | None = None) -> Entry:
+        """Экран не изменился. **Запись, а не пропуск.**
+
+        Desktop Duplication не выдаёт неизменённый кадр вовсе (`dxcam.grab()` отдаёт
+        `None`). Механизм разумный, но у него есть ловушка, и она дорогая: первая
+        запись минимального набора — «неподвижность, 60 с» — статична по замыслу.
+        Наивный счётчик отрапортовал бы «потеряно 1700 кадров из 1800» на записи,
+        прошедшей идеально: изменений ровно ноль, и это искомый ответ.
+
+        Поэтому здесь пишется отметка со временем, а **ссылка на кадр берётся у
+        предыдущей записи**: момент времени новый, содержимое то же. Дублировать
+        пиксели незачем — хранилище адресуется по содержимому и всё равно склеило бы
+        их в один сегмент, но тогда в журнале стояло бы «пришёл кадр», и «экран не
+        менялся» стало бы неотличимо от «пришёл точно такой же кадр». Это разные
+        утверждения: первое — про устройство механизма, второе — про мир.
+
+        `record_gap` для этого не годится категорически: разрыв означает потерю, а
+        здесь ничего не потеряно.
+        """
+        if self._last_frame_ref is None:
+            raise SessionError(
+                "«без изменений» до первого кадра: ссылаться не на что. Первый кадр "
+                "приходит всегда, даже на неподвижном экране, и если его не было — "
+                "это поломка захвата, а не отсутствие изменений")
+        self.clocks.tick_self()
+        self.clocks.set_world(self.clocks.t_world + 1 if t_world is None else t_world)
+        self.clocks.set_content(t_content)
+        stamp = self.clocks.stamp()
+        self._last_frame_world = int(stamp.t_world)
+        self.unchanged_written += 1
+        return self.journal.append(
+            EntryKind.FRAME, stamp, actor, actor_layer,
+            frame=self._last_frame_ref,
+            event={"code": "unchanged", "same_as_seq": self.journal.seq},
+            wall_clock=wall_clock)
 
     def record_gap(self, code: str, detail: dict[str, Any]) -> Entry:
         """Пропуск кадров, рассинхрон, отвал источника. Молчать об этом нельзя."""

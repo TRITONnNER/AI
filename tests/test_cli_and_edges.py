@@ -252,9 +252,16 @@ def test_unavailable_backends_fail_loudly(monkeypatch: pytest.MonkeyPatch) -> No
     monkeypatch.delenv("DISPLAY", raising=False)
     monkeypatch.delenv("WAYLAND_DISPLAY", raising=False)
 
-    for backend in (WindowsScreenCapture(), MacScreenCapture()):
-        with pytest.raises(BackendUnavailable, match="не реализован"):
-            backend.start()
+    # ScreenCaptureKit по-прежнему не написан и говорит это прямо.
+    with pytest.raises(BackendUnavailable, match="не реализован"):
+        MacScreenCapture().start()
+
+    # А dxcam с TASK-08 **написан**: проверка на машине оператора показала, что
+    # `dxcam.create()` и `grab()` работают с первой попытки. Здесь он отказывает по
+    # другой причине — нет пакета, — и текст обязан называть именно её: «не
+    # реализован» отправило бы оператора ждать того, что уже готово.
+    with pytest.raises(BackendUnavailable, match="dxcam"):
+        WindowsScreenCapture().start()
 
     cap = ScreenCapture()
     with pytest.raises(BackendUnavailable):

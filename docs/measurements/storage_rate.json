@@ -1,0 +1,26 @@
+[
+  {
+    "kind": "шум",
+    "frames": 300,
+    "bytes": 622310985,
+    "kib_per_frame": 2025.8,
+    "gib_per_hour": 208.65,
+    "raw_gib_per_hour": 208.6
+  },
+  {
+    "kind": "неподвижный экран",
+    "frames": 300,
+    "bytes": 706526,
+    "kib_per_frame": 2.3,
+    "gib_per_hour": 0.24,
+    "raw_gib_per_hour": 208.6
+  },
+  {
+    "kind": "экран с движением",
+    "frames": 300,
+    "bytes": 1109345,
+    "kib_per_frame": 3.6,
+    "gib_per_hour": 0.37,
+    "raw_gib_per_hour": 208.6
+  }
+]

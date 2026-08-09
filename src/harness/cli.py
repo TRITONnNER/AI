@@ -707,8 +707,8 @@ def cmd_record(args: argparse.Namespace) -> int:
     Иначе живой корпус окажется неотличим по атрибуции от синтетического, где
     кадры не начаты никем.
     """
-    from .capture.base import BackendUnavailable
-    from .capture.screen import AudioOverflow, ScreenCapture
+    from .capture.base import UNCHANGED, BackendUnavailable
+    from .capture.screen import AudioOverflow
     from .core.journal import Actor, ActorLayer
     from .core.profile import MILESTONE_0
     from .corpus.live import plan_text
@@ -732,16 +732,23 @@ def cmd_record(args: argparse.Namespace) -> int:
     actor = Actor.HUMAN if human else Actor.NONE
     layer = ActorLayer.HUMAN if human else ActorLayer.NONE
 
-    cap = ScreenCapture(gray=MILESTONE_0.structural["frame_format"] == "gray8")
-    try:
-        cap.start()
-    except BackendUnavailable as e:
-        print(f"захват недоступен: {e}", file=sys.stderr)
-        # Не список backend'ов, а имя команды, которая скажет, что делать: список
-        # отвечает «чего нет», а оператору нужно «что ввести».
+    # Механизм выбирается тем же кодом, что у доктора: иначе доктор проверит один
+    # путь, а запись пойдёт другим, и первое живое число окажется не о том.
+    from .capture.select import open_screen
+    from .machine import detect as detect_machine
+
+    machine_now = detect_machine()
+    choice = open_screen(machine_now,
+                         gray=MILESTONE_0.structural["frame_format"] == "gray8")
+    if choice.source is None:
+        print(f"захват недоступен: {choice.why_text()}", file=sys.stderr)
         print("\nЧто именно чинить и какой командой: harness doctor",
               file=sys.stderr)
         return 2
+    cap = choice.source
+    print(f"механизм: {choice.why_text()}")
+    if choice.caveat:
+        print(f"ВНИМАНИЕ: {choice.caveat}")
 
     # Линия записи оператора выводится из его машины, а не берётся у контейнера:
     # экран, оператор и часы здесь другие, и это отдельная линия по построению.
@@ -776,12 +783,27 @@ def cmd_record(args: argparse.Namespace) -> int:
                   file=sys.stderr)
 
     written = 0
+    unchanged = 0
     audio_blocks = 0
     try:
         with Recorder(args.path, profile=MILESTONE_0, source=cap.name,
                       synthetic=False, note=args.note, lineage_id=lid) as rec:
-            while written < frames:
+            while written + unchanged < frames:
                 frame = cap.read()
+                if frame is UNCHANGED:
+                    # Экран не менялся. **Не пропуск.** На записи «неподвижность»
+                    # это основной исход: считать его потерей значило бы объявить
+                    # сломанной запись, прошедшую идеально.
+                    if written == 0:
+                        # До первого кадра ссылаться не на что — а первый кадр
+                        # Desktop Duplication отдаёт всегда. Значит это поломка.
+                        rec.record_gap("unchanged_before_first_frame",
+                                       {"turns": unchanged + 1})
+                        unchanged += 1
+                        continue
+                    rec.record_unchanged(actor=actor, actor_layer=layer)
+                    unchanged += 1
+                    continue
                 if frame is None:
                     rec.record_gap("source_ended", {"after_frames": written})
                     break
@@ -807,7 +829,13 @@ def cmd_record(args: argparse.Namespace) -> int:
         cap.stop()
         if audio_src is not None:
             audio_src.stop()
-    print(f"записано кадров: {written} → {args.path} ({audio_note})")
+    # Два числа, а не одно: «кадров» и «без изменений». Одно число здесь означало бы
+    # либо потерянную статику, либо мнимые потери — и то и другое ломает опорный замер.
+    print(f"записано: {written} изменившихся кадров и {unchanged} отметок "
+          f"«без изменений» → {args.path} ({audio_note})")
+    if unchanged and not written:
+        print("ни одного изменившегося кадра: если это была запись неподвижности — "
+              "так и должно быть", file=sys.stderr)
     if audio_blocks:
         print(f"блоков звука: {audio_blocks}")
     print(f"слой-инициатор: {layer}, линия {lid} (своя, не контейнерная)")
@@ -846,7 +874,8 @@ def cmd_selftest(args: argparse.Namespace) -> int:
         tmp = tempfile.mkdtemp(prefix="harness-selftest-")
         root = Path(tmp) / "session"
     res = selftest.run(Path(root), seconds=args.seconds,
-                       with_audio=not args.no_audio)
+                       with_audio=not args.no_audio,
+                       expect_change=not args.static)
     if args.json:
         _print_json(res.as_dict())
     else:
@@ -1088,6 +1117,9 @@ def build_parser() -> argparse.ArgumentParser:
     st.add_argument("--seconds", type=float, default=10.0)
     st.add_argument("--no-audio", action="store_true",
                     help="без звука: он записи не блокирует")
+    st.add_argument("--static", action="store_true",
+                    help="сцена статична (как в записи «неподвижность»): совпадение "
+                         "кадров здесь правильный ответ, а не отказ")
     st.add_argument("--json", action="store_true")
     st.set_defaults(fn=cmd_selftest)
 

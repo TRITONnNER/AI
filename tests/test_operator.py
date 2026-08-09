@@ -53,14 +53,29 @@ def test_wayland_wins_over_display_variable() -> None:
 
 def test_no_capture_backend_for_wayland() -> None:
     """Под Wayland механизма нет, и это объявлено, а не выясняется чёрным кадром."""
-    from harness.machine import CAPTURE_FOR
+    from harness.capture.select import CANDIDATES
+    from harness.machine import HAS_CAPTURE
 
-    assert CAPTURE_FOR[Session.WAYLAND] is None
-    assert CAPTURE_FOR[Session.X11] == "screen_mss"
-    # Windows и macOS тоже умеют mss: раньше их запирала не машинерия, а проверка
-    # переменной DISPLAY, которой на этих системах не бывает вовсе.
-    assert CAPTURE_FOR[Session.WINDOWS] == "screen_mss"
-    assert CAPTURE_FOR[Session.MACOS] == "screen_mss"
+    assert HAS_CAPTURE[Session.WAYLAND] is False
+    assert CANDIDATES[Session.WAYLAND] == ()
+    assert [b.name for b in CANDIDATES[Session.X11]] == ["screen_mss"]
+    assert [b.name for b in CANDIDATES[Session.MACOS]] == ["screen_mss"]
+
+
+def test_windows_prefers_desktop_duplication_over_mss() -> None:
+    """На Windows dxcam первым, mss запасным. Порядок измерен, а не выбран.
+
+    Через mss на 1080p замер дал 19.9 кадр/с при заявленных 30, и полноэкранные
+    DirectX-приложения он не видит вовсе. Прежняя таблица «одна система — один
+    backend» брала mss при установленном и работающем dxcam.
+    """
+    from harness.capture.select import CANDIDATES
+
+    order = [b.name for b in CANDIDATES[Session.WINDOWS]]
+    assert order == ["screen_dxcam", "screen_mss"], order
+    mss = CANDIDATES[Session.WINDOWS][1]
+    assert mss.caveat, "у запасного пути обязана быть названа его слабость"
+    assert "не" in mss.caveat and "захватыва" in mss.caveat
 
 
 def test_screen_capture_refuses_wayland_loudly(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -173,15 +188,21 @@ def test_probe_rejects_a_uniform_frame() -> None:
 
 
 def _probe_with(source: Any) -> tuple[Any, str, Any, bool]:
-    """Прогнать проверку содержимого через подменённый источник."""
-    import harness.capture.screen as screen_mod
+    """Прогнать проверку содержимого через подменённый источник.
 
-    real = screen_mod.ScreenCapture
+    Подменяется **выбор механизма**, а не класс захвата: с TASK-08 `probe_screen`
+    берёт источник у `capture.select.open_screen`, чтобы доктор проверял тот же
+    механизм, которым потом пойдёт запись.
+    """
+    import harness.capture.select as select_mod
+
+    real = select_mod.open_screen
     try:
-        screen_mod.ScreenCapture = lambda **_: source     # type: ignore[assignment]
+        select_mod.open_screen = lambda m, **kw: select_mod.Choice(   # type: ignore[assignment]
+            chosen=select_mod.MSS, considered=(select_mod.MSS,), source=source)
         return doctor.probe_screen(detect(), pause_s=0.0)
     finally:
-        screen_mod.ScreenCapture = real                   # type: ignore[assignment]
+        select_mod.open_screen = real                     # type: ignore[assignment]
 
 
 def test_free_space_is_reported_in_hours_not_gigabytes(tmp_path: Path) -> None:
@@ -283,7 +304,9 @@ def test_selftest_catches_frozen_frames(tmp_path: Path) -> None:
                        audio_source=FakeAudio(_stereo()))
     assert not res.ok
     assert res.failed[0].name == "кадры не одинаковые"
-    assert "один и тот же буфер" in res.failed[0].where
+    assert "повторённый буфер" in res.failed[0].where
+    assert "утверждает" in res.failed[0].where, (
+        "отказ обязан отличать «источник соврал» от «экран не менялся»")
 
 
 def test_selftest_catches_mono_dressed_as_stereo(tmp_path: Path) -> None:
@@ -303,7 +326,8 @@ def test_selftest_says_where_not_just_that(tmp_path: Path) -> None:
     res = selftest.run(tmp_path / "s", seconds=0.5, source=FakeSource(black),
                        audio_source=FakeAudio(_stereo()))
     text = res.render_text()
-    assert "Сломалось:" in text and "Где именно:" in text
+    assert "Чинить первым:" in text and "Где именно:" in text
+    assert "Прошло" in text, "сводка обязана сказать, сколько прошло и сколько нет"
     with pytest.raises(ValueError, match="не сказал, где именно"):
         selftest.Step("шаг", False, "не вышло")
 
@@ -687,3 +711,267 @@ def test_setup_puts_the_code_in_the_home_directory() -> None:
         "второе сообщение о той же причине сбивает с толку и должно быть названо")
     assert "не переносите" in text.lower(), (
         "перенос выглядит очевидным решением и не работает")
+
+
+# ---------------------------------------------------------------------------
+# Ловушка `None`: «экран не менялся» — это данные, а не пропуск (TASK-08)
+# ---------------------------------------------------------------------------
+
+
+class StaticScreen:
+    """Источник, ведущий себя как Desktop Duplication на неподвижном экране.
+
+    Первый `read()` отдаёт кадр, остальные — `UNCHANGED`. Именно так работает
+    `dxcam.grab()`: неизменённый кадр не выдаётся вовсе.
+    """
+
+    name = "тест-dxcam-статика"
+
+    def __init__(self, turns: int = 40) -> None:
+        self._turns = turns
+        self._i = 0
+
+    def start(self) -> None: ...
+    def stop(self) -> None: ...
+
+    def read(self) -> Any:
+        from harness.capture.base import UNCHANGED
+
+        self._i += 1
+        if self._i > self._turns:
+            return None
+        if self._i == 1:
+            return Frame(np.random.default_rng(2).integers(
+                0, 256, (48, 64), dtype=np.uint8), 0, 0)
+        return UNCHANGED
+
+
+def test_unchanged_is_not_none_and_is_falsy() -> None:
+    """`None` — «кадра не пришло», `UNCHANGED` — «кадр тот же». Разные ответы."""
+    from harness.capture.base import UNCHANGED, Unchanged
+
+    assert UNCHANGED is not None
+    assert isinstance(UNCHANGED, Unchanged)
+    assert not UNCHANGED, (
+        "ложное значение нарочно: `if frame:` без явной проверки обрабатывает его "
+        "как «кадра нет» — это безопасная сторона ошибки")
+
+
+def test_stillness_recording_does_not_look_like_lost_frames(tmp_path: Path) -> None:
+    """Главная ловушка задачи, целиком.
+
+    Запись «неподвижность, 60 с» статична по замыслу. Наивный счётчик отрапортовал бы
+    «потеряно 1700 кадров из 1800» на записи, прошедшей идеально. Проверяется, что
+    отметки «без изменений» попали в журнал как данные и что ни одного разрыва не
+    записано.
+    """
+    from harness.session import Session as ReadSession
+
+    res = selftest.run(tmp_path / "s", seconds=0.5, with_audio=False,
+                       expect_change=False, source=StaticScreen(turns=20))
+    assert res.ok, res.render_text()
+
+    with ReadSession(tmp_path / "s") as s:
+        frames = list(s.journal.frames())
+        codes = [(e.event or {}).get("code") for e in frames]
+        assert codes.count("unchanged") >= 10, (
+            f"отметок «без изменений» {codes.count('unchanged')}: статика должна "
+            "давать их, а не разрывы")
+        assert codes.count("frame") == 1, "изменившийся кадр здесь ровно один"
+        gaps = [e for e in s.journal if str(e.kind) == "capture_gap"]
+        assert not gaps, (
+            f"записано {len(gaps)} разрывов на записи, где ничего не потеряно: "
+            "именно это и есть та ошибка, из-за которой опорный замер сломался бы "
+            "первым")
+
+
+def test_unchanged_reuses_the_previous_frame_reference(tmp_path: Path) -> None:
+    """Ссылка на прежний сегмент; содержимое не дублируется."""
+    from harness.core.journal import Actor, ActorLayer
+    from harness.core.profile import MILESTONE_0
+    from harness.session import Recorder, Session as ReadSession
+
+    root = tmp_path / "s"
+    with Recorder(root, profile=MILESTONE_0, source="screen_dxcam",
+                  synthetic=False) as rec:
+        rec.record_frame(np.random.default_rng(3).integers(
+            0, 256, (48, 64), dtype=np.uint8),
+            actor=Actor.HUMAN, actor_layer=ActorLayer.HUMAN)
+        for _ in range(4):
+            rec.record_unchanged(actor=Actor.HUMAN, actor_layer=ActorLayer.HUMAN)
+
+    with ReadSession(root) as s:
+        frames = list(s.journal.frames())
+        refs = {(e.frame or {}).get("digest") if isinstance(e.frame, dict)
+                else getattr(e.frame, "digest", None) for e in frames}
+        assert len(refs) == 1, (
+            f"ссылок {len(refs)}: у отметки «без изменений» она обязана быть та же, "
+            "что у предыдущего кадра")
+        # И часы при этом идут: момент времени у каждой отметки свой.
+        selves = [e.stamp.t_self for e in frames]
+        assert selves == sorted(selves) and len(set(selves)) == len(selves)
+
+
+def test_unchanged_before_the_first_frame_is_a_defect(tmp_path: Path) -> None:
+    """До первого кадра ссылаться не на что, и это поломка, а не статика.
+
+    Первый кадр Desktop Duplication отдаёт всегда, даже на неподвижном экране.
+    Поэтому «без изменений» на первом обороте означает неисправный механизм, и
+    молчаливо превращать это в отметку нельзя.
+    """
+    from harness.core.profile import MILESTONE_0
+    from harness.session import Recorder, SessionError
+
+    with Recorder(tmp_path / "s", profile=MILESTONE_0, source="screen_dxcam",
+                  synthetic=False) as rec:
+        with pytest.raises(SessionError, match="до первого кадра"):
+            rec.record_unchanged()
+
+
+def test_frequency_is_two_numbers(tmp_path: Path) -> None:
+    """Обороты цикла и изменившиеся кадры — разные величины.
+
+    На статичном экране второе законно равно нулю, и отказом это не считается.
+    """
+    res = selftest.run(tmp_path / "s", seconds=0.5, with_audio=False,
+                       expect_change=False, source=StaticScreen(turns=30))
+    names = [s.name for s in res.steps]
+    assert "частота оборотов не ниже заявленной" in names
+    assert "изменившиеся кадры считаются отдельно" in names
+    changed = next(s for s in res.steps
+                   if s.name == "изменившиеся кадры считаются отдельно")
+    assert changed.ok, "малое число изменившихся кадров на статике — не отказ"
+
+
+def test_identity_check_depends_on_the_kind_of_scene(tmp_path: Path) -> None:
+    """На записи неподвижности кадры обязаны быть одинаковыми."""
+    # Один кадр, размноженный копиями: если поправить только первый, он станет
+    # отличаться от остальных, и «все одинаковы» окажется неверным по построению.
+    base = np.full((32, 32), 90, dtype=np.uint8)
+    base[0, 0] = 255                         # чтобы кадр не был однородным
+    same = [base.copy() for _ in range(12)]
+
+    static = selftest.run(tmp_path / "static", seconds=0.3, with_audio=False,
+                          expect_change=False, source=FakeSource(list(same)))
+    step = next(s for s in static.steps if "одинаков" in s.name)
+    assert step.ok, "на статичной сцене совпадение кадров — правильный ответ"
+
+    moving = selftest.run(tmp_path / "moving", seconds=0.3, with_audio=False,
+                          expect_change=True, source=FakeSource(list(same)))
+    step = next(s for s in moving.steps if "одинаков" in s.name)
+    assert not step.ok, "там, где ждали движения, совпадение кадров — отказ"
+
+
+def test_setup_has_the_three_symptoms_from_the_first_live_run() -> None:
+    """`TASK-08`, часть 4: три симптома, на которых оператор стоял на самом деле."""
+    text = (ROOT / "SETUP.md").read_text(encoding="utf-8")
+    assert "WinError 5" in text
+    assert "Permission denied" in text and "python.exe" in text, (
+        "повторное `py -m venv` при активном окружении падает на python.exe, и это "
+        "не поломка: окружение уже есть")
+    assert "не является внутренней или внешней командой" in text
+    # И для последнего названы **обе** причины: их две, и различаются они по (.venv).
+    assert "Установка не прошла" in text and "не активировано" in text
+
+
+def test_doctor_says_which_mechanism_and_why() -> None:
+    """Строка «есть» без причины выбора — дефект вывода, а не мелочь оформления."""
+    check = doctor.check_session(detect())
+    if check.state is doctor.State.YES:
+        assert ":" in check.detail, "не сказано, почему выбран именно этот механизм"
+    text = (ROOT / "SETUP.md").read_text(encoding="utf-8")
+    assert "screen_dxcam" in text and "screen_mss" in text, (
+        "оператор должен знать имена механизмов: доктор печатает именно их")
+
+
+def test_storage_estimate_names_both_ends() -> None:
+    """Одного числа расхода не существует: разброс тысячекратный по содержимому."""
+    check = doctor.check_disk(detect(), path=Path("."), fps=30.0, size=(1920, 1080))
+    assert "ч записи экрана" in check.detail
+    assert "видео во весь экран" in check.detail, (
+        "предел для несжимаемого содержимого обязан быть назван рядом: разница "
+        "между 0.37 и 209 ГиБ/ч — это разница между неделей и двадцатью минутами")
+    # И константа теперь измерена, а не взята из головы.
+    assert doctor.BYTES_PER_FRAME_1080P < 8 * 1024, (
+        "прежние 90 КиБ на кадр были числом из головы, подписанным как замер: "
+        "измеренное — 3.6 КиБ")
+
+
+def test_selftest_runs_everything_that_does_not_depend_on_the_failure(tmp_path: Path) -> None:
+    """`TASK-08`, часть 3a, дефект 1: останов на первом отказе стоил захода.
+
+    Различие кадров, звук, журнал, воспроизведение и расход места от частоты захвата
+    не зависят. Здесь частота нарочно провалена — источник отдаёт мало кадров, — и
+    все независимые проверки обязаны быть выполнены.
+    """
+    class Slow:
+        name = "тест-медленный"
+
+        def __init__(self) -> None:
+            self._i = 0
+
+        def start(self) -> None: ...
+        def stop(self) -> None: ...
+
+        def read(self) -> Any:
+            import time as _t
+
+            self._i += 1
+            _t.sleep(0.05)              # 20 оборотов в секунду вместо тридцати
+            return Frame(np.random.default_rng(self._i).integers(
+                0, 256, (32, 48), dtype=np.uint8), self._i, 0)
+
+    res = selftest.run(tmp_path / "s", seconds=0.6, with_audio=False, source=Slow())
+    names = [s.name for s in res.steps]
+    rate = next(s for s in res.steps if "частота оборотов" in s.name)
+    assert not rate.ok, "частота должна была провалиться — иначе тест ничего не ловит"
+    for must in ("кадры не чёрные", "кадры не одинаковые",
+                 "записи журнала создаются", "actor_layer = human",
+                 "воспроизведение работает", "расход места измерен"):
+        assert must in names, (
+            f"после провала частоты не выполнено «{must}», хотя оно от неё не зависит")
+    assert res.summary().startswith("Прошло ")
+
+
+def test_rate_failure_blames_the_mechanism_before_the_operator(tmp_path: Path) -> None:
+    """`TASK-08`, часть 3a, дефект 2: совет не должен опережать причину в коде.
+
+    Оператору напечатали «закройте тяжёлые окна или уменьшите capture_fps», тогда как
+    дело было в выбранном механизме: он получил бы те же двадцать кадров.
+    """
+    import harness.capture.select as select_mod
+
+    class Slow:
+        name = "screen_mss"
+
+        def __init__(self) -> None:
+            self._i = 0
+
+        def start(self) -> None: ...
+        def stop(self) -> None: ...
+
+        def read(self) -> Any:
+            import time as _t
+
+            self._i += 1
+            _t.sleep(0.05)
+            return Frame(np.random.default_rng(self._i).integers(
+                0, 256, (32, 48), dtype=np.uint8), self._i, 0)
+
+    real = select_mod.open_screen
+    try:
+        select_mod.open_screen = lambda m, **kw: select_mod.Choice(  # type: ignore[assignment]
+            chosen=select_mod.MSS, considered=(select_mod.DXCAM, select_mod.MSS),
+            rejected=[("screen_dxcam", "нет пакета dxcam")], source=Slow())
+        res = selftest.run(tmp_path / "s", seconds=0.8, with_audio=False)
+    finally:
+        select_mod.open_screen = real                                # type: ignore[assignment]
+
+    rate = next(s for s in res.steps if "частота оборотов" in s.name)
+    assert not rate.ok
+    where = rate.where
+    assert "механизм" in where, "не названа возможная причина в коде"
+    assert where.index("механизм") < where.index("окна"), (
+        "совет оператору стоит раньше причины в коде: именно так оператор и потратил "
+        "заход впустую")
+    assert "harness doctor" in where

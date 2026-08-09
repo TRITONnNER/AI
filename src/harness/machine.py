@@ -37,18 +37,19 @@ class Session(StrEnum):
     NONE = "none"          # графической сессии нет: сервер, контейнер, ssh
 
 
-#: Какой backend захвата годится для какой оконной системы.
+#: Есть ли для этой оконной системы **хоть какой-то** механизм захвата.
 #:
-#: `screen_mss` стоит и на Windows, и на macOS не по недосмотру: mss работает на всех
-#: трёх системах. Быстрые пути — Desktop Duplication и ScreenCaptureKit — лучше по
-#: частоте кадров, но не написаны, а требовать от оператора ждать их написания, когда
-#: рабочий путь уже есть, значит не получить первой записи вообще.
-CAPTURE_FOR: dict[Session, str | None] = {
-    Session.X11: "screen_mss",
-    Session.WAYLAND: None,       # нужен PipeWire; backend не написан
-    Session.WINDOWS: "screen_mss",
-    Session.MACOS: "screen_mss",
-    Session.NONE: None,
+#: Не «какой именно»: выбор между несколькими живёт в `capture.select`, потому что он
+#: зависит от того, что установлено и что запустилось, а здесь этого знать нельзя.
+#: Раньше здесь стояло одно имя на систему, и из-за этого на Windows брался mss при
+#: установленном и работающем dxcam — таблица просто не предусматривала, что
+#: кандидатов может быть двое.
+HAS_CAPTURE: dict[Session, bool] = {
+    Session.X11: True,
+    Session.WAYLAND: False,      # нужен PipeWire; backend не написан
+    Session.WINDOWS: True,
+    Session.MACOS: True,
+    Session.NONE: False,
 }
 
 
@@ -63,8 +64,21 @@ class Machine:
     release: str
 
     @property
+    def has_capture(self) -> bool:
+        """Есть ли механизм в принципе. Какой именно — решает `capture.select`."""
+        return HAS_CAPTURE[self.session]
+
+    @property
     def capture_backend(self) -> str | None:
-        return CAPTURE_FOR[self.session]
+        """Что бы выбрали на этой машине. `None` — механизма нет.
+
+        Смотрит на установленные пакеты через `capture.select.plan`, а не на таблицу:
+        ответ зависит от машины, а не только от оконной системы.
+        """
+        from .capture.select import plan
+
+        choice = plan(self)
+        return choice.chosen.name if choice.chosen else None
 
     @property
     def os_name(self) -> str:
@@ -145,9 +159,16 @@ def install_ffmpeg(machine: Machine) -> str:
 
 
 def install_capture(machine: Machine) -> str:
-    """Чем ставить зависимости захвата именно здесь."""
+    """Чем ставить зависимости захвата именно здесь.
+
+    На Windows первым называется dxcam: он предпочтительный механизм, и предлагать
+    вместо него mss значило бы советовать тот путь, который не видит полноэкранных
+    игр и не держит тридцати кадров.
+    """
     if machine.session is Session.WAYLAND:
         return switch_to_x11()
+    if machine.system == "Windows":
+        return pip_install("dxcam mss", machine)
     return pip_install("mss", machine)
 
 

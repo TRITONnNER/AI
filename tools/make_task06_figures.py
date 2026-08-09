@@ -238,6 +238,57 @@ def fig_m3(out: Path, m3: dict[str, Any]) -> Path:
                  f"{m3['total']}, на живом экране — {m3['measured_on_live']}")
 
 
+# ---------------------------------------------------------------------------
+# 17. Расход места: измеренный против оценённого (TASK-08)
+# ---------------------------------------------------------------------------
+
+
+def fig_storage(out: Path, rows: list[dict[str, Any]]) -> Path:
+    """Одно утверждение: расход зависит от содержимого, а оценка была из головы."""
+    import json as _json
+
+    fig, (ax1, ax2) = _fig(520, ncols=2)
+    order = ["неподвижный экран", "экран с движением", "шум"]
+    by = {r["kind"]: r for r in rows}
+    vals = [by[k]["gib_per_hour"] for k in order]
+
+    # Панель 1: логарифмическая шкала — разброс тысячекратный, линейная его скроет.
+    ax1.bar(range(3), vals, color=[PROVEN, PROVEN, ALARM])
+    ax1.set_yscale("log")
+    ax1.set_xticks(range(3))
+    ax1.set_xticklabels(["неподвижный\nэкран", "экран\nс движением", "шум"],
+                        fontsize=TICK_PT)
+    ax1.set_ylabel("ГиБ в час, 1080p при 30 кадр/с", fontsize=LABEL_PT)
+    for i, v in enumerate(vals):
+        ax1.text(i, v * 1.25, f"{v:g}", ha="center", fontsize=LABEL_PT)
+    ax1.set_xlabel("зелёный — экранное содержимое, красный — несжимаемый предел\n"
+                   "шкала логарифмическая: разброс тысячекратный",
+                   fontsize=LABEL_PT - 2, color=NEUTRAL)
+
+    # Панель 2: что обещали оператору и что есть на самом деле.
+    screen = by["экран с движением"]["gib_per_hour"]
+    free_gib = 64.5
+    hours_claimed = free_gib / 9.2          # прежняя оценка доктора, 90 КиБ на кадр
+    hours_real = free_gib / screen
+    ax2.barh([0, 1], [hours_claimed, hours_real], color=[ALARM, PROVEN], height=0.5)
+    ax2.set_yticks([0, 1])
+    ax2.set_yticklabels(["оценка доктора\nдо TASK-08", "измерено"],
+                        fontsize=LABEL_PT)
+    ax2.set_xlabel(f"часов записи на {free_gib:g} ГиБ свободных", fontsize=LABEL_PT)
+    ax2.text(hours_claimed, 0, f"  {hours_claimed:.0f} ч", va="center",
+             fontsize=LABEL_PT, color=ALARM)
+    ax2.text(hours_real, 1, f"  {hours_real:.0f} ч", va="center", fontsize=LABEL_PT,
+             color=PROVEN)
+    ax2.set_xlim(0, hours_real * 1.25)
+
+    _stamp(fig, n="3 вида содержимого, по 300 кадров",
+           unit="вид содержимого",
+           compares="оценка по 90 КиБ на кадр против измеренных 3.6 КиБ")
+    return _save(fig, out / "17-raskhod-mesta.png",
+                 "Расход места был завышен в 25 раз: обещали 7 часов там, где влезает "
+                 "170.")
+
+
 def main(argv: list[str]) -> int:
     base = Path(argv[1]) if len(argv) > 1 else ROOT / "docs" / "figures"
     made = []
@@ -251,6 +302,10 @@ def main(argv: list[str]) -> int:
 
     import project_status as ps
     made.append(fig_m3(base, ps.m3_summary()))
+
+    rate = json.loads((ROOT / "docs" / "measurements" / "storage_rate.json")
+                      .read_text(encoding="utf-8"))
+    made.append(fig_storage(base, rate))
 
     # Обе раскладки рисунков отслеживаются в репозитории и уже расходились однажды.
     other = ROOT / "figures"

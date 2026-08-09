@@ -48,12 +48,24 @@ from .machine import (Machine, Session, detect, enable_uinput, find_loopback,
 #: и на 3.10 проект падает импортом, а не понятным сообщением.
 PYTHON_MIN = (3, 11)
 
-#: Сколько байт занимает кадр в журнале — грубая оценка для «сколько часов влезет».
-#: Не из воздуха: замер на синтетическом корпусе дал кадр+дельта+zlib около 12 КиБ
-#: на 320×180 и около 90 КиБ на 1080p. Берётся вторая, потому что оператор пишет
-#: настоящий экран, а не 320×180, и завышенная оценка честнее заниженной: человек,
-#: которому обещали десять часов и дали два, потеряет запись на середине.
-BYTES_PER_FRAME_1080P = 90 * 1024
+#: Сколько байт занимает кадр 1080p в журнале. **Измерено**, а не оценено:
+#: `tools/measure_storage_rate.py`, числа в `docs/measurements/storage_rate.json`.
+#:
+#: Прежнее значение — 90 КиБ — я взял из головы в TASK-07 и подписал как замер. На
+#: машине оператора это дало «64.5 ГиБ ≈ 7.0 часов» там, где честный ответ около 170:
+#: настоящий конвейер (кадр, дельта, zlib) пишет 3.6 КиБ на кадр экранного содержимого
+#: и 2.3 КиБ на неподвижном экране.
+#:
+#: Берётся вариант «экран с движением»: он ближе всего к тому, что будет записывать
+#: оператор по минимальному плану. Ошибка в эту сторону не бесплатна, поэтому вместе с
+#: числом печатается предел для несжимаемого содержимого — видео во весь экран и игра
+#: с частицами ближе к шуму, чем к рабочему столу.
+BYTES_PER_FRAME_1080P = int(3.6 * 1024)
+
+#: Тот же кадр, если содержимое несжимаемо. Не «на всякий случай»: разница между
+#: 0.37 и 209 ГиБ/ч — это разница между «влезет неделя» и «влезет двадцать минут», и
+#: скрывать её за одним средним числом нельзя.
+WORST_BYTES_PER_FRAME_1080P = int(2026 * 1024)
 
 
 class State(StrEnum):
@@ -178,9 +190,13 @@ def check_deps(m: Machine) -> Check:
     """Обязательные пакеты. Необязательные — отдельными проверками, не здесь."""
     import importlib.util
 
+    from .capture.select import CANDIDATES
+
     need = {"numpy": "numpy>=1.26"}
-    if m.capture_backend == "screen_mss":
-        need["mss"] = "mss"
+    # Пакет захвата спрашивается у кандидатов этой оконной системы, а не у одного
+    # зашитого имени: на Windows их два, и раньше проверялся только запасной.
+    for b in CANDIDATES[m.session]:
+        need[b.module] = b.module
     missing = [spec for mod, spec in need.items()
                if importlib.util.find_spec(mod) is None]
     if not missing:
@@ -191,18 +207,52 @@ def check_deps(m: Machine) -> Check:
 
 
 def check_session(m: Machine) -> Check:
-    """Оконная система и есть ли под неё механизм захвата."""
+    """Оконная система и есть ли под неё механизм захвата.
+
+    Печатает **выбранный механизм, альтернативы и причину выбора**. Строка «есть» без
+    объяснения, почему не взят установленный и более подходящий механизм, — дефект
+    вывода: именно так на Windows брался mss при работающем dxcam, и отчёт при этом
+    был зелёным.
+    """
+    from .capture.select import plan
+
     if m.session is Session.NONE:
         return Check("графическая сессия", State.NO,
                      f"нет ({m.session_source})", blocks=True,
                      fix="запустите на машине с экраном; в контейнере и по ssh "
                          "без проброса X захватывать нечего")
-    if m.capture_backend is None:
-        return Check("механизм захвата", State.NO,
-                     f"под {m.session} backend'а нет", blocks=True,
-                     fix=switch_to_x11())
-    return Check("механизм захвата", State.YES,
-                 f"{m.capture_backend} для {m.session}")
+    choice = plan(m)
+    if choice.chosen is None:
+        return Check("механизм захвата", State.NO, choice.why_text(), blocks=True,
+                     fix=switch_to_x11() if m.session is Session.WAYLAND
+                     else install_capture(m))
+    return Check("механизм захвата", State.YES, choice.why_text())
+
+
+def check_fullscreen(m: Machine) -> Check | None:
+    """Умеет ли выбранный механизм захватывать полноэкранные приложения.
+
+    Отдельным пунктом, а не примечанием: через mss на Windows игра **не попадёт в
+    кадр**, и молча — кадры будут, содержимое будет не то. Записи из минимального
+    набора это не мешает (браузер и рабочий стол видны), поэтому пункт не
+    блокирующий; полному набору с игрой — мешает, и там он назван.
+
+    `None` — механизма нет вовсе, и говорить об играх нечего: об этом уже сказал
+    предыдущий пункт, а два «НЕТ» об одной причине заставляют чинить дважды.
+    """
+    from .capture.select import plan
+
+    choice = plan(m)
+    if choice.chosen is None:
+        return None
+    if not choice.caveat:
+        return Check("полноэкранные приложения", State.YES,
+                     f"{choice.chosen.name} их видит")
+    return Check("полноэкранные приложения", State.NO,
+                 f"активен {choice.chosen.name}: {choice.caveat}",
+                 later="записям игры (полный набор `--set full`)",
+                 fix=install_capture(m) + "   # затем повторите harness doctor: "
+                     "он выберет dxcam сам, если тот запустится")
 
 
 def probe_screen(m: Machine, *, frames: int = 2, pause_s: float = 0.25
@@ -214,23 +264,37 @@ def probe_screen(m: Machine, *, frames: int = 2, pause_s: float = 0.25
     """
     import time
 
-    from .capture.base import BackendUnavailable
-    from .capture.screen import ScreenCapture
+    from .capture.base import UNCHANGED
+    from .capture.select import open_screen
 
-    cap = ScreenCapture(gray=True)
-    try:
-        cap.start()
-    except BackendUnavailable as e:
-        return State.NO, str(e), None, False
+    choice = open_screen(m, gray=True)
+    if choice.source is None:
+        return State.NO, choice.why_text(), None, False
+    cap = choice.source
     try:
         shots = []
+        unchanged = 0
         for i in range(max(2, frames)):
             f = cap.read()
+            if f is UNCHANGED:
+                # Экран не менялся — это ответ, а не пустота. Судить о содержимом
+                # будем по тем кадрам, которые пришли.
+                unchanged += 1
+                if i == 0:
+                    time.sleep(pause_s)
+                continue
             if f is None:
+                if shots:
+                    break
                 return State.NO, "захват вернул пустоту вместо кадра", None, False
             shots.append(f.image)
             if i == 0:
                 time.sleep(pause_s)
+        if not shots:
+            return (State.NO,
+                    f"механизм {choice.chosen.name} ни разу не отдал кадр "
+                    f"(«без изменений» {unchanged} раз): первый кадр обязан прийти "
+                    "всегда, даже на неподвижном экране", None, False)
     except Exception as e:                      # backend'ы бросают своё
         return State.NO, f"захват сорвался: {e}", None, False
     finally:
@@ -247,7 +311,10 @@ def probe_screen(m: Machine, *, frames: int = 2, pause_s: float = 0.25
         return (State.NO,
                 f"кадр {w}×{h} однороден (разброс яркости {spread:.2f}): это не экран",
                 size, True)
-    return State.YES, f"{w}×{h}, разброс яркости {spread:.1f}", size, False
+    detail = f"{w}×{h}, разброс яркости {spread:.1f}"
+    if unchanged:
+        detail += f", «без изменений» {unchanged} из {max(2, frames)}"
+    return State.YES, detail, size, False
 
 
 def check_display(m: Machine, probe: tuple[State, str, tuple[int, int] | None, bool]
@@ -342,15 +409,22 @@ def check_disk(m: Machine, *, path: Path, fps: float, size: tuple[int, int] | No
                      blocks=True, fix=f"создайте каталог: mkdir -p {path}")
     free_gb = usage.free / (1 << 30)
     per_frame = BYTES_PER_FRAME_1080P
+    worst = WORST_BYTES_PER_FRAME_1080P
     if size:
         # Пропорция по площади кадра от 1080p: 320×180 в тридцать шесть раз меньше.
-        per_frame = max(2048, int(BYTES_PER_FRAME_1080P
-                                  * (size[0] * size[1]) / (1920 * 1080)))
+        area = (size[0] * size[1]) / (1920 * 1080)
+        per_frame = max(512, int(BYTES_PER_FRAME_1080P * area))
+        worst = max(2048, int(WORST_BYTES_PER_FRAME_1080P * area))
     hours = usage.free / max(1.0, per_frame * fps * 3600.0)
-    detail = (f"{free_gb:.1f} ГиБ свободно — это около {hours:.1f} ч записи "
-              f"при {fps:g} кадр/с")
-    # Полчаса — минимальный набор из части 5. Меньше — блокирует: запись, оборванная
-    # по месту, честно оборвётся, но пятнадцать минут работы оператора пропадут.
+    worst_hours = usage.free / max(1.0, worst * fps * 3600.0)
+    detail = (f"{free_gb:.1f} ГиБ свободно — это около {hours:.0f} ч записи "
+              f"экрана при {fps:g} кадр/с, и всего {worst_hours:.1f} ч, если "
+              f"писать видео во весь экран или игру с частицами")
+    # Порог — по **реалистичной** оценке, а предел по шуму печатается рядом как
+    # предупреждение. Блокировать по шуму нельзя: минимальный план — это браузер и
+    # рабочий стол, там расход экранный, и отказ при тридцати свободных гигабайтах
+    # остановил бы оператора на ровном месте. Полчаса — длина минимального набора:
+    # запись, оборванная по месту, оборвётся честно, но работа пропадёт.
     if hours < 0.5:
         return Check("свободное место", State.NO, detail, blocks=True,
                      fix=f"освободите место или укажите другой диск: "
@@ -393,6 +467,9 @@ def run(*, path: Path | None = None, fps: float | None = None,
     rep.checks.append(check_deps(m))
     session = check_session(m)
     rep.checks.append(session)
+    fullscreen = check_fullscreen(m)
+    if fullscreen is not None:
+        rep.checks.append(fullscreen)
 
     # Кадр берётся один раз, а выводов из него три: экран, разрешения, размер для
     # оценки места. Три отдельных захвата дали бы три разных ответа на одной и той
