@@ -667,15 +667,28 @@ def probe_chooser(profile: Profile) -> Callable[..., tuple[str, int]]:
     Смешивать в одной ветке опыт двух разведок нельзя — у графа будет разная форма,
     и любое сравнение по нему станет сравнением двух разных экспериментов.
     """
-    if not bool(profile.parameters["explore_closes_loops"]):
+    share = float(profile.structural["explore_closing_share"])
+    if share <= 0.0:
         return choose_probe
     bar = int(profile.parameters["explore_close_degree_bar"])
+    # Доля отрабатывается счётчиком, а не случайностью: прогон обязан
+    # воспроизводиться от сида, и кривая баланса не должна зависеть от того, какому
+    # генератору достался этот вызов. Накопитель тот же, что у темпа лепета.
+    state = {"credit": 0.0, "closing": 0, "deep": 0}
 
     def chooser(model: ForwardModel, graph: Any, place: str | None,
                 outputs: Sequence[str], **kw: Any) -> tuple[str, int]:
-        return choose_closing_probe(model, graph, place, outputs,
-                                    degree_bar=bar, **kw)
+        state["credit"] += share
+        if state["credit"] >= 1.0:
+            state["credit"] -= 1.0
+            state["closing"] += 1
+            return choose_closing_probe(model, graph, place, outputs,
+                                        degree_bar=bar, **kw)
+        state["deep"] += 1
+        kw.pop("graph", None)
+        return choose_probe(model, place, outputs, **kw)
 
+    chooser.counts = state          # type: ignore[attr-defined]
     return chooser
 
 

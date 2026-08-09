@@ -207,7 +207,7 @@ def build_graph(seed: int, *, steps: int, babble: int, closing: bool,
         extra["world_extent_px"] = extent
     profile = from_schema("сверка-mu", capture_width=320, capture_height=180,
                           babble_repeats=3, place_record_loops=True,
-                          macro_max_length=0, explore_closes_loops=closing,
+                          macro_max_length=0, explore_closing_share=(1.0 if closing else 0.0),
                           world_variable_cost=variable_cost,
                           world_bounded=bounded, **extra)
     min_n = int(profile.parameters["plan_min_step_n"])

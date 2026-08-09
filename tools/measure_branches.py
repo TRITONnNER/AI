@@ -27,7 +27,7 @@ from harness.model.places import PlaceGraph
 def run(seed: int, steps: int, arb) -> dict:
     profile = from_schema("ветки", capture_width=320, capture_height=180,
                           babble_repeats=3, place_record_loops=True,
-                          macro_max_length=0, explore_closes_loops=True)
+                          macro_max_length=0, explore_closing_share=1.0)
     min_n = int(profile.parameters["plan_min_step_n"])
     bw = InteractiveWorld(profile, seed=seed, n_outputs=16)
     bab = Babbler(profile, bw.outputs, rng_seed=seed)
