@@ -187,10 +187,28 @@ def cmd_loop(args: argparse.Namespace) -> int:
 
     with Recorder(args.path, profile=profile, source=f"loop:seed={args.seed}",
                   synthetic=True, note=args.note) as rec:
-        babbler = Babbler(profile, world.outputs, journal=rec.journal, rng_seed=args.seed)
         motivation = Motivation(profile)
         stack = GoalStack(profile, journal=rec.journal)
         error = PredictionError(profile)
+
+        def state_extra() -> dict[str, Any]:
+            """Чем дополнить срез состояния каждой записи действия.
+
+            Драйвы, настроение и активная цель считались в этом цикле и раньше, но в
+            записи не попадали: срез оставался пустым, и все показатели, построенные на
+            `StateSnapshot`, докладывали «не измерялось» по прогону, где всё было
+            измерено. Числа были в оперативной памяти и умирали вместе с процессом.
+            """
+            active = stack.active
+            return {"drives": {name: {"value": round(d.value, 6),
+                                      "forecast": round(d.forecast, 6)}
+                               for name, d in motivation.drives.items()},
+                    "mood": (round(motivation.mood.valence, 6),
+                             round(motivation.mood.arousal, 6)),
+                    "goal_id": None if active is None else active.id}
+
+        babbler = Babbler(profile, world.outputs, journal=rec.journal,
+                          rng_seed=args.seed, state_extra=state_extra)
         branch = rec.journal.meta.branch_id
 
         for _ in range(args.rounds):

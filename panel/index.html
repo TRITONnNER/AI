@@ -1,0 +1,697 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<title>Панель исследователя</title>
+<link rel="icon" href="data:,">
+<style>
+/* Словарь лабораторного прибора. Ни градиентов, ни теней, ни свечения: за этим сидят
+   часами, и свечение снижает читаемость ровно того, во что смотрят. Фон тёмный
+   нейтральный, не чёрный. Палитра — шесть значений, из них насыщенный ровно один. */
+:root{
+  --bg:#1c1e20; --panel:#232629; --line:#31353a; --ink:#d6d9dc; --dim:#8b9297;
+  --agent:#6f8fa8;            /* приглушённый: агент за рулём */
+  --human:#a89a6f;            /* другой приглушённый: человек */
+  --alarm:#c0392b;            /* насыщенный: только тревога */
+  --ok:#5b7f5e;
+  --mono:ui-monospace,"DejaVu Sans Mono",Menlo,Consolas,monospace;
+  --sans:system-ui,"Segoe UI",Roboto,sans-serif;
+}
+*{box-sizing:border-box}
+html,body{height:100%;margin:0}
+body{background:var(--bg);color:var(--ink);font:14px/1.4 var(--sans);
+     display:flex;flex-direction:column;overflow:hidden}
+/* Все числа моноширинные с табличными цифрами: они меняются каждый кадр и не
+   должны прыгать по ширине. */
+.num,.mono{font-family:var(--mono);font-variant-numeric:tabular-nums}
+
+/* ---------- верхняя полоса: постоянство места ---------- */
+#bar{display:flex;align-items:stretch;gap:0;border-bottom:1px solid var(--line);
+     background:var(--panel);flex:0 0 auto}
+#bar > div{padding:8px 14px;border-right:1px solid var(--line);display:flex;
+           flex-direction:column;justify-content:center}
+#bar .k{font-size:10px;letter-spacing:.08em;color:var(--dim);text-transform:uppercase}
+#driver{min-width:190px}
+#driver .v{font-size:20px;font-weight:600;letter-spacing:.04em}
+#bar .v{font-family:var(--mono);font-variant-numeric:tabular-nums;font-size:14px}
+#clocks .v{letter-spacing:.02em}
+#clocks .off{color:var(--dim);text-decoration:line-through}
+#alarm{cursor:pointer;min-width:120px}
+#alarm .dot{width:10px;height:10px;border-radius:50%;background:var(--dim);
+            display:inline-block;margin-right:6px}
+#alarm.on .dot{background:var(--alarm)}
+#stopwrap{margin-left:auto;border-right:none;padding:6px 10px}
+#stop{background:var(--alarm);color:#fff;border:1px solid #8f2b20;font:600 16px/1 var(--sans);
+      letter-spacing:.14em;padding:12px 22px;cursor:pointer}
+#stop:active{background:#8f2b20}
+
+/* ---------- корешки экранов ---------- */
+#tabs{display:flex;gap:0;border-bottom:1px solid var(--line);flex:0 0 auto;
+      background:var(--bg)}
+#tabs button{background:none;border:none;border-right:1px solid var(--line);
+             color:var(--dim);font:12px/1 var(--sans);padding:7px 13px;cursor:pointer;
+             letter-spacing:.02em}
+#tabs button .n{font-family:var(--mono);color:var(--ink);margin-right:6px}
+#tabs button{border-bottom:2px solid transparent}
+#tabs button.sel{color:var(--ink);background:var(--panel);
+                 border-bottom-color:var(--agent)}
+
+/* ---------- экраны ---------- */
+main{flex:1 1 auto;min-height:0;position:relative}
+.screen{position:absolute;inset:0;display:none;padding:12px;gap:12px}
+.screen.sel{display:flex}
+h2{margin:0 0 6px;font:600 13px/1 var(--sans);letter-spacing:.06em;
+   text-transform:uppercase;color:var(--dim)}
+.q{font:12px/1.3 var(--sans);color:var(--dim);margin:0 0 10px}
+.box{background:var(--panel);border:1px solid var(--line);padding:10px;min-height:0}
+
+/* Экран «Живое»: главный объект — зеркало с лентой под ним, один объект на ~70 %. */
+#s-live{flex-direction:row}
+#mirrorwrap{flex:0 0 70%;display:flex;flex-direction:column;min-width:0}
+#mirror{flex:1 1 auto;min-height:0;background:#101112;border:1px solid var(--line);
+        display:flex;align-items:center;justify-content:center;overflow:hidden;position:relative}
+#mirror img{width:100%;height:100%;object-fit:contain;image-rendering:pixelated}
+#overlaysvg{position:absolute;inset:0;pointer-events:none}
+#ribbon{flex:0 0 118px;margin-top:8px;background:var(--panel);border:1px solid var(--line);
+        position:relative}
+#ribbon canvas{width:100%;height:100%;display:block}
+.cap{font:11px/1.3 var(--sans);color:var(--dim);padding:4px 2px}
+#rail{flex:1 1 auto;display:flex;flex-direction:column;gap:8px;min-width:230px}
+.value{background:var(--panel);border:1px solid var(--line);padding:9px 10px}
+.value .k{font-size:11px;color:var(--dim);letter-spacing:.04em}
+.value .v{font-family:var(--mono);font-variant-numeric:tabular-nums;font-size:26px;
+          line-height:1.15;margin-top:2px}
+.value .u{font-size:11px;color:var(--dim);margin-left:5px;font-family:var(--sans)}
+.value.absent .v{font-size:15px;color:var(--dim)}
+.value.alarm{border-color:var(--alarm)}
+.value.alarm .v{color:var(--alarm)}
+.value .why{font-size:11px;color:var(--dim);margin-top:4px}
+.origin{font-size:10px;color:var(--dim);letter-spacing:.03em;margin-top:5px}
+#hints{font:11px/1.5 var(--sans);color:var(--dim)}
+#hints b{color:var(--ink);font-family:var(--mono);font-weight:400}
+
+/* таблицы */
+table{border-collapse:collapse;width:100%;font-size:12px}
+th,td{border-bottom:1px solid var(--line);padding:4px 7px;text-align:left;vertical-align:top}
+th{color:var(--dim);font-weight:600;font-size:11px;letter-spacing:.04em;
+   text-transform:uppercase;position:sticky;top:0;background:var(--panel)}
+td.n,th.n{font-family:var(--mono);font-variant-numeric:tabular-nums;text-align:right}
+.scroll{overflow:auto;min-height:0}
+.dimtext{color:var(--dim)}
+.bar-h{height:8px;background:#2c3033;position:relative}
+.bar-h i{position:absolute;inset:0 auto 0 0;background:var(--agent)}
+.bar-h u{position:absolute;top:-2px;bottom:-2px;width:2px;background:var(--ink)}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:12px;min-height:0}
+.grid3{display:grid;grid-template-columns:1.1fr 1.6fr 1fr;gap:12px;min-height:0}
+.col{display:flex;flex-direction:column;gap:8px;min-height:0}
+
+/* конфигуратор поверх любого экрана */
+#cfg{position:absolute;inset:24px;background:var(--panel);border:1px solid var(--line);
+     display:none;flex-direction:column;padding:12px;z-index:5}
+#cfg.on{display:flex}
+#cfg .split{display:grid;grid-template-columns:1fr 12px 1fr;gap:0;flex:1 1 auto;min-height:0}
+#cfg .gap{background:var(--line);width:2px;margin:0 auto}
+#warn{background:#33231f;border:1px solid var(--alarm);color:var(--ink);
+      padding:8px 10px;font-size:12px;display:none;margin-top:8px}
+#warn.on{display:block}
+#err{padding:20px;font:13px/1.6 var(--sans)}
+#err code{font-family:var(--mono);background:var(--panel);padding:1px 5px}
+</style>
+</head>
+<body>
+
+<!-- Полоса состояния. Стоит на одном месте во всех экранах и не скроллится. -->
+<div id="bar">
+  <div id="driver"><span class="k">кто за рулём</span><span class="v" id="b-driver">—</span></div>
+  <div id="clocks"><span class="k">циклы / мир / содержимое</span>
+    <span class="v"><span id="b-self">—</span> · <span id="b-world">—</span> ·
+    <span id="b-content">—</span></span></div>
+  <div><span class="k">профиль</span><span class="v" id="b-profile">—</span></div>
+  <div><span class="k">экземпляры</span><span class="v" id="b-inst">—</span></div>
+  <div><span class="k">осталось записи</span><span class="v" id="b-hours">—</span></div>
+  <div id="alarm" title="один индикатор, а не пятнадцать метрик в полосе">
+    <span class="k">тревога</span><span class="v"><span class="dot"></span><span id="b-alarm">—</span></span></div>
+  <div id="stopwrap"><button id="stop">СТОП</button></div>
+</div>
+
+<div id="tabs"></div>
+
+<main>
+  <!-- 1. Живое -->
+  <section class="screen sel" id="s-live">
+    <div id="mirrorwrap">
+      <div id="mirror"><img id="mirror-img" alt=""><svg id="overlaysvg"></svg></div>
+      <div class="cap" id="mirror-cap"></div>
+      <div id="ribbon"><canvas id="ribbon-c"></canvas></div>
+      <div class="cap" id="ribbon-cap"></div>
+    </div>
+    <div id="rail">
+      <div id="rail-values"></div>
+      <div class="box" id="hints"></div>
+    </div>
+  </section>
+
+  <!-- 2. Состояние -->
+  <section class="screen" id="s-state">
+    <div class="grid2" style="flex:1 1 auto">
+      <div class="col">
+        <div class="box" style="flex:1 1 auto;overflow:auto">
+          <h2>драйвы и прогноз</h2>
+          <p class="q">вопрос экрана: чего ему сейчас не хватает</p>
+          <div id="st-drives"></div>
+        </div>
+      </div>
+      <div class="col">
+        <div class="box" style="flex:0 0 330px">
+          <h2>настроение: валентность × возбуждение</h2>
+          <canvas id="mood" width="600" height="270" style="width:100%;height:270px"></canvas>
+        </div>
+        <div class="box" style="flex:1 1 auto;overflow:auto">
+          <h2>тело и модулятор</h2>
+          <div id="st-body"></div>
+          <div class="origin" id="st-mod"></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 3. Цели и речь -->
+  <section class="screen" id="s-goals">
+    <div class="grid3" style="flex:1 1 auto">
+      <div class="box scroll"><h2>стек целей</h2>
+        <p class="q">вопрос экрана: чего он добивается и на что тратит бюджет</p>
+        <div id="g-stack"></div></div>
+      <div class="box scroll"><h2>речь: заземлённая и беглая</h2>
+        <div id="g-speech"></div></div>
+      <div class="box scroll"><h2>вопросы агента</h2><div id="g-questions"></div></div>
+    </div>
+  </section>
+
+  <!-- 4. Память -->
+  <section class="screen" id="s-memory">
+    <div class="grid3" style="flex:1 1 auto">
+      <div class="box scroll"><h2>карточки</h2><div id="m-list"></div></div>
+      <div class="box scroll"><h2>карточка целиком</h2>
+        <p class="q">вопрос экрана: что он знает и откуда</p>
+        <div id="m-card"></div></div>
+      <div class="col">
+        <div class="box scroll" style="flex:1 1 auto"><h2>конвейер убеждений</h2>
+          <div id="m-pipeline"></div></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 5. Журнал -->
+  <section class="screen" id="s-journal">
+    <div class="col" style="flex:1 1 auto">
+      <div class="box" style="flex:0 0 190px"><h2>ошибка предсказания по записям</h2>
+        <p class="q">вопрос экрана: почему он это сделал</p>
+        <canvas id="j-line" width="1200" height="120" style="width:100%;height:120px"></canvas></div>
+      <div class="grid2" style="flex:1 1 auto">
+        <div class="box scroll"><h2>слои-инициаторы</h2><div id="j-layers"></div></div>
+        <div class="box scroll"><h2>два ответа рядом</h2><div id="j-answers"></div></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 6. Тело -->
+  <section class="screen" id="s-body">
+    <div class="box scroll" style="flex:1 1 auto"><h2>выходы устройства</h2>
+      <p class="q">вопрос экрана: чем он умеет действовать и что откатывается</p>
+      <div id="b-outputs"></div></div>
+  </section>
+
+  <!-- 7. Опыты -->
+  <section class="screen" id="s-exp">
+    <div class="col" style="flex:1 1 auto">
+      <div class="box scroll" style="flex:1 1 auto"><h2>прогоны и постоянные показатели</h2>
+        <p class="q">вопрос экрана: помогла ли правка</p>
+        <div id="e-runs"></div></div>
+      <div class="grid2" style="flex:0 0 42%">
+        <div class="box scroll"><h2>показатели по журналу</h2><div id="e-vitals"></div></div>
+        <div class="box scroll"><h2>хранилище</h2><div id="e-storage"></div></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- конфигуратор: поверх любого экрана, по P -->
+  <div id="cfg">
+    <h2>конфигуратор профиля <span class="dimtext">— P закрывает</span></h2>
+    <div class="split">
+      <div class="scroll"><h2>блок А: параметры, меняются на ходу</h2><div id="cfg-a"></div></div>
+      <div class="gap"></div>
+      <div class="scroll"><h2>блок Б: структурные</h2><div id="cfg-b"></div></div>
+    </div>
+    <div id="warn"></div>
+  </div>
+</main>
+
+<div id="err" style="display:none"></div>
+
+<script>
+/* ЕДИНСТВЕННОЕ МЕСТО, ГДЕ ЗАДАН ИСТОЧНИК ДАННЫХ.
+   Смена фикстуры на настоящий журнал — правка этой строки и ничего больше.
+   Фикстуру по любой записи собирает tools/make_panel_fixture.py --session ПУТЬ. */
+const SOURCE = "fixture.json";
+
+const SCREENS = [
+  ["s-live",    "Живое",        "жив ли он сейчас"],
+  ["s-state",   "Состояние",    "чего ему не хватает"],
+  ["s-goals",   "Цели и речь",  "чего он добивается"],
+  ["s-memory",  "Память",       "что он знает"],
+  ["s-journal", "Журнал",       "почему он это сделал"],
+  ["s-body",    "Тело",         "чем он умеет действовать"],
+  ["s-exp",     "Опыты",        "помогла ли правка"],
+];
+
+const $ = (id) => document.getElementById(id);
+let DATA = null, cur = 0, overlays = {};
+
+/* Разряды по смыслу величины: печатается ровно столько, сколько объявлено в фикстуре.
+   Лишний разряд обещает точность, которой в числе нет. */
+/* Единицы, у которых дробная часть значима всегда: доля 1.00 и доля 1 читаются
+   по-разному — первая говорит «ровно единица из единицы», вторая выглядит счётчиком. */
+const RATIO_UNITS = ["доля", "0..1", "валентность×возбуждение", "с", "мс"];
+
+function fmt(v, digits, unit) {
+  if (v === null || v === undefined) return "—";
+  if (Array.isArray(v)) return v.map((x) => fmt(x, digits, unit)).join(" / ");
+  if (typeof v !== "number") return String(v);
+  /* Целое печатается целым, если единица счётная. Иначе «записей 381.000» обещает три
+     знака после запятой у счётчика записей, у которого дробной части не бывает. */
+  if (digits === 0) return String(Math.round(v));
+  if (Number.isInteger(v) && !RATIO_UNITS.includes(unit)) return String(Math.round(v));
+  const t = v.toFixed(digits);
+  return t === "-" + (0).toFixed(digits) ? (0).toFixed(digits) : t;  /* без «−0.00» */
+}
+
+function valueCell(v) {
+  const absent = v.value === null || v.value === undefined;
+  const el = document.createElement("div");
+  el.className = "value" + (absent ? " absent" : "") + (v.alarm ? " alarm" : "");
+  el.title = "источник: " + v.source;
+  el.innerHTML =
+    `<div class="k">${v.label}</div>` +
+    `<div class="v">${absent ? "нет числа" : fmt(v.value, v.digits, v.unit)}` +
+    (absent ? "" : `<span class="u">${v.unit}</span>`) + `</div>` +
+    (v.note ? `<div class="why">${v.note}</div>` : "") +
+    `<div class="origin">${v.origin} · ${v.source}</div>`;
+  return el;
+}
+
+function table(rows, cols) {
+  const t = document.createElement("table");
+  t.innerHTML = "<thead><tr>" + cols.map((c) =>
+    `<th class="${c.n ? "n" : ""}">${c.h}</th>`).join("") + "</tr></thead>";
+  const tb = document.createElement("tbody");
+  for (const r of rows) {
+    const tr = document.createElement("tr");
+    tr.innerHTML = cols.map((c) => {
+      const raw = c.f ? c.f(r) : r[c.k];
+      return `<td class="${c.n ? "n" : ""}">${raw === null || raw === undefined ? "—" : raw}</td>`;
+    }).join("");
+    tb.appendChild(tr);
+  }
+  t.appendChild(tb);
+  return t;
+}
+
+function spark(canvas, series, {mean = null} = {}) {
+  const c = canvas.getContext("2d");
+  const w = canvas.width = canvas.clientWidth * 2;
+  const h = canvas.height = canvas.clientHeight * 2;
+  c.clearRect(0, 0, w, h);
+  if (!series.length) {
+    c.fillStyle = "#8b9297"; c.font = "24px monospace";
+    c.fillText("ряда нет: величина не измерялась", 16, h / 2);
+    return;
+  }
+  const hi = Math.max(...series, 1e-9), lo = Math.min(...series, 0);
+  const y = (v) => h - 6 - ((v - lo) / (hi - lo || 1)) * (h - 12);
+  if (mean !== null) {
+    c.strokeStyle = "#31353a"; c.lineWidth = 2; c.beginPath();
+    c.moveTo(0, y(mean)); c.lineTo(w, y(mean)); c.stroke();
+  }
+  c.strokeStyle = "#6f8fa8"; c.lineWidth = 2; c.beginPath();
+  series.forEach((v, i) => {
+    const x = (i / Math.max(1, series.length - 1)) * w;
+    i ? c.lineTo(x, y(v)) : c.moveTo(x, y(v));
+  });
+  c.stroke();
+  /* Всплески — цветом, потому что это сигнал, а не украшение. */
+  c.fillStyle = "#c0392b";
+  const bar = mean === null ? Infinity : mean * 2;
+  series.forEach((v, i) => {
+    if (v <= bar) return;
+    const x = (i / Math.max(1, series.length - 1)) * w;
+    c.fillRect(x - 2, y(v) - 2, 5, 5);
+  });
+}
+
+function moodField(canvas, trail) {
+  const c = canvas.getContext("2d");
+  const w = canvas.width = canvas.clientWidth * 2;
+  const h = canvas.height = canvas.clientHeight * 2;
+  c.clearRect(0, 0, w, h);
+  c.strokeStyle = "#31353a"; c.lineWidth = 2;
+  c.beginPath(); c.moveTo(w / 2, 0); c.lineTo(w / 2, h); c.stroke();
+  c.beginPath(); c.moveTo(0, h / 2); c.lineTo(w, h / 2); c.stroke();
+  c.fillStyle = "#8b9297"; c.font = "20px system-ui";
+  c.fillText("возбуждение", 8, 22); c.fillText("валентность", w - 190, h / 2 - 12);
+  if (!trail.length) {
+    c.font = "24px monospace";
+    c.fillText("настроение не снималось", 16, h - 20);
+    return;
+  }
+  const px = (v) => w / 2 + v * (w / 2 - 20);
+  const py = (a) => h - 20 - a * (h - 40);
+  c.strokeStyle = "#4c5359"; c.lineWidth = 2; c.beginPath();
+  trail.forEach(([v, a], i) => (i ? c.lineTo(px(v), py(a)) : c.moveTo(px(v), py(a))));
+  c.stroke();
+  const [v, a] = trail[trail.length - 1];
+  c.fillStyle = "#d6d9dc";
+  c.beginPath(); c.arc(px(v), py(a), 7, 0, 7); c.fill();
+}
+
+/* ---------- отрисовка экранов ---------- */
+
+function drawBar(d) {
+  const b = d.bar;
+  $("b-driver").textContent = b.driver;
+  $("driver").title = b.driver_why;
+  $("driver").style.background = b.driver === "АГЕНТ" ? "#26313a"
+    : b.driver === "ЧЕЛОВЕК" ? "#332f22" : "transparent";
+  $("b-self").textContent = b.t_self;
+  $("b-world").textContent = b.t_world;
+  const cnt = $("b-content");
+  cnt.textContent = b.t_content === null ? "—" : b.t_content;
+  cnt.className = b.t_content === null ? "off" : "";
+  cnt.title = b.t_content === null
+    ? "время содержимого гаснет: агент ничего не просматривал" : "";
+  $("b-profile").textContent = b.profile_name + " " + b.profile_hash;
+  $("b-profile").title = "структурный хеш " + b.structure_hash;
+  $("b-inst").textContent = b.instances.live + "/" + b.instances.total;
+  const h = b.hours_left;
+  $("b-hours").textContent = h.value === null ? "—" : fmt(h.value, h.digits) + " ч";
+  $("b-hours").title = b.hours_basis;
+  /* Один агрегированный индикатор. Метрики в полосу не выводятся. */
+  const alarms = d.live.values.filter((v) => v.alarm);
+  $("alarm").classList.toggle("on", alarms.length > 0);
+  $("b-alarm").textContent = alarms.length ? alarms.length + " за границей" : "в норме";
+  $("alarm").onclick = () => {
+    const names = alarms.map((v) => v.label).join(", ");
+    $("b-alarm").textContent = alarms.length ? names : "в норме";
+  };
+}
+
+function drawLive(d) {
+  const L = d.live;
+  $("mirror-img").src = L.mirror || "";
+  $("mirror-cap").textContent = "зеркало экрана агента — " + L.mirror_note;
+  const rail = $("rail-values");
+  rail.innerHTML = "";
+  /* Ровно те величины, что объявлены в фикстуре. Ни одной сверх. */
+  for (const v of L.values) rail.appendChild(valueCell(v));
+  const errs = L.ribbon;
+  const mean = errs.length ? errs.reduce((a, b) => a + b, 0) / errs.length : null;
+  spark($("ribbon-c"), errs, {mean});
+  $("ribbon-cap").textContent = L.ribbon_label +
+    (errs.length ? ` · ${errs.length} значений, среднее ${mean.toFixed(3)}` : " · ряда нет");
+  $("hints").innerHTML =
+    "накладки выключены, включаются по одной:<br>" +
+    L.overlays.map((o) => `<b>${o.key}</b> ${o.label}${overlays[o.key] ? " · включена" : ""}`)
+      .join("<br>") +
+    "<br><br>экраны — цифры <b>1</b>…<b>7</b>, <b>Esc</b> возвращает на первый," +
+    " <b>P</b> — конфигуратор";
+  drawOverlays(L);
+}
+
+function drawOverlays(L) {
+  const svg = $("overlaysvg");
+  const on = L.overlays.filter((o) => overlays[o.key]);
+  svg.innerHTML = on.map((o, i) =>
+    `<text x="8" y="${18 + i * 16}" fill="#6f8fa8" font-family="monospace"
+      font-size="12">накладка «${o.label}» включена · данных нет: ${o.source}</text>`
+  ).join("");
+}
+
+function drawState(d) {
+  const s = d.state;
+  const wrap = $("st-drives");
+  wrap.innerHTML = "";
+  for (const dr of s.drives) {
+    const row = document.createElement("div");
+    row.style.margin = "0 0 12px";
+    row.innerHTML =
+      `<div style="display:flex;justify-content:space-between">
+         <span>${dr.name}</span>
+         <span class="num">${fmt(dr.value, dr.digits)}
+           <span class="dimtext">прогноз ${fmt(dr.forecast, dr.digits)}</span></span></div>
+       <div class="bar-h"><i style="width:${Math.min(100, dr.value * 100)}%"></i>
+         <u style="left:${Math.min(100, dr.forecast * 100)}%"></u></div>`;
+    wrap.appendChild(row);
+  }
+  wrap.appendChild(Object.assign(document.createElement("div"),
+    {className: "origin", textContent: "источник: " + s.drives_source +
+      " · чёрточка — прогноз (аллостаз)"}));
+  moodField($("mood"), s.mood_trail);
+  const body = $("st-body");
+  body.innerHTML = "";
+  for (const v of s.body) body.appendChild(valueCell(v));
+  $("st-mod").textContent = s.modulator === null
+    ? "активный модулятор: " + s.modulator_note : "активный модулятор: " + s.modulator;
+}
+
+function drawGoals(d) {
+  const g = d.goals;
+  $("g-stack").innerHTML = "";
+  $("g-stack").appendChild(table(g.stack, [
+    {h: "цель", k: "id"}, {h: "переход", k: "code"}, {h: "вид", k: "kind"},
+    {h: "предмет", k: "target"}, {h: "драйв", k: "drive"},
+    {h: "бюджет", n: true, f: (r) => r.spent === null || r.spent === undefined
+      ? "—" : `${r.spent}/${r.budget}`},
+  ]));
+  $("g-stack").appendChild(Object.assign(document.createElement("div"),
+    {className: "origin", textContent: "источник: " + g.stack_source}));
+
+  const sp = g.speech;
+  $("g-speech").innerHTML =
+    `<div class="grid2">
+       <div><div class="k dimtext">заземлённая (символы агента)</div>
+            <div class="mono">${sp.grounded === null ? "—" : sp.grounded}</div></div>
+       <div><div class="k dimtext">беглая (рендер планировщика)</div>
+            <div class="mono">${sp.fluent === null ? "—" : sp.fluent}</div></div>
+     </div>
+     <div class="why dimtext" style="margin-top:8px">${sp.note}</div>
+     <div class="origin">источник: ${sp.source}</div>`;
+
+  const q = g.questions;
+  $("g-questions").innerHTML =
+    `<div class="num" style="font-size:26px">${q.open}</div>
+     <div class="k dimtext">открытых вопросов из ${q.asked} заданных</div>
+     <div class="why" style="margin-top:8px">${q.note ||
+       "покрытие " + (q.coverage === null ? "—" : Math.round(q.coverage * 100) + " %") +
+       ", слепых " + q.blind}</div>
+     <div class="origin">источник: ${q.source}</div>`;
+}
+
+function drawMemory(d) {
+  const m = d.memory;
+  const list = $("m-list");
+  list.innerHTML = "";
+  const pick = (card) => {
+    $("m-card").innerHTML =
+      `<div class="mono" style="font-size:20px">${card.id}</div>
+       <div class="k dimtext">${card.kind} · встреч ${card.encounters} ·
+         обращений ${card.recalls} · ранг ${fmt(card.rank, 2)}</div>` +
+      (card.affordances.length
+        ? "<h2 style='margin-top:12px'>аффордансы</h2>"
+        : "<div class='why'>аффордансов нет</div>");
+    if (card.affordances.length) {
+      $("m-card").appendChild(table(card.affordances, [
+        {h: "действие", k: "key"}, {h: "μ", n: true, f: (r) => fmt(r.mu, 2)},
+        {h: "σ", n: true, f: (r) => fmt(r.sigma, 2)}, {h: "n", n: true, k: "n"},
+        {h: "происхождение", k: "origin"},
+        {h: "своих", n: true, k: "own"},
+      ]));
+    }
+    const o = document.createElement("div");
+    o.className = "origin";
+    o.textContent = "источник: " + m.cards_source;
+    $("m-card").appendChild(o);
+  };
+  m.cards.forEach((card, i) => {
+    const b = document.createElement("div");
+    b.className = "mono";
+    b.style.cssText = "cursor:pointer;padding:3px 4px;border-bottom:1px solid var(--line)";
+    b.textContent = `${card.id}  ${card.kind}  ×${card.encounters}`;
+    b.onclick = () => pick(card);
+    list.appendChild(b);
+    if (!i) pick(card);
+  });
+  if (!m.cards.length) $("m-card").innerHTML = "<div class='why'>карточек нет</div>";
+  $("m-pipeline").innerHTML =
+    Object.entries(m.pipeline).map(([k, v]) =>
+      `<div style="display:flex;justify-content:space-between">
+         <span>${k}</span><span class="num">${v}</span></div>`).join("") +
+    `<div class="origin">источник: ${m.pipeline_source} · карточек с единственной
+      встречей ${m.single_encounter}</div>`;
+}
+
+function drawJournal(d) {
+  const j = d.journal;
+  const mean = j.errors.length
+    ? j.errors.reduce((a, b) => a + b, 0) / j.errors.length : null;
+  spark($("j-line"), j.errors, {mean});
+  $("j-layers").innerHTML = "";
+  $("j-layers").appendChild(table(
+    Object.entries(j.by_layer).map(([k, v]) => ({layer: k, n: v})),
+    [{h: "слой-инициатор", k: "layer"}, {h: "записей", n: true, k: "n"}]));
+  $("j-layers").appendChild(Object.assign(document.createElement("div"),
+    {className: "origin", textContent: "источник: " + j.by_layer_source +
+      " · записей всего " + j.entries}));
+  $("j-answers").innerHTML =
+    `<div class="k dimtext">из журнала (механически)</div>
+     <div class="mono">слой-инициатор drive, всплесков ${j.spikes.length}</div>
+     <div class="k dimtext" style="margin-top:10px">от планировщика (связно, возможно ложно)</div>
+     <div class="mono dimtext">реплик нет: планировщик в этом прогоне не объяснялся</div>
+     <div class="why" style="margin-top:8px">сопоставление этих двух колонок и есть
+       метрика конфабуляции; пока сопоставлять нечего, числа нет</div>`;
+}
+
+function drawBody(d) {
+  $("b-outputs").innerHTML = "";
+  $("b-outputs").appendChild(table(d.body.outputs, [
+    {h: "выход", k: "id"}, {h: "состояние", k: "state"},
+    {h: "отзывов", n: true, k: "responses"},
+    /* «неизвестна» — не то же, что нуль: при n = 0 наблюдений обратимости не было,
+       и осторожность здесь максимальна именно поэтому (инвариант 9). */
+    {h: "обратимость", f: (r) => r.reversibility && r.reversibility.n > 0
+      ? fmt(r.reversibility.mu, 2) + ` <span class="dimtext">n=${r.reversibility.n}</span>`
+      : "<span class='dimtext'>неизвестна</span>"},
+  ]));
+  $("b-outputs").appendChild(Object.assign(document.createElement("div"),
+    {className: "origin", textContent: "источник: " + d.body.source}));
+}
+
+function drawExperiments(d) {
+  const e = d.experiments;
+  $("e-runs").innerHTML = "";
+  $("e-runs").appendChild(table(e.runs, [
+    {h: "что мерили", k: "name"}, {h: "стало", k: "value"}, {h: "было", k: "was"},
+    {h: "единица", k: "unit"}, {h: "n", n: true, k: "n"}, {h: "задача", k: "task"},
+  ]));
+  $("e-runs").appendChild(Object.assign(document.createElement("div"),
+    {className: "origin", textContent: "источник: " + e.source +
+      " · файлов замеров " + e.files.length}));
+
+  const claims = d.vitals.vitals || [];
+  $("e-vitals").innerHTML = "";
+  $("e-vitals").appendChild(table(claims, [
+    {h: "показатель", k: "code"},
+    /* Разряды по смыслу: доля — два знака, счётчик — целое, остальное три. */
+    {h: "значение", n: true, f: (r) => r.value === null ? "—"
+      : fmt(r.value, r.unit === "доля" ? 2 : 3, r.unit)},
+    {h: "единица", k: "unit"},
+    {h: "независимость", f: (r) => r.independence
+      ? `${r.independence.aggregate} по «${r.independence.unit}», n=${r.independence.n}`
+      : "—"},
+    {h: "источник", k: "source"},
+  ]));
+
+  const h = d.bar.hours_left;
+  $("e-storage").innerHTML =
+    `<div class="num" style="font-size:34px">${h.value === null ? "—" : fmt(h.value, h.digits)}
+       <span class="u">часов записи при текущих настройках</span></div>
+     <div class="why" style="margin-top:6px">${d.bar.hours_basis}</div>
+     <div class="origin">${h.origin} · ${h.source}. Проценты здесь не показываются:
+       они ни о чём не говорят, а часы говорят сразу</div>`;
+}
+
+function drawConfig(d) {
+  const rows = d.profile.rows;
+  const cols = [
+    {h: "ручка", k: "key"}, {h: "группа", k: "group"},
+    {h: "по умолчанию", n: true, k: "default"}, {h: "ед.", k: "unit"},
+  ];
+  $("cfg-a").innerHTML = "";
+  $("cfg-a").appendChild(table(rows.filter((r) => r.block === "А"), cols));
+  $("cfg-b").innerHTML = "";
+  const bTable = table(rows.filter((r) => r.block === "Б"), cols);
+  bTable.addEventListener("mouseover", () => {
+    $("warn").textContent = d.profile.warning;
+    $("warn").classList.add("on");
+  });
+  $("cfg-b").appendChild(bTable);
+}
+
+/* ---------- переключение экранов ---------- */
+
+function buildTabs() {
+  $("tabs").innerHTML = "";
+  SCREENS.forEach(([id, name, q], i) => {
+    const b = document.createElement("button");
+    b.innerHTML = `<span class="n">${i + 1}</span>${name}`;
+    b.title = q;
+    b.onclick = () => show(i);
+    $("tabs").appendChild(b);
+  });
+}
+
+function show(i) {
+  cur = i;
+  SCREENS.forEach(([id], k) => $(id).classList.toggle("sel", k === i));
+  [...$("tabs").children].forEach((b, k) => b.classList.toggle("sel", k === i));
+  /* Перерисовка того, что живёт на canvas: размеры известны только после показа. */
+  if (i === 0) drawLive(DATA);
+  if (i === 1) drawState(DATA);
+  if (i === 4) drawJournal(DATA);
+}
+
+document.addEventListener("keydown", (ev) => {
+  if (ev.key === "Escape") { $("cfg").classList.remove("on"); return show(0); }
+  if (ev.key === "p" || ev.key === "P" || ev.key === "з" || ev.key === "З") {
+    $("cfg").classList.toggle("on");
+    if ($("cfg").classList.contains("on")) drawConfig(DATA);
+    return;
+  }
+  const n = Number(ev.key);
+  if (n >= 1 && n <= SCREENS.length) return show(n - 1);
+  if (cur === 0 && DATA) {
+    const o = DATA.live.overlays.find((x) => x.key === ev.key.toLowerCase());
+    if (o) { overlays[o.key] = !overlays[o.key]; drawLive(DATA); }
+  }
+});
+
+$("stop").onclick = () => {
+  $("stop").textContent = "СТОП ОТДАН";
+  /* В настоящей панели здесь обрыв инъекции. В фикстуре обрывать нечего, и панель
+     говорит это прямо, а не делает вид, что что-то остановила. */
+  $("b-alarm").textContent = "инъекции нет: обрывать нечего";
+  $("alarm").classList.add("on");
+};
+
+window.addEventListener("resize", () => show(cur));
+
+fetch(SOURCE).then((r) => {
+  if (!r.ok) throw new Error(r.status + " " + r.statusText);
+  return r.json();
+}).then((d) => {
+  DATA = d;
+  buildTabs();
+  drawBar(d);
+  drawGoals(d); drawMemory(d); drawBody(d); drawExperiments(d);
+  show(0);
+}).catch((e) => {
+  document.querySelector("main").style.display = "none";
+  $("err").style.display = "block";
+  $("err").innerHTML =
+    `<b>не прочитался источник <code>${SOURCE}</code>: ${e.message}</b><br><br>` +
+    "Браузер не отдаёт локальные файлы по <code>file://</code>. Запустите из каталога " +
+    "<code>panel/</code>:<br><br><code>python3 -m http.server 8000</code><br><br>" +
+    "и откройте <code>http://localhost:8000/</code>.<br><br>" +
+    "Фикстура собирается так: <code>python3 tools/make_panel_fixture.py</code>.";
+});
+</script>
+</body>
+</html>

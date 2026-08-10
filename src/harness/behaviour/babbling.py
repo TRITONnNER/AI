@@ -30,7 +30,8 @@ from typing import Any, Callable, Iterator, Sequence
 
 from ..core.action import Action, Reversibility
 from ..core.clocks import Stamp
-from ..core.journal import Actor, ActorLayer, Journal, Kind as EntryKind
+from ..core.journal import (Actor, ActorLayer, Journal, Kind as EntryKind,
+                            StateSnapshot)
 from ..core.profile import Profile
 from ..model.rebuild import BodyMap
 
@@ -86,7 +87,8 @@ class Babbler:
 
     def __init__(self, profile: Profile, outputs: Sequence[str], *,
                  body: BodyMap | None = None, journal: Journal | None = None,
-                 rng_seed: int = 0) -> None:
+                 rng_seed: int = 0,
+                 state_extra: Callable[[], dict[str, Any]] | None = None) -> None:
         import random
 
         p = profile.parameters
@@ -105,6 +107,9 @@ class Babbler:
             silent_min_deliveries=int(p["babble_repeats"]),
             response_sigmas=float(p["body_excess_sigmas"]))
         self.journal = journal
+        # Чем дополнить срез состояния: драйвы, настроение, активная цель. Лепет их
+        # не знает — их знает тот, кто его вызывает, и отдаёт замыканием.
+        self._state_extra = state_extra
         self.hold_min = int(p["babble_hold_min_ms"])
         self.hold_max = int(p["babble_hold_max_ms"])
         if self.hold_min > self.hold_max:
@@ -339,8 +344,24 @@ class Babbler:
             # больше ответить нечем, поэтому инициатор — контур драйвов. Если
             # когда-нибудь появится отдельный контур лепета, изменится набор
             # слоёв (структурное изменение), а не эта атрибуция.
+            # Срез состояния, а не только событие. Ошибка предсказания лежала
+            # **только** в событии (`ProbeResult.as_event`), и из-за этого
+            # `vitals.prediction_error_mean` докладывал «ни одна запись не несёт
+            # ошибки предсказания» по журналу, каждая запись которого её несла:
+            # читатели построены на `StateSnapshot`, а число было положено рядом.
+            # Величина в записи есть, а измерить её нельзя — худший вид расхождения,
+            # потому что данные выглядят целыми.
+            #
+            # Драйвы, настроение и цель приходят от вызывающего (`state_extra`): лепет
+            # про них не знает и знать не должен — иначе `behaviour/babbling` начнёт
+            # импортировать мотивацию, и слой перестанет быть проверяемым отдельно.
+            extra = dict(self._state_extra() if self._state_extra else {})
+            state = StateSnapshot(prediction_error=result.error_value,
+                                 drives=extra.get("drives", {}),
+                                 mood=extra.get("mood"),
+                                 goal_id=extra.get("goal_id"))
             self.journal.append(EntryKind.ACTION, stamp, Actor.AGENT,
-                                ActorLayer.DRIVE, action=action,
+                                ActorLayer.DRIVE, action=action, state=state,
                                 event={**result.as_event(), "device": "babble",
                                        "latency_ms": float(probe.duration_ms)})
 
