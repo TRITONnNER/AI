@@ -526,14 +526,20 @@ def test_the_command_prints_progress_while_it_records(tmp_path: Path, monkeypatc
     out = capsys.readouterr()
     assert code == 0, out.err
 
-    parts = [x for x in out.err.split("\r") if x.strip()]
-    running = [x for x in parts if "из" in x and "кадров" in x and "записано" not in x]
-    assert len(running) >= 2, f"строк хода за прогон: {len(running)} — {parts}"
+    # Ход идёт в **стандартный вывод**, тем же потоком, что и всё остальное, что оператор
+    # читает. Поток при этом не терминал (его перехватывает pytest), поэтому строки идут
+    # с переводом, а не через возврат каретки: в перенаправленном потоке `\r` не виден до
+    # конца записи, и ровно на это оператор и напоролся.
+    running = [x for x in out.out.splitlines()
+               if "из" in x and "кадров" in x and "записано" not in x]
+    assert len(running) >= 2, f"строк хода за прогон: {len(running)} — {out.out}"
     # Строки обязаны **различаться**: одинаковая строка дважды означала бы, что счётчики
     # в неё не попадают, и оператор смотрел бы на замерший вывод — то же самое молчание.
     assert running[0] != running[-1], running
-    assert "осталось ~" in out.err or "остаток неизвестен" in out.err
-    assert "записано за" in out.err and str(root) in out.err
+    assert "осталось ~" in out.out or "остаток неизвестен" in out.out
+    assert "записано за" in out.out and str(root) in out.out
+    # Итоговая строка **одна**: путь завершения проходится один раз (пункт 4 задачи).
+    assert out.out.count("записано за") == 1, out.out
     assert "Дальше: harness ingest" in out.out
     with Session.open(root) as s:
         assert s.verify()["ok"] and s.interrupted is None
@@ -553,7 +559,8 @@ def test_the_command_survives_ctrl_c_and_says_what_is_left(tmp_path: Path, monke
                        screen, monkeypatch)
     out = capsys.readouterr()
     assert code == 0, out.err
-    assert "прервано на" in out.err, out.err
+    assert "прервано на" in out.out, out.out
+    assert out.out.count("прервано на") == 1, "итог напечатан дважды"
     assert "годна к приёму" in out.out
 
     with Session.open(root) as s:
@@ -594,7 +601,7 @@ def test_stillness_recording_keeps_the_terminal_out_of_the_frame(
                         "--kind", "stillness"], FakeScreen(still_every=2), monkeypatch)
     out = capsys.readouterr()
     assert code == 0
-    assert "\r" not in out.err, "ход печатался на экран на записи неподвижности"
+    assert "\r" not in out.out + out.err, "ход печатался на экран на записи неподвижности"
     log = root.parent / f"{root.name}-progress.log"
     assert log.exists() and "кадров" in log.read_text(encoding="utf-8")
     assert str(log) in out.out, "оператору не сказали, куда смотреть"
@@ -639,3 +646,257 @@ def test_turns_counts_are_one_object(tmp_path: Path) -> None:
     """
     t = Turns(written=3, unchanged=2)
     assert t.turns == 5
+
+
+# --- TASK-17: срок, разбивка, поток вывода, пути -----------------------------
+
+
+def test_seconds_is_a_deadline_not_a_frame_count(tmp_path: Path) -> None:
+    """`--seconds` — срок. Запись кончается по времени, а не по числу кадров.
+
+    До TASK-17 десять секунд превращались в 300 кадров, и на машине, отдающей 6.5 кадр/с,
+    запись шла 46 секунд — молча. Оператор просил десять секунд и получал минуту.
+    """
+    root = tmp_path / "s"
+    # Медленный источник: 300 кадров он отдал бы за 6 с, но срок — 0.3 с.
+    screen = FakeScreen(delay_s=0.02)
+    p = _profile(screen.w, screen.h)
+    with Recorder(root, profile=p, source=screen.name, synthetic=False) as rec:
+        turns = run_turns(rec, source=screen, frames=300, first=screen.first(),
+                          actor=Actor.HUMAN, actor_layer=ActorLayer.HUMAN,
+                          seconds=0.3, expected_fps=30.0)
+    assert turns.stop_reason == "deadline"
+    assert turns.turns < 300, "запись досидела до числа кадров вместо срока"
+    assert 0.3 <= turns.elapsed_s < 2.0, turns.elapsed_s
+
+
+def test_frames_still_means_frames(tmp_path: Path) -> None:
+    """`--frames` не изменился: столько кадров, сколько названо.
+
+    Два флага — два разных смысла, и это решение, а не недосмотр: за числом кадров
+    приходят, когда нужен ровный объём для сравнения прогонов.
+    """
+    root = tmp_path / "s"
+    screen = FakeScreen()
+    p = _profile(screen.w, screen.h)
+    with Recorder(root, profile=p, source=screen.name, synthetic=False) as rec:
+        turns = run_turns(rec, source=screen, frames=25, first=screen.first(),
+                          actor=Actor.HUMAN, actor_layer=ActorLayer.HUMAN,
+                          expected_fps=30.0)
+    assert turns.stop_reason == "frames" and turns.turns == 25
+
+
+def test_shortfall_against_the_target_rate_is_a_printed_number(tmp_path: Path) -> None:
+    """Недобор частоты виден числом, а не растянутой записью.
+
+    `capture_fps` — цель цикла, а не свойство записи. Тот, кто посчитает длительность как
+    «кадров делить на capture_fps», получит 10 с там, где прошло 46, — поэтому ожидаемое и
+    достигнутое стоят рядом.
+    """
+    root = tmp_path / "s"
+    # 60 мс на оборот — это 16 кадр/с при цели 30, то есть недобор вдвое. Первая редакция
+    # теста брала 20 мс и получала 50 кадр/с, то есть **перебор**: проверка утверждала не
+    # то, что называла, и поймала это сама.
+    screen = FakeScreen(delay_s=0.06)
+    p = _profile(screen.w, screen.h)
+    with Recorder(root, profile=p, source=screen.name, synthetic=False) as rec:
+        turns = run_turns(rec, source=screen, frames=1000, first=screen.first(),
+                          actor=Actor.HUMAN, actor_layer=ActorLayer.HUMAN,
+                          seconds=0.5, expected_fps=30.0)
+    st = turns.stages()
+    assert st["expected_turns"] > turns.turns, st
+    assert st["capture_ms"] >= 40.0, ("ожидание кадра не измерено: "
+                                      f"{st['capture_ms']:.1f} мс")
+
+
+def test_time_breakdown_separates_capture_encode_and_write(tmp_path: Path) -> None:
+    """Разбивка раздельная: ожидание кадра, разность, сжатие, файл.
+
+    «Узкое место где-то в записи на диск» — не диагноз. Стадии считаются там, где
+    происходят, и на машине оператора тоже: в контейнере другой диск и другой процессор.
+    """
+    root = tmp_path / "s"
+    screen = FakeScreen(w=320, h=240)
+    p = _profile(320, 240)
+    with Recorder(root, profile=p, source=screen.name, synthetic=False) as rec:
+        turns = run_turns(rec, source=screen, frames=40, first=screen.first(),
+                          actor=Actor.HUMAN, actor_layer=ActorLayer.HUMAN,
+                          expected_fps=30.0)
+        cost = rec.cost()
+    fr = cost["frames"]
+    assert fr["calls"] == turns.written
+    assert fr["keyframes"] >= 1 and fr["keyframes"] < fr["calls"], fr
+    assert fr["compress_ms_per_call"] > 0 and fr["write_ms_per_call"] >= 0
+    assert fr["ratio"] and fr["ratio"] > 1, "сжатие не сжало — проверять нечего"
+    assert turns.stages()["record_ms"] > 0
+
+
+def test_the_breakdown_lands_in_the_journal(tmp_path: Path, monkeypatch,
+                                            capsys) -> None:
+    """Разбивка лежит в записи, а не только в консоли, которую закрыли."""
+    root = tmp_path / "rec"
+    _run_record(["record", str(root), "--frames", "20", "--no-audio"],
+                FakeScreen(w=320, h=240), monkeypatch)
+    out = capsys.readouterr().out
+    assert "на что ушло время" in out and "сжатие" in out
+    with Session.open(root) as s:
+        costs = [e.event for e in s.journal
+                 if e.kind is Kind.INTERVENTION and e.event.get("code") == "cost"]
+    assert len(costs) == 1 and costs[0]["frames"]["calls"] == 20
+
+
+def test_progress_prints_lines_when_the_stream_is_not_a_terminal(tmp_path: Path) -> None:
+    """В перенаправленном потоке ход идёт строками, а не возвратом каретки.
+
+    Пункт 3 задачи: строка хода не появилась вовсе. Возврат каретки в неперенаправленном
+    терминале обновляет строку, а в файле остаётся байтом и не виден до конца записи.
+    """
+    import io
+
+    class Piped(io.StringIO):
+        def isatty(self) -> bool:
+            return False
+
+    clock = FakeClock()
+    out = Piped()
+    prog = Progress(total_turns=60, fps=30.0, path=tmp_path / "s", channel="line",
+                    min_interval_s=1.0, out=out, now=clock)
+    for turn in range(60):
+        clock.t = turn / 30.0
+        prog.update(written=turn, unchanged=0, disk_bytes=1000)
+    text = out.getvalue()
+    assert "\r" not in text, "в перенаправленный поток ушёл возврат каретки"
+    assert len([x for x in text.splitlines() if x.strip()]) == 2, text
+
+
+def test_progress_fits_the_terminal_width(tmp_path: Path, monkeypatch) -> None:
+    """Строка не длиннее окна: перенос уводит возврат каретки не туда.
+
+    Дополнение до 96 столбцов в окне шириной 80 переносило строку, и следующее обновление
+    писалось поверх переноса — виден мусор либо пустота, то есть отчёт оператора.
+    """
+    import io
+    import shutil
+
+    class Tty(io.StringIO):
+        def isatty(self) -> bool:
+            return True
+
+    monkeypatch.setattr(shutil, "get_terminal_size", lambda default=(80, 24): __import__(
+        "os").terminal_size((60, 24)))
+    out = Tty()
+    prog = Progress(total_turns=1800, fps=30.0, path=tmp_path / "очень-длинный-путь-записи",
+                    channel="line", min_interval_s=0.0, out=out)
+    prog.update(written=1234, unchanged=567, disk_bytes=987 << 20)
+    body = out.getvalue().lstrip("\r")
+    assert len(body) == 59, f"строка длиной {len(body)} в окне 60"
+    assert "…" in body, "строка обрезана без знака обрезки"
+
+
+def test_the_final_line_is_printed_once(tmp_path: Path) -> None:
+    """`finish` возвращает итог и не печатает его сам.
+
+    Пункт 4 задачи: путь завершения проходился дважды — строку писал и `finish`, и
+    `cmd_record`. Одна работа — одно место.
+    """
+    import io
+
+    class Tty(io.StringIO):
+        def isatty(self) -> bool:
+            return True
+
+    out = Tty()
+    prog = Progress(total_turns=10, fps=30.0, path=tmp_path / "s", channel="line",
+                    min_interval_s=0.0, out=out)
+    line = prog.finish(written=5, unchanged=1, disk_bytes=1024)
+    assert "записано за" in line
+    assert "записано за" not in out.getvalue(), "итог напечатан и каналом, и вызывающим"
+
+
+def test_tilde_is_expanded_by_us_because_cmd_exe_does_not(tmp_path: Path) -> None:
+    """`~` раскрывается программой: `cmd.exe` и `powershell` этого не делают.
+
+    Оператор набрал `~\\harness-live\\proba` и получил каталог с именем `~` внутри
+    проекта. Тильда — соглашение `sh`, и на Windows раскрыть её больше некому.
+    """
+    from harness.paths import PathError, live_path, resolve_input, show
+
+    home = tmp_path / "дом"
+    got = resolve_input("~/harness-live/proba", home=home)
+    assert got == home / "harness-live" / "proba", got
+    assert live_path("proba", home) == home / "harness-live" / "proba"
+
+    # Тильда в середине пути — не раскрыл никто, и писать туда молча нельзя.
+    with pytest.raises(PathError) as exc:
+        resolve_input("ai/harness/~/harness-live/proba", home=home)
+    assert "не раскрыл" in str(exc.value) and show(home) in str(exc.value)
+
+
+def test_printed_paths_use_the_shape_of_the_target_system() -> None:
+    """Пути печатаются в форме той системы, где их будут набирать.
+
+    `~/harness-live/stillness` в `cmd.exe` не работает дважды: и тильдой, и наклонными.
+    Строка для копирования обязана работать при вставке.
+    """
+    from harness.paths import show
+
+    assert show("C:/Users/chiha/harness-live", windows=True) == \
+        "C:\\Users\\chiha\\harness-live"
+    assert show("/home/o/harness-live", windows=False) == "/home/o/harness-live"
+
+
+def test_the_plan_prints_real_paths_not_tildes() -> None:
+    """В плане записи — настоящие пути этой машины, а не `~`.
+
+    Дважды напоролись на одно: план печатал `~/harness-live/...`, оператор копировал, и
+    тильда доезжала до нас именем каталога.
+    """
+    from harness.corpus.live import plan_text
+    from harness.paths import live_root, show
+
+    text = plan_text("minimal")
+    assert "~" not in text, "в плане осталась тильда"
+    assert show(live_root()) in text
+
+
+def test_stillness_plan_says_to_get_out_of_the_frame() -> None:
+    """План записи неподвижности говорит убрать себя из кадра.
+
+    Замер оператора дал 300 изменившихся кадров и **ни одной** отметки «без изменений»:
+    опорный уровень мерил мигающий курсор и открытое окно записи, а не фон экрана.
+    """
+    from harness.corpus.live import KINDS, plan_text
+
+    how = KINDS["stillness"]["how"]
+    assert "курсор" in how and ("сверн" in how or "убрать" in how), how
+    assert "курсор" in plan_text("minimal")
+
+
+def test_every_path_argument_expands_the_tilde() -> None:
+    """Раскрытие стоит типом аргумента, а не проверкой в каждой команде.
+
+    Тильда доехала до `ingest` **вторым** заходом именно потому, что раскрытие было делом
+    каждой команды по отдельности. Проверяется механически: ни один аргумент пути не
+    объявлен как `type=Path`.
+    """
+    import ast
+
+    src = (Path(__file__).resolve().parent.parent / "src" / "harness" / "cli.py")
+    tree = ast.parse(src.read_text(encoding="utf-8"))
+    plain = []
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Call):
+            continue
+        text = ast.unparse(node)
+        if "add_argument" in text and "type=Path" in text:
+            plain.append((node.lineno, text[:70]))
+    assert not plain, f"аргументы пути без раскрытия тильды: {plain}"
+
+    # И сама подмена работает: неизвестная команда с путём в тильде даёт отказ argparse,
+    # а не создаёт каталог с именем `~`.
+    from harness.cli import _path_arg
+    import argparse
+
+    assert _path_arg("~").is_absolute()
+    with pytest.raises(argparse.ArgumentTypeError, match="не раскрыл"):
+        _path_arg("a/~/b")

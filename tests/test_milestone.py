@@ -278,6 +278,26 @@ def test_0_3_delta_encoding_is_exact(tmp_path: Path) -> None:
     assert stats["deltas"] > stats["keyframes"]
 
 
+def test_0_3_delta_in_uint8_matches_the_int16_form_on_every_pair() -> None:
+    """Разность в uint8 даёт то же число, что прежняя запись через int16. Все 65536 пар.
+
+    `TASK-17`, пункт 2: прежняя форма стоила 11.6 мс на кадре 1920×1080 — больше, чем само
+    сжатие, — и обе стадии идут в основном потоке. Новая стоит 0.6 мс.
+
+    Проверяется исчерпывающе, а не выборочно: значений всего 256 на каждой стороне, то
+    есть полный перебор дешевле любой выборки. Расхождение в редких значениях дало бы
+    кадры, расходящиеся при чтении в отдельных пикселях, — незаметная поломка, худший вид.
+    """
+    from harness.core.blobstore import _decode_delta, _encode_delta
+
+    a = np.arange(256, dtype=np.uint8).repeat(256).reshape(256, 256)
+    b = np.tile(np.arange(256, dtype=np.uint8), (256, 1))
+    было = ((a.astype(np.int16) - b.astype(np.int16) + 128) % 256).astype(np.uint8)
+    стало = _encode_delta(a, b)
+    assert np.array_equal(было, стало), "новая форма разности расходится с прежней"
+    assert np.array_equal(_decode_delta(b, стало), a), "обратное преобразование неточно"
+
+
 def test_0_3_still_frames_are_cheap(tmp_path: Path) -> None:
     """Неподвижный экран почти не занимает места — за этим и нужна разность."""
     from harness.core.blobstore import FrameStore

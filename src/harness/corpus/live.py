@@ -59,6 +59,7 @@ from typing import Any, Iterable
 import numpy as np
 
 from ..core.journal import FORMAT, BranchMeta, FormatError, Journal, TamperError
+from ..paths import live_path, show
 from ..session import SESSION_META, Session, SessionMeta
 
 #: Шесть записей из задания. Набор закрыт: каждая проверяет своё, и «ещё одна
@@ -69,7 +70,13 @@ KINDS: dict[str, dict[str, str]] = {
         "duration": "60 с",
         "why": "фоновое изменение экрана без участия. Опорный уровень: всё, что "
                "меняется здесь, меняется само, и детектор обязан это знать",
-        "how": "запустить, ничего не нажимать и не двигать мышью",
+        # Порядок действий, а не пожелание: первый замер оператора дал 300 изменившихся
+        # кадров и **ни одной** отметки «без изменений» при 403 МиБ за 10 с. Опорный
+        # уровень мерил мигающий курсор в открытом окне записи, а не фон экрана.
+        "how": "запустить, свернуть окно записи, увести курсор в угол и не трогать мышь; "
+               "не смотреть на экран, чтобы не переключать окна. Если после записи "
+               "отметок «без изменений» ноль — в кадре что-то мигало, и опорного уровня "
+               "не получилось",
     },
     "camera_only": {
         "title": "только камера",
@@ -609,11 +616,14 @@ def plan_text(set_name: str = "minimal") -> str:
         # зависит **канал хода записи**. На записи неподвижности ход уходит в файл, потому
         # что мигающая строка в терминале попала бы в кадр как изменение, а изменение там
         # и есть измеряемая величина.
-        rows.append(f"     команда: harness record ~/harness-live/{name} "
+        # Пути печатаются **раскрытыми и в форме этой системы**. `~/harness-live/...` в
+        # `cmd.exe` не работает дважды: тильду он не раскрывает, а наклонные ставит
+        # обратные. Оператор скопировал такую строку и получил каталог `~` внутри проекта.
+        rows.append(f"     команда: harness record {show(live_path(name))} "
                     f"--actor human --kind {name} "
                     f"--seconds {_seconds_of(k['duration'])}")
-        rows.append(f"              harness ingest ~/harness-live/{name} "
-                    f"--corpus ~/harness-live/corpus --kind {name}")
+        rows.append(f"              harness ingest {show(live_path(name))} "
+                    f"--corpus {show(live_path('corpus'))} --kind {name}")
         rows.append("")
     rows += [f"Этого набора достаточно для: {spec['enough_for']}.", ""]
     if set_name == "minimal":

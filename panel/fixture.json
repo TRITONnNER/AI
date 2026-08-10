@@ -2960,6 +2960,7 @@
    "env_dependence",
    "identity",
    "params_audit",
+   "record_cost",
    "record_feedback",
    "storage_rate",
    "text_boundary"
@@ -4987,7 +4988,7 @@
   "source": "core.settings.SCHEMA"
  },
  "about": {
-  "session": "/tmp/panel-session-n42p1srk/session",
+  "session": "/tmp/panel-session-6jl1p5kb/session",
   "origins": {
    "живая запись оператора": "снято на машине оператора",
    "синтетический прогон": "посчитано по журналу этого прогона",

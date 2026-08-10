@@ -15,6 +15,7 @@
 from __future__ import annotations
 
 import json
+import time
 import zlib
 from dataclasses import dataclass
 from pathlib import Path
@@ -64,6 +65,77 @@ class BlobRef:
                    None if d.get("base") is None else int(d["base"]))
 
 
+@dataclass(slots=True)
+class Cost:
+    """Куда ушло время и сколько вышло байтов. `TASK-17`, пункт 2.
+
+    Заведено потому, что частота живой записи оказалась 6.5 кадр/с против 32.5 в
+    `selftest` на той же машине, и объяснения не было ни у кого: «узкое место где-то в
+    записи на диск» — не диагноз. Разбивка снимается **на машине оператора**, а не
+    выводится из замера в контейнере: там другой экран, другой диск и другой процессор.
+
+    Счётчики дешёвые нарочно: `perf_counter_ns` стоит десятки наносекунд, а кадр идёт
+    десятки миллисекунд. Измерение, из-за которого замедлилось измеряемое, — испорченное
+    измерение.
+    """
+
+    calls: int = 0
+    keyframes: int = 0
+    delta_ns: int = 0            # вычисление разности с предыдущим кадром
+    compress_ns: int = 0         # zlib.compress
+    write_ns: int = 0            # запись в шард и строка индекса
+    bytes_in: int = 0            # сколько отдали сжатию
+    bytes_out: int = 0           # сколько легло на диск
+
+    def add(self, other: "Cost") -> None:
+        self.calls += other.calls
+        self.keyframes += other.keyframes
+        self.delta_ns += other.delta_ns
+        self.compress_ns += other.compress_ns
+        self.write_ns += other.write_ns
+        self.bytes_in += other.bytes_in
+        self.bytes_out += other.bytes_out
+
+    @property
+    def total_ns(self) -> int:
+        return self.delta_ns + self.compress_ns + self.write_ns
+
+    def as_dict(self) -> dict[str, Any]:
+        n = max(1, self.calls)
+        return {
+            "calls": self.calls, "keyframes": self.keyframes,
+            "delta_ms_per_call": round(self.delta_ns / n / 1e6, 3),
+            "compress_ms_per_call": round(self.compress_ns / n / 1e6, 3),
+            "write_ms_per_call": round(self.write_ns / n / 1e6, 3),
+            "bytes_in": self.bytes_in, "bytes_out": self.bytes_out,
+            "ratio": round(self.bytes_in / self.bytes_out, 2) if self.bytes_out else None,
+        }
+
+
+def _encode_delta(frame: np.ndarray, prev: np.ndarray) -> np.ndarray:
+    """Разность кадров по модулю 256 со сдвигом 128, в арифметике uint8.
+
+    Считается **в uint8**, а не через int16: арифметика uint8 в numpy переполняется по
+    модулю 256 сама, то есть даёт ровно то же число, а обходов массива делает вдвое
+    меньше и памяти просит вчетверо меньше.
+
+    Это не украшательство. `TASK-17`, пункт 2: на кадре 1920×1080 прежняя запись через
+    int16 стоила 11.6 мс — больше, чем само сжатие на уровне 6 (10.2 мс), — и обе стадии
+    идут в основном потоке, то есть прямо ограничивают частоту записи. Замер:
+    `docs/measurements/record_cost.json`.
+
+    Тождественность двух записей проверяется тестом на всех 65536 парах значений: если бы
+    она была «скорее всего верна», кадры расходились бы при чтении в редких пикселях, и
+    это был бы худший вид поломки — незаметный.
+    """
+    return (frame - prev + np.uint8(128))
+
+
+def _decode_delta(prev: np.ndarray, delta: np.ndarray) -> np.ndarray:
+    """Обратное к `_encode_delta`, тоже в uint8."""
+    return (delta + prev - np.uint8(128))
+
+
 class BlobStore:
     """Дозаписываемое хранилище массивов с индексом.
 
@@ -84,6 +156,7 @@ class BlobStore:
         self._shard_no = 0
         self._shard_size = 0
         self._read_cache: dict[int, Any] = {}
+        self.cost = Cost()
 
         if mode == "a":
             self.root.mkdir(parents=True, exist_ok=True)
@@ -142,8 +215,15 @@ class BlobStore:
         if not array.flags["C_CONTIGUOUS"]:
             array = np.ascontiguousarray(array)
 
-        payload = zlib.compress(array.tobytes(), self.compress_level)
+        raw = array.tobytes()
+        t0 = time.perf_counter_ns()
+        payload = zlib.compress(raw, self.compress_level)
+        t1 = time.perf_counter_ns()
+        self.cost.calls += 1
+        self.cost.compress_ns += t1 - t0
+        self.cost.bytes_in += len(raw)
         record = MAGIC + len(payload).to_bytes(4, "big") + payload
+        self.cost.bytes_out += len(record)
 
         if self._shard_size and self._shard_size + len(record) > self.shard_bytes:
             self._shard_fh.close()
@@ -152,6 +232,7 @@ class BlobStore:
             self._shard_fh = self._shard_path(self._shard_no).open("ab")
 
         offset = self._shard_size
+        t2 = time.perf_counter_ns()
         self._shard_fh.write(record)
         self._shard_size += len(record)
 
@@ -160,6 +241,7 @@ class BlobStore:
                       enc, base)
         self._index.append(ref)
         self._index_fh.write(json.dumps(ref.as_dict(), separators=(",", ":")) + "\n")
+        self.cost.write_ns += time.perf_counter_ns() - t2
         return ref
 
     def flush(self) -> None:
@@ -281,11 +363,17 @@ class FrameStore(BlobStore):
         keyframe = (blob_id % self.keyframe_interval == 0) or not same_shape
 
         if keyframe:
+            self.cost.keyframes += 1
             ref = self.append(frame)
             self._base_id = blob_id
         else:
-            delta = ((frame.astype(np.int16) - self._prev_frame.astype(np.int16) + 128)
-                     % 256).astype(np.uint8)
+            # Вычисление разности считается отдельно от сжатия: это две разные работы, и
+            # смешав их, нельзя ответить, что именно съело кадр. На 1080p разность — это
+            # три обхода массива в 2 МБ (int16, вычитание, обратно в uint8), и обход не
+            # бесплатен.
+            t0 = time.perf_counter_ns()
+            delta = _encode_delta(frame, self._prev_frame)
+            self.cost.delta_ns += time.perf_counter_ns() - t0
             ref = self.append(delta, enc="delta", base=self._base_id)
         self._prev_frame = frame.copy()
         self._prev_id = blob_id
@@ -314,7 +402,7 @@ class FrameStore(BlobStore):
 
     @staticmethod
     def _apply(prev: np.ndarray, delta: np.ndarray) -> np.ndarray:
-        return ((delta.astype(np.int16) + prev.astype(np.int16) - 128) % 256).astype(np.uint8)
+        return _decode_delta(prev, delta)
 
     def encoding_stats(self) -> dict[str, int]:
         raw = sum(1 for r in self._index if r.enc == "raw")

@@ -34,6 +34,23 @@ def _record_kinds() -> tuple[str, ...]:
     return tuple(sorted(KINDS))
 
 
+def _path_arg(raw: str) -> Path:
+    """Путь из командной строки: тильда раскрыта, буквальный `~` внутри — отказ.
+
+    Стоит **типом аргумента**, а не проверкой в каждой команде: раскрытие, забытое в одной
+    команде из семнадцати, — это ровно то, как тильда доехала до `ingest` во второй раз.
+    Здесь его забыть нельзя: аргумент пути без этого типа не создаётся.
+    """
+    import argparse as _ap
+
+    from .paths import PathError, resolve_input
+
+    try:
+        return resolve_input(raw)
+    except PathError as e:
+        raise _ap.ArgumentTypeError(str(e)) from None
+
+
 def _print_json(obj: object) -> None:
     print(json.dumps(obj, ensure_ascii=False, indent=2, sort_keys=True, default=str))
 
@@ -741,7 +758,8 @@ def cmd_record(args: argparse.Namespace) -> int:
     from .core.journal import Actor, ActorLayer
     from .core.profile import MILESTONE_0
     from .corpus.live import plan_text
-    from .capture.record_loop import run_turns
+    from .capture.record_loop import STOP_REASONS, run_turns
+    from .paths import PathError, resolve_input, show
     from .progress import Progress, dir_bytes
     from .session import Recorder, describe_existing
 
@@ -749,22 +767,42 @@ def cmd_record(args: argparse.Namespace) -> int:
         print(plan_text(getattr(args, "plan_set", "minimal")))
         return 0
 
-    # Секунды переводятся в кадры здесь, а не оператором в голове.
-    frames = args.frames
-    if frames is None:
+    # Тильду раскрываем сами: `cmd.exe` и `powershell` этого не делают, и `~` доехал бы
+    # до нас именем каталога. Оператор так уже получил каталог `~` внутри проекта.
+    try:
+        target = resolve_input(args.path)
+    except PathError as e:
+        print(str(e), file=sys.stderr)
+        return 2
+    args.path = target
+
+    # **`--seconds` — это секунды.** До TASK-17 они переводились в кадры и запись ждала
+    # этого числа кадров: на 6.5 кадр/с «десять секунд» превращались в 46, молча. Теперь
+    # срок обрывает запись, а недобор частоты печатается числом. `--frames` остаётся тем,
+    # чем был: ровно столько кадров, сколько названо, сколько бы это ни заняло.
+    fps = float(MILESTONE_0.parameters["capture_fps"])
+    seconds: float | None = None
+    if args.frames is not None:
+        frames = args.frames
+        if args.seconds is not None:
+            print("указаны и --frames, и --seconds; беру --frames: это счёт кадров, "
+                  "а не срок", file=sys.stderr)
+        print(f"{frames} кадров при цели {fps:g} кадр/с — это не меньше "
+              f"{frames / fps:.0f} с, а на медленной машине больше")
+    else:
         seconds = args.seconds if args.seconds is not None else 10.0
-        frames = max(1, int(seconds * float(MILESTONE_0.parameters["capture_fps"])))
-        print(f"{seconds:g} с при {MILESTONE_0.parameters['capture_fps']:g} кадр/с "
-              f"= {frames} кадров")
-    elif args.seconds is not None:
-        print("указаны и --frames, и --seconds; беру --frames", file=sys.stderr)
+        # Предел по кадрам всё равно нужен: он ловит машину, которая **быстрее** цели, и
+        # не даёт записи вырасти сверх заявленного объёма.
+        frames = max(1, int(seconds * fps))
+        print(f"{seconds:g} с — срок. При цели {fps:g} кадр/с это до {frames} кадров; "
+              f"если машина не успевает, кадров будет меньше, и это будет сказано")
 
     # Занятый каталог проверяется **до** открытия захвата: иначе оператор ждёт выбора
     # механизма, первого кадра и звукового входа, чтобы получить отказ о том, что было
     # видно с самого начала.
-    if Path(args.path).exists() and any(Path(args.path).iterdir()):
-        print(f"{args.path} не пуст.", file=sys.stderr)
-        print(describe_existing(Path(args.path)), file=sys.stderr)
+    if target.exists() and any(target.iterdir()):
+        print(f"{show(target)} не пуст.", file=sys.stderr)
+        print(describe_existing(target), file=sys.stderr)
         return 2
 
     human = args.actor == "human"
@@ -836,23 +874,19 @@ def cmd_record(args: argparse.Namespace) -> int:
         print(f"кадр {first.image.shape[1]}×{first.image.shape[0]}: профиль записи "
               f"построен по нему, а не по значению из схемы")
 
-    written = 0
-    unchanged = 0
-    audio_blocks = 0
-    interrupted = False
-
     # Ход записи. Канал выбирается по виду записи и объявляется вслух: на записи
     # неподвижности мигающая строка в терминале попала бы в кадр как изменение, а
     # изменение там — измеряемая величина.
-    prog = Progress.from_profile(profile, total_turns=frames, path=Path(args.path),
+    prog = Progress.from_profile(profile, total_turns=frames, path=target,
                                  kind=getattr(args, "kind", None),
                                  channel=getattr(args, "progress", None))
     hello = prog.open()
     if hello:
         print(hello)
 
+    cost: dict[str, Any] = {}
     try:
-        with Recorder(args.path, profile=profile, source=cap.name,
+        with Recorder(target, profile=profile, source=cap.name,
                       synthetic=False, note=args.note, lineage_id=lid) as rec:
             # Сам цикл — в `capture.record_loop`: он обязан проверяться офлайн, без
             # дисплея, и прерывание перехватывает внутри открытой сессии. Снаружи уже
@@ -860,20 +894,41 @@ def cmd_record(args: argparse.Namespace) -> int:
             # поэтому её и не было.
             turns = run_turns(rec, source=cap, frames=frames, first=first,
                               actor=actor, actor_layer=layer, audio=audio_src,
-                              progress=prog,
-                              disk_bytes=lambda: dir_bytes(Path(args.path)))
-        written, unchanged = turns.written, turns.unchanged
-        audio_blocks, interrupted = turns.audio_blocks, turns.interrupted
+                              progress=prog, seconds=seconds,
+                              expected_fps=float(profile.parameters["capture_fps"]),
+                              disk_bytes=lambda: dir_bytes(target))
+            cost = rec.cost()
+            # Разбивка идёт в журнал: «почему на этой машине 6.5 кадр/с» — вопрос о
+            # записи, и ответ обязан лежать в ней, а не в консоли, которую закрыли.
+            rec.record_intervention("cost", {**cost, "stages": turns.stages()})
     finally:
         cap.stop()
         if audio_src is not None:
             audio_src.stop()
-    # Итог — те же числа, что показывались в ходе, плюс путь. Два числа кадров, а не
-    # одно: «кадров» и «без изменений». Одно означало бы либо потерянную статику, либо
-    # мнимые потери — и то и другое ломает опорный замер.
+    written, unchanged = turns.written, turns.unchanged
+    audio_blocks, interrupted = turns.audio_blocks, turns.interrupted
+
+    # Итог — те же числа, что показывались в ходе, плюс путь. Печатается **один раз** и
+    # печатается здесь: до TASK-17 строку писал и `finish`, и этот `print`, и оператор
+    # видел её дважды. Два числа кадров, а не одно: «кадров» и «без изменений». Одно
+    # означало бы либо потерянную статику, либо мнимые потери.
     print(prog.finish(written=written, unchanged=unchanged,
-                      disk_bytes=lambda: dir_bytes(Path(args.path)),
+                      disk_bytes=lambda: dir_bytes(target),
                       interrupted=interrupted, audio_note=audio_note))
+    print(f"почему кончилось: {STOP_REASONS[turns.stop_reason]}")
+    # Недобор частоты — свойство машины, и он печатается числом, а не растягиванием
+    # записи. Молчать об этом нельзя: по числу кадров, делённому на заявленную частоту,
+    # длительность записи вышла бы 10 с там, где прошло 46.
+    got_fps = turns.turns / turns.elapsed_s if turns.elapsed_s > 0 else 0.0
+    print(f"частота: {got_fps:.1f} кадр/с достигнуто при цели "
+          f"{profile.parameters['capture_fps']:g}; оборотов {turns.turns}, "
+          f"ожидалось к этому сроку {turns.expected_turns}")
+    if turns.expected_turns and turns.turns < turns.expected_turns * 0.9:
+        print(f"машина не успевала за целью: недобор "
+              f"{100 * (1 - turns.turns / turns.expected_turns):.0f} %. Запись годна, "
+              f"но заявленной частоте не верьте — верьте этой строке")
+    for line in _cost_lines(turns, cost):
+        print(line)
     if interrupted:
         print("прервано вами; запись закрыта и годна к приёму — отметка о прерывании "
               "лежит в журнале")
@@ -883,10 +938,56 @@ def cmd_record(args: argparse.Namespace) -> int:
     if audio_blocks:
         print(f"блоков звука: {audio_blocks}")
     print(f"слой-инициатор: {layer}, линия {lid} (своя, не контейнерная)")
-    corpus = Path(args.path).resolve().parent / "corpus"
-    print(f"Дальше: harness ingest {args.path} --corpus {corpus} --kind ВИД")
+    corpus = target.resolve().parent / "corpus"
+    print(f"Дальше: harness ingest {show(target)} --corpus {show(corpus)} --kind ВИД")
     print(f"        какие бывают виды: harness ingest --list")
     return 0
+
+
+def _cost_lines(turns: Any, cost: dict[str, Any]) -> list[str]:
+    """Разбивка времени по стадиям. `TASK-17`, пункт 2.
+
+    Печатается всегда, а не по ключу: живая запись дала 6.5 кадр/с против 32.5 в
+    `selftest` на той же машине, и объяснения не было ни у кого. Числа снимаются там, где
+    идёт запись, — на машине оператора, — потому что в контейнере другой диск и другой
+    процессор.
+    """
+    st = turns.stages()
+    if not st["turns"]:
+        return []
+    frames_cost = cost.get("frames") or {}
+    rows = [
+        f"на что ушло время (мс на оборот из {st['turns']}): "
+        f"ждал кадр {st['capture_ms']:.1f}, писал {st['record_ms']:.1f}",
+    ]
+    if frames_cost.get("calls"):
+        rows.append(
+            f"  внутри записи кадра: разность {frames_cost['delta_ms_per_call']:.1f}, "
+            f"сжатие {frames_cost['compress_ms_per_call']:.1f}, "
+            f"файл {frames_cost['write_ms_per_call']:.1f}"
+            + (f"; сжатие в {frames_cost['ratio']:.1f} раза"
+               if frames_cost.get("ratio") else ""))
+        rows.append(
+            f"  ключевых кадров {frames_cost['keyframes']} из {frames_cost['calls']}")
+        # Куда смотреть, если частота не добрана. Названа **настройка профиля**, а не
+        # «попробуйте что-нибудь»: обе ручки уже в схеме, и обе меняют profile_hash, то
+        # есть выбор принимает исследователь, а не команда за него.
+        inside = (frames_cost["delta_ms_per_call"] + frames_cost["compress_ms_per_call"]
+                  + frames_cost["write_ms_per_call"])
+        # Совет про уровень сжатия даётся только там, где запись **и есть** узкое место.
+        # Иначе два совета противоречат друг другу: «крутите сжатие» и «дело в захвате»,
+        # причём верен второй, и оператор пойдёт крутить не то.
+        writing_dominates = st["record_ms"] >= st["capture_ms"]
+        if writing_dominates and inside > 0 and (
+                frames_cost["compress_ms_per_call"] / inside > 0.5):
+            rows.append(
+                f"  сжатие — {frames_cost['compress_ms_per_call'] / inside:.0%} времени "
+                "записи кадра. Если частота не добрана, дешевле всего frame_compress_level "
+                "(замер: docs/measurements/record_cost.json). Это меняет profile_hash")
+        if st["capture_ms"] > st["record_ms"]:
+            rows.append("  больше всего ждали кадр от экрана, а не писали: узкое место в "
+                        "захвате, и настройки хранения тут не помогут")
+    return rows
 
 
 def cmd_doctor(args: argparse.Namespace) -> int:
@@ -1062,7 +1163,7 @@ def build_parser() -> argparse.ArgumentParser:
     sub.add_parser("resources", help="ресурсы и пределы").set_defaults(fn=cmd_resources)
 
     bb = sub.add_parser("babble", help="лепет: агент открывает своё тело")
-    bb.add_argument("path", type=Path)
+    bb.add_argument("path", type=_path_arg)
     bb.add_argument("--seed", type=int, default=0)
     bb.add_argument("--steps", type=int, default=1500)
     bb.add_argument("--note", default=None)
@@ -1071,7 +1172,7 @@ def build_parser() -> argparse.ArgumentParser:
     bb.set_defaults(fn=cmd_babble)
 
     g = sub.add_parser("gen-corpus", help="записать синтетическую сессию")
-    g.add_argument("path", type=Path)
+    g.add_argument("path", type=_path_arg)
     g.add_argument("--seed", type=int, default=0)
     g.add_argument("--frames", type=int, default=0, help="примерное число кадров")
     g.add_argument("--width", type=int, default=320)
@@ -1081,7 +1182,7 @@ def build_parser() -> argparse.ArgumentParser:
     g.set_defaults(fn=cmd_gen_corpus)
 
     lp = sub.add_parser("loop", help="замкнутый круг: драйв → цель → пробы → тест")
-    lp.add_argument("path", type=Path)
+    lp.add_argument("path", type=_path_arg)
     lp.add_argument("--seed", type=int, default=23)
     lp.add_argument("--rounds", type=int, default=40)
     lp.add_argument("--steps-per-round", type=int, default=40)
@@ -1093,26 +1194,26 @@ def build_parser() -> argparse.ArgumentParser:
     lp.set_defaults(fn=cmd_loop)
 
     v = sub.add_parser("verify", help="проверить целостность записи")
-    v.add_argument("path", type=Path)
+    v.add_argument("path", type=_path_arg)
     v.set_defaults(fn=cmd_verify)
 
     j = sub.add_parser("journal", help="сводка по журналу")
-    j.add_argument("path", type=Path)
+    j.add_argument("path", type=_path_arg)
     j.set_defaults(fn=cmd_journal)
 
     r = sub.add_parser("replay", help="пройти запись покадрово")
-    r.add_argument("path", type=Path)
+    r.add_argument("path", type=_path_arg)
     r.add_argument("--at", type=int, default=None, help="показать один кадр")
     r.set_defaults(fn=cmd_replay)
 
     sw = sub.add_parser("selfworld", help="разделить экранный и мировой слои (0.6)")
-    sw.add_argument("path", type=Path)
-    sw.add_argument("--dump-mask", type=Path, default=None)
+    sw.add_argument("path", type=_path_arg)
+    sw.add_argument("--dump-mask", type=_path_arg, default=None)
     sw.set_defaults(fn=cmd_selfworld)
 
     rp = sub.add_parser("report", help="показатели по журналу рядом со словами "
                                        "агента о себе")
-    rp.add_argument("path", type=Path)
+    rp.add_argument("path", type=_path_arg)
     rp.add_argument("--beliefs", action="store_true",
                     help="пересобрать убеждения и карту тела (медленнее)")
     rp.add_argument("--json", action="store_true")
@@ -1121,7 +1222,7 @@ def build_parser() -> argparse.ArgumentParser:
     stt = sub.add_parser("status", help="что готово, что нет и почему — по коду")
     stt.add_argument("--tests", action="store_true",
                      help="прогнать тесты и показать их итог")
-    stt.add_argument("--md", type=Path, default=None, help="записать markdown")
+    stt.add_argument("--md", type=_path_arg, default=None, help="записать markdown")
     stt.add_argument("--json", action="store_true")
     stt.set_defaults(fn=cmd_status)
 
@@ -1153,7 +1254,7 @@ def build_parser() -> argparse.ArgumentParser:
     bn.set_defaults(fn=cmd_bench)
 
     rec = sub.add_parser("record", help="запись с живого экрана")
-    rec.add_argument("path", type=Path, nargs="?", default=Path("."))
+    rec.add_argument("path", type=_path_arg, nargs="?", default=Path("."))
     rec.add_argument("--frames", type=int, default=None,
                      help="сколько кадров; по умолчанию считается из --seconds")
     # Секунды, а не только кадры: «3 мин» приходилось умножать на частоту в голове,
@@ -1186,13 +1287,13 @@ def build_parser() -> argparse.ArgumentParser:
     rec.set_defaults(fn=cmd_record)
 
     doc = sub.add_parser("doctor", help="что на этой машине мешает записывать")
-    doc.add_argument("--path", type=Path, default=None,
+    doc.add_argument("--path", type=_path_arg, default=None,
                      help="куда собираетесь писать: по нему считается место")
     doc.add_argument("--json", action="store_true")
     doc.set_defaults(fn=cmd_doctor)
 
     st = sub.add_parser("selftest", help="десять секунд захвата с проверкой результата")
-    st.add_argument("path", type=Path, nargs="?", default=None,
+    st.add_argument("path", type=_path_arg, nargs="?", default=None,
                     help="куда положить пробную запись; по умолчанию во временный каталог")
     st.add_argument("--seconds", type=float, default=10.0)
     st.add_argument("--no-audio", action="store_true",
@@ -1214,8 +1315,8 @@ def build_parser() -> argparse.ArgumentParser:
     pm.set_defaults(fn=cmd_params)
 
     ing = sub.add_parser("ingest", help="принять запись с чужой машины в корпус")
-    ing.add_argument("path", type=Path, nargs="?", default=Path("."))
-    ing.add_argument("--corpus", type=Path, default=Path("corpus/live"))
+    ing.add_argument("path", type=_path_arg, nargs="?", default=Path("."))
+    ing.add_argument("--corpus", type=_path_arg, default=Path("corpus/live"))
     ing.add_argument("--kind", default="play",
                      help="вид записи; --list покажет все")
     ing.add_argument("--in-place", action="store_true",
@@ -1225,14 +1326,14 @@ def build_parser() -> argparse.ArgumentParser:
     ing.set_defaults(fn=cmd_ingest)
 
     mk = sub.add_parser("mark", help="отметить область обрамления на живой записи")
-    mk.add_argument("path", type=Path)
+    mk.add_argument("path", type=_path_arg)
     mk.add_argument("--screen", nargs=4, action="append", metavar=("ВЕРХ", "ЛЕВО", "ВЫСОТА", "ШИРИНА"),
                     help="прямоугольник экранного слоя; можно указать несколько раз")
     mk.add_argument("--note", default=None)
     mk.set_defaults(fn=cmd_mark)
 
     bl = sub.add_parser("bench-live", help="прогнать тот же код по живым записям")
-    bl.add_argument("path", type=Path, default=Path("corpus/live"), nargs="?")
+    bl.add_argument("path", type=_path_arg, default=Path("corpus/live"), nargs="?")
     bl.add_argument("--method", choices=("arbiter", "parallax", "both"),
                     default="both",
                     help="какой из двух существующих путей прогнать")

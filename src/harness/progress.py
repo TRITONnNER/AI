@@ -89,6 +89,11 @@ class Sample:
     unchanged: int
     total_turns: int
     disk_bytes: int
+    #: Раньше этого срока расход не выдаётся. Окно в миллисекунду делит байты сессии
+    #: (`session.json`, ветка журнала) на почти ноль и печатает «3.4 ГиБ/ч» на записи, где
+    #: не записано ещё ни кадра. Порог берётся из профиля — это `progress_min_interval_s`,
+    #: то есть он уже в схеме и уже в `profile_hash` (инвариант 23), а не нарисован здесь.
+    rate_after_s: float = 0.0
 
     @property
     def turns(self) -> int:
@@ -108,6 +113,8 @@ class Sample:
     def gib_per_hour(self) -> float | None:
         """Расход в ГиБ/ч по факту, а не по константе. `None` — мерить пока нечем."""
         if self.elapsed_s <= 0 or self.disk_bytes <= 0:
+            return None
+        if self.elapsed_s < self.rate_after_s:
             return None
         return self.disk_bytes / self.elapsed_s * 3600.0 / (1 << 30)
 
@@ -237,6 +244,43 @@ class Progress:
                     f"смотреть на ходу: tail -f {self.log_path}")
         return f"идёт запись {_hms(self.total_s)} — {self.why}"
 
+    def _stream(self):
+        if self._out is not None:
+            return self._out
+        import sys
+
+        return sys.stdout
+
+    def _inplace(self) -> bool:
+        """Обновлять на месте или писать строку за строкой.
+
+        На месте — только в настоящем терминале. `TASK-17`, пункт 3: на машине оператора
+        строка хода не появилась вовсе, и два подозрения из трёх — про вывод, а не про
+        частоту. Возврат каретки в **перенаправленном** потоке не возвращает ничего: в
+        файле он остаётся байтом `0x0D`, а конвейер его не толкует, поэтому строка не
+        видна до конца записи. Там надо печатать строками.
+        """
+        stream = self._stream()
+        try:
+            return bool(stream.isatty())
+        except Exception:
+            return False
+
+    def _width(self) -> int:
+        """Ширина терминала. Дополнение до 96 столбцов было ошибкой на 80-колоночном окне.
+
+        В `cmd.exe` шириной 80 строка в 96 символов **переносится**, и возврат каретки
+        уводит курсор в начало уже второй строки: следующее обновление пишется поверх
+        переноса, а не поверх строки. Виден при этом мусор либо пустота — то есть ровно
+        то, о чём отчёт оператора.
+        """
+        import shutil
+
+        try:
+            return max(40, shutil.get_terminal_size((80, 24)).columns)
+        except Exception:
+            return 80
+
     def _write(self, text: str, *, final: bool = False) -> None:
         if self.channel == "none":
             return
@@ -244,15 +288,18 @@ class Progress:
             self._log.write(text + "\n")
             self._log.flush()
             return
-        stream = self._out
-        if stream is None:
-            import sys
-
-            stream = sys.stderr
-        # Строка обновляется **на месте**: возврат каретки без перевода. Перевод строки
-        # только у итога — иначе за минуту записи набегает шестьдесят строк, и то, что
-        # оператор искал (идёт ли запись), тонет в том, что он уже видел.
-        stream.write(("\r" + text.ljust(96)) if not final else ("\r" + text + "\n"))
+        stream = self._stream()
+        if not self._inplace():
+            # Поток перенаправлен: строками, каждая со своим переводом. Шестьдесят строк в
+            # файле лучше одной невидимой.
+            stream.write(text + "\n")
+            stream.flush()
+            return
+        # Строка обновляется **на месте**: возврат каретки без перевода, и обрезается по
+        # ширине окна минус один столбец — иначе перенос, и обновление уходит не туда.
+        room = self._width() - 1
+        shown = text if len(text) <= room else text[:room - 1] + "…"
+        stream.write("\r" + shown.ljust(room) + ("\n" if final else ""))
         stream.flush()
 
     # --- ход --------------------------------------------------------------
@@ -260,7 +307,8 @@ class Progress:
     def sample(self, *, written: int, unchanged: int, disk_bytes: int) -> Sample:
         return Sample(elapsed_s=self._now() - self.started, total_s=self.total_s,
                       written=written, unchanged=unchanged,
-                      total_turns=self.total_turns, disk_bytes=int(disk_bytes))
+                      total_turns=self.total_turns, disk_bytes=int(disk_bytes),
+                      rate_after_s=self.min_interval_s)
 
     def update(self, *, written: int, unchanged: int,
                disk_bytes: int | Callable[[], int], force: bool = False) -> str | None:
@@ -292,11 +340,20 @@ class Progress:
         s = self.sample(written=written, unchanged=unchanged, disk_bytes=got)
         line = render_final(s, path=self.path, interrupted=interrupted,
                             audio_note=audio_note)
+        # Итог **возвращается**, а печатает его вызывающий, и печатает один раз. `TASK-17`,
+        # пункт 4: до этого `finish` писал строку в поток сам и возвращал её же, а
+        # `cmd_record` печатал возвращённое — итог выходил дважды. Одна работа — одно место.
+        #
+        # В канал пишется только то, что иначе потеряется: строка в файл хода (её никто
+        # больше не напишет) и **уборка** незакрытой строки на месте — без перевода строки
+        # итог напечатался бы поверх хода.
         if self.channel == "file" and self._log is not None:
             self._log.write(line + "\n")
             self._log.flush()
-        else:
-            self._write(line, final=True)
+        elif self.channel == "line" and self._inplace():
+            stream = self._stream()
+            stream.write("\r" + " " * (self._width() - 1) + "\r")
+            stream.flush()
         self.close()
         return line
 

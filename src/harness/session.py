@@ -445,6 +445,16 @@ class Recorder:
         self.profile = new_profile
         return self
 
+    def cost(self) -> dict[str, Any]:
+        """Куда ушло время и сколько вышло байтов, по хранилищам. `TASK-17`, пункт 2.
+
+        Разбивка нужна на машине оператора: живая запись дала 6.5 кадр/с против 32.5 в
+        `selftest` на той же машине, и «узкое место где-то в записи на диск» — не диагноз.
+        Здесь она собирается там же, где происходит, а не восстанавливается по итогам.
+        """
+        return {"frames": self.frames.cost.as_dict(),
+                "audio": self.audio.cost.as_dict()}
+
     def close(self) -> None:
         self.frames.close()
         self.audio.close()
