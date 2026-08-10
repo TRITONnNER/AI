@@ -421,6 +421,19 @@ def experiments() -> dict[str, Any]:
                      "was": "не измерялось", "unit": "настройка",
                      "n": pa["всего_настроек"], "task": "TASK-10, инвариант 31"})
 
+    idn = files.get("identity", {})
+    if idn:
+        by = {(c["source"], c["case"]): c for c in idn["cases"]}
+        for (src, case), c in sorted(by.items()):
+            runs.append({
+                "name": f"тождество: {case} ({src})",
+                "value": f"карточек {c['before']} → {c['after']} при истине "
+                         f"{c['true_entities']}, ошибка {c['error_before']} → "
+                         f"{c['error_after']}",
+                "was": "прежнее правило склеивало похожие: 6 сущностей в 2, "
+                       "ошибка 0 → 4",
+                "unit": idn["unit"], "n": c["before"], "task": "TASK-14"})
+
     sr = files.get("storage_rate", [])
     if sr:
         worst = max(sr, key=lambda x: x["gib_per_hour"])

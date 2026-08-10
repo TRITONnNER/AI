@@ -462,6 +462,51 @@ def from_journal(journal: Journal, *, profile: Profile,
             independence=share("вопрос", q["asked"]) if q["asked"]
             else count("вопрос", 0))
 
+    # --- тождество карточек (TASK-14) ---------------------------------------
+    # Берётся из последней записи сна в журнале, а не из живого хранилища: пересмотр
+    # тождества происходит во сне, и его результат — часть следа, иначе показатель
+    # зависел бы от того, кто и когда трогал память после.
+    ident = None
+    for e in journal.entries([EntryKind.SLEEP]):
+        got = e.event.get("identity")
+        if isinstance(got, dict):
+            ident = got
+    if ident is None:
+        out.add("entities_after_sleep", None, "карточек", "нет источника",
+                "сна в журнале нет: пересмотр тождества не проводился. Ноль здесь "
+                "означал бы «после сна карточек не осталось»",
+                independence=count("карточка", 0))
+    else:
+        out.add("entities_after_sleep", ident["after"], "карточек",
+                "запись SLEEP: identity",
+                f"сколько карточек осталось после пересмотра тождества против "
+                f"{ident['before']} до него. Само по себе уменьшение не благо: "
+                "слипание уменьшает число карточек ровно так же, как верное слияние",
+                independence=count("карточка", ident["before"]))
+        out.add("merge_share", ident["merge_share"], "доля",
+                "запись SLEEP: identity",
+                "какая доля карточек ушла в слияние. Единица — карточка; для "
+                "утверждений о самом методе тождества единица другая (источник "
+                "отпечатка), и внутри одного прогона таких наблюдений ровно одно",
+                independence=share("карточка", ident["before"]))
+        out.add("split_share", ident["split_share"], "доля",
+                "запись SLEEP: identity",
+                "какая доля карточек расщепилась задним числом: карточка оказалась "
+                "двумя, и её встречи разошлись по эпизодам",
+                independence=share("карточка", ident["before"]))
+        out.add("single_encounter_cards", ident["single_encounter_after"], "карточек",
+                "запись SLEEP: identity",
+                f"карточек с единственной встречей: {ident['single_encounter_before']} "
+                f"до пересмотра. Их рост — признак расщепления мира на осколки: одно "
+                "записано как двадцать",
+                independence=count("карточка", ident["after"]))
+        out.add("false_merge_share", ident["false_merge_share"], "доля",
+                "запись SLEEP: identity",
+                "доля догадок о тождестве, не прошедших порог уверенности. Проверка без "
+                "этого числа может кричать на пустом месте (инвариант 31)",
+                independence=share("карточка", ident["merge_guesses"])
+                if ident["merge_guesses"] else count("карточка", 0))
+
     # Распределение по слою-инициатору: без него доля конфабуляции обманчива.
     for name in sorted(layers):
         out.add(f"layer_{name}", layers[name], "записей",

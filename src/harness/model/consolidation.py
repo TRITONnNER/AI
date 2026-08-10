@@ -106,6 +106,7 @@ class SleepReport:
     verified_testimony: int = 0
     deferred_open: int = 0
     drift: float | None = None
+    identity: dict[str, Any] | None = None
     reality_check_overdue: bool = False
     minutes_since_reality_check: float = 0.0
     fingerprint_before: str = ""
@@ -129,7 +130,7 @@ class SleepReport:
                 "hearsay_pending": self.hearsay_pending,
                 "verified_testimony": self.verified_testimony,
                 "deferred_open": self.deferred_open,
-                "drift": self.drift,
+                "drift": self.drift, "identity": self.identity,
                 "reality_check_overdue": self.reality_check_overdue,
                 "minutes_since_reality_check": round(self.minutes_since_reality_check, 2),
                 "fingerprint_before": self.fingerprint_before,
@@ -181,6 +182,9 @@ class Consolidator:
         self.split_min_n = int(p["split_min_observations"])
         self.split_band = float(p["split_middle_band"])
         self.macro_max_length = int(profile.structural["macro_max_length"])
+        # Имя функции отпечатка попадает в отчёт сна: показатели тождества сравнимы
+        # только внутри одного источника отпечатков.
+        self.fingerprint_source = str(profile.structural.get("frame_format", "?"))
         self.live_min_responses = int(p["body_live_min_responses"])
         self.silent_min_deliveries = int(p["babble_repeats"])
         self.runs = 0
@@ -316,9 +320,15 @@ class Consolidator:
         report.merges_proposed = self.propose_merges(store)
         report.splits_proposed = self.propose_splits(store)
         if apply_merges:
-            for m in report.merges_proposed:
-                if not m.conflicts and self.apply_merge(store, m.a, m.b):
-                    report.merges_applied.append((m.a, m.b))
+            # Пересмотр тождества — одна операция, а не две: порядок «сначала
+            # расщепления, потом слияния» существен, и держать его в вызывающем значило
+            # бы позволить перепутать (см. `identity.revise`).
+            from .identity import revise
+
+            got = revise(store, profile=self.profile,
+                         source=self.fingerprint_source)
+            report.identity = got.as_dict()
+            report.merges_applied = list(got.merged_pairs)
 
         report.edges_recomputed = self.recompute_edges(graph) if graph is not None else 0
         report.scripts_mined = self.mine_scripts(journal)

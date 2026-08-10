@@ -498,12 +498,90 @@ def entity_id(fingerprint: str) -> str:
     return f"ENT_{h}"
 
 
+class EntityKind(StrEnum):
+    """Что это за сущность. Одна структура на всё, а не отдельный тип на каждый вид.
+
+    Место, предмет, другой, звук, состояние и мысль различаются **значением поля**, а не
+    классом. Это не экономия кода: карточки должны сравниваться между собой и попадать в
+    один кластер, а сравнивать разные классы нечем. Именно так перенос между доменами
+    получается бесплатно — слот в игре и поле для перетаскивания в редакторе оказываются
+    похожими, потому что у них одинаковая сигнатура аффордансов, а не одинаковый тип.
+
+    Набор закрыт. Новый вид — это утверждение о том, что мир содержит нечто, не
+    сводимое к перечисленному, и обосновывается здесь.
+    """
+
+    PLACE = "place"        # узел графа мест: отпечаток вида
+    THING = "thing"        # предмет: то, с чем можно что-то сделать
+    OTHER = "other"        # другой деятель: предсказывается моделью цели
+    SOUND = "sound"        # звук с пеленгом
+    STATE = "state"        # состояние мира или интерфейса
+    THOUGHT = "thought"    # своё воображаемое: действие с отключёнными эффекторами
+    OUTPUT = "output"      # выход собственного тела
+    SYMBOL = "symbol"      # непрозрачный символ с экрана
+    TRACE = "trace"        # след: деятельность при отсутствии деятеля (MIND.md, 4a)
+
+
+class Relation(StrEnum):
+    """Типы связей между карточками. Набор закрыт (`ARCHITECTURE.md`, контракт карточки).
+
+    Шесть первых — про устройство мира, три последних — про **происхождение**, и они
+    отделены намеренно (`MIND.md`, раздел 4a). `FOUND_WITH` — честная позиция «связь
+    наблюдаю, причину нет», и с неё начинается всякая археология: артефакт, встреченный
+    рядом с деятелями, которые его не изготавливают, наблюдением неразрешим, и
+    приписать ему `MADE_BY` было бы выводом, а не наблюдением.
+    """
+
+    AT = "at"
+    PART_OF = "part_of"
+    CAUSES = "causes"
+    RESEMBLES = "resembles"
+    PRECEDES = "precedes"
+    REPRESENTS = "represents"
+    # --- происхождение ---
+    MADE_BY = "made_by"
+    USED_BY = "used_by"
+    FOUND_WITH = "found_with"
+
+
+#: Связи происхождения. Отделены от прочих, потому что вывод о происхождении — самое
+#: частое место, где наблюдение подменяется догадкой.
+PROVENANCE_RELATIONS = (Relation.MADE_BY, Relation.USED_BY, Relation.FOUND_WITH)
+
+
+@dataclass(frozen=True, slots=True)
+class Sighting:
+    """Одна встреча с сущностью: когда, чем опознана, что вышло.
+
+    Хранится **поштучно**, а не только счётчиком, и это единственное, что делает
+    возможным расщепление задним числом. Карточка, оказавшаяся двумя, делится по
+    эпизодам: каждая встреча уходит той половине, к которой относится по своему исходу.
+    Без списка встреч делить было бы нечем, и ссылки пришлось бы разводить наугад — то
+    есть портить обе половины вместо того, чтобы починить одну.
+    """
+
+    seq: int                  # эпизод: номер записи журнала
+    fingerprint: str          # чем опознали — отпечаток, а не идентификатор
+    key: str = ""             # действие или наблюдение, если было
+    outcome: bool | None = None
+    source: str = ""          # какая функция отпечатка дала этот отпечаток
+
+    def as_dict(self) -> dict[str, Any]:
+        return {"seq": self.seq, "fingerprint": self.fingerprint, "key": self.key,
+                "outcome": self.outcome, "source": self.source}
+
+
 @dataclass(slots=True)
 class Entity:
-    """Карточка сущности: что это, что я с этим умею, что оно делает само."""
+    """Карточка сущности: что это, что я с этим умею, что оно делает само.
+
+    Одна структура для места, предмета, другого, звука, состояния и мысли — вид лежит в
+    `kind`. Тождество карточки **провизорно**: она держит список встреч и может во сне
+    слиться с другой или расщепиться на две (`model.identity`).
+    """
 
     id: str
-    kind: str                                    # "symbol" | "output" | "place" | "sound"
+    kind: str                                    # значение из `EntityKind`
     first_seq: int
     last_seq: int
     encounters: int = 1
@@ -511,6 +589,63 @@ class Entity:
     dynamics: dict[str, Belief] = field(default_factory=dict)      # что делает само
     links: dict[str, str] = field(default_factory=dict)            # id → вид связи
     uses: int = 0
+    # Встречи поштучно. Нужны расщеплению задним числом: см. `Sighting`.
+    sightings: list[Sighting] = field(default_factory=list)
+    # Уверенность в тождестве: 1.0 — карточка ни разу не сливалась и не расщеплялась,
+    # ниже — её тождество уже пересматривалось, и опираться на него надо осторожнее.
+    identity_confidence: float = 1.0
+    # Откуда карточка взялась после пересмотра тождества: «слияние ENT_x+ENT_y» либо
+    # «расщепление ENT_z по ключу». Пустая строка — карточка родилась встречей.
+    identity_note: str = ""
+
+    def __post_init__(self) -> None:
+        if self.kind not in {str(k) for k in EntityKind}:
+            raise BeliefError(
+                f"вид сущности {self.kind!r} не объявлен. Набор закрыт: "
+                f"{sorted(str(k) for k in EntityKind)}. Новый вид — это утверждение о "
+                "мире, и его место в EntityKind, а не в строке вызывающего")
+        bad = {v for v in self.links.values() if v not in {str(r) for r in Relation}}
+        if bad:
+            raise BeliefError(
+                f"связи {sorted(bad)} не объявлены. Набор типов связей закрыт: "
+                f"{sorted(str(r) for r in Relation)}")
+
+    def see(self, s: Sighting) -> None:
+        """Отметить встречу. Растит счётчик и границы эпизодов вместе со списком.
+
+        Одна запись журнала об одном ключе — **одна** встреча. Повторное добавление с тем
+        же `(seq, key)` не удваивает счётчик: это то же наблюдение, пришедшее вторым
+        путём. Так и было — `learn_affordance` внутри вызывает `touch`, и вызывающий,
+        сделавший `touch` сам, получал по две встречи на каждое наблюдение. Счётчик
+        встреч удваивался, а вместе с ним и `yes_seqs` в плане расщепления: половины
+        делились по списку, где каждый эпизод стоял дважды.
+        """
+        same = next((i for i, old in enumerate(self.sightings)
+                     if old.seq == s.seq and old.key == s.key), None)
+        if same is not None:
+            # Побеждает более содержательная: у той, что с исходом, сведений больше.
+            if self.sightings[same].outcome is None and s.outcome is not None:
+                self.sightings[same] = s
+            return
+        self.sightings.append(s)
+        self.encounters = len(self.sightings)
+        self.first_seq = min(self.first_seq, s.seq)
+        self.last_seq = max(self.last_seq, s.seq)
+
+    @property
+    def fingerprints(self) -> tuple[str, ...]:
+        """Отпечатки, под которыми карточку опознавали. Их может быть много.
+
+        Слипание видно именно здесь: карточка, собравшая двадцать разных отпечатков,
+        подозрительна независимо от того, насколько согласованы её аффордансы.
+        """
+        return tuple(dict.fromkeys(s.fingerprint for s in self.sightings))
+
+    @property
+    def provenance_links(self) -> dict[str, str]:
+        """Только связи происхождения: `made_by`, `used_by`, `found_with`."""
+        prov = {str(r) for r in PROVENANCE_RELATIONS}
+        return {k: v for k, v in self.links.items() if v in prov}
     # Обращения к карточке. Растут при `BeliefStore.recall` — извлечение есть транзакция,
     # а не чтение, и без счётчика ранжирование не имело бы входа: «что держать подробно»
     # решается по обращениям, а обращения надо считать в момент, когда они происходят.
@@ -547,6 +682,10 @@ class Entity:
 
     def as_dict(self) -> dict[str, Any]:
         return {"id": self.id, "kind": self.kind, "first_seq": self.first_seq,
+                "fingerprints": list(self.fingerprints),
+                "identity_confidence": round(self.identity_confidence, 4),
+                "identity_note": self.identity_note,
+                "sightings": len(self.sightings),
                 "last_seq": self.last_seq, "encounters": self.encounters,
                 "uses": self.uses, "value": round(self.value(), 4),
                 "recalls": self.recalls, "rank": self.rank(),
@@ -570,20 +709,28 @@ class BeliefStore:
 
     # --- наполнение ---------------------------------------------------------
 
-    def touch(self, ent_id: str, kind: str, seq: int) -> Entity:
+    def touch(self, ent_id: str, kind: str, seq: int, *,
+              fingerprint: str = "", key: str = "", outcome: bool | None = None,
+              source: str = "") -> Entity:
+        """Встретить сущность. Встреча пишется поштучно, а не только счётчиком.
+
+        `fingerprint` — чем опознали. По умолчанию берётся идентификатор карточки: это
+        честно для тех путей, где отпечаток и есть идентификатор (выходы тела, символы),
+        но для мест и предметов вызывающий обязан передать настоящий отпечаток, иначе
+        расщепление задним числом останется без входных данных.
+        """
         e = self.entities.get(ent_id)
+        s = Sighting(seq, fingerprint or ent_id, key, outcome, source)
         if e is None:
-            e = Entity(ent_id, kind, first_seq=seq, last_seq=seq)
+            e = Entity(ent_id, kind, first_seq=seq, last_seq=seq, encounters=0)
             self.entities[ent_id] = e
-        else:
-            e.encounters += 1
-            e.last_seq = max(e.last_seq, seq)
+        e.see(s)
         return e
 
     def learn_affordance(self, ent_id: str, action_key: str, outcome: bool,
                          prov: Provenance, *, kind: str = "output") -> Belief:
         """«Когда я делаю это с этим, получается вот то»."""
-        e = self.touch(ent_id, kind, prov.seq)
+        e = self.touch(ent_id, kind, prov.seq, key=action_key, outcome=outcome)
         e.uses += 1
         claim = f"{ent_id}|afford|{action_key}"
         old = e.affordances.get(action_key)
@@ -596,7 +743,7 @@ class BeliefStore:
     def learn_dynamics(self, ent_id: str, what: str, outcome: bool,
                        prov: Provenance, *, kind: str = "symbol") -> Belief:
         """«Оно делает это само, без меня»."""
-        e = self.touch(ent_id, kind, prov.seq)
+        e = self.touch(ent_id, kind, prov.seq, key=what, outcome=outcome)
         claim = f"{ent_id}|dyn|{what}"
         old = e.dynamics.get(what)
         b = old.observe(outcome, prov) if old else Belief(
@@ -642,6 +789,12 @@ class BeliefStore:
         return out
 
     def link(self, a: str, b: str, kind: str) -> None:
+        """Связать две карточки типизированной связью. Тип обязан быть объявлен."""
+        if kind not in {str(r) for r in Relation}:
+            raise BeliefError(
+                f"связь {kind!r} не объявлена. Типы связей закрыты: "
+                f"{sorted(str(r) for r in Relation)}. Свободная строка здесь означала бы, "
+                "что вид связи выяснится потом — а он и есть то, что утверждается")
         if a in self.entities:
             self.entities[a].links[b] = kind
         if b in self.entities:
