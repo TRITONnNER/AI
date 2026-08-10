@@ -43,11 +43,16 @@ class FakeScreen:
 
     name = "тест-экран"
 
-    def __init__(self, *, w: int = 64, h: int = 48, still_every: int = 0,
+    def __init__(self, *, w: int = 64, h: int = 48, still_every: int | None = 0,
+                 still_ratio: int = 0,
                  interrupt_at: int | None = None, ends_at: int | None = None,
                  delay_s: float = 0.0) -> None:
         self.w, self.h = w, h
-        self.still_every = still_every
+        self.still_every = still_every or 0
+        # `still_ratio = 4` — четыре оборота из пяти без изменений, как на записи
+        # неподвижности. Это не то же, что `still_every`: там статика редкая, здесь
+        # частая, и предел оборотов ведёт себя по-разному.
+        self.still_ratio = int(still_ratio)
         self.interrupt_at = interrupt_at
         self.ends_at = ends_at
         # Задержка на оборот нужна ровно одному тесту: чтобы прогон целой команды занял
@@ -70,6 +75,8 @@ class FakeScreen:
             raise KeyboardInterrupt
         if self.ends_at is not None and self.reads >= self.ends_at:
             return None
+        if self.still_ratio and self.reads % (self.still_ratio + 1) != 0:
+            return UNCHANGED
         if self.still_every and self.reads % self.still_every == 0:
             return UNCHANGED
         img = np.full((self.h, self.w), (self.reads * 13) % 251, dtype=np.uint8)
@@ -651,39 +658,61 @@ def test_turns_counts_are_one_object(tmp_path: Path) -> None:
 # --- TASK-17: срок, разбивка, поток вывода, пути -----------------------------
 
 
-def test_seconds_is_a_deadline_not_a_frame_count(tmp_path: Path) -> None:
-    """`--seconds` — срок. Запись кончается по времени, а не по числу кадров.
+def test_seconds_is_a_deadline_and_the_turn_limit_does_not_apply(tmp_path: Path) -> None:
+    """`--seconds` — срок, и предел оборотов при нём не применяется вовсе.
 
-    До TASK-17 десять секунд превращались в 300 кадров, и на машине, отдающей 6.5 кадр/с,
-    запись шла 46 секунд — молча. Оператор просил десять секунд и получал минуту.
+    TASK-17 сделал срок в печати, но оставил предел в условии выхода: `--seconds 10`
+    кончилась за секунду с причиной «набрано заданное число кадров», потому что 29 кадров
+    и 271 отметка «без изменений» дали 300 оборотов = 10 × 30. На записи неподвижности
+    отметок почти сто процентов, и минута кончалась за секунды.
     """
     root = tmp_path / "s"
-    # Медленный источник: 300 кадров он отдал бы за 6 с, но срок — 0.3 с.
-    screen = FakeScreen(delay_s=0.02)
+    # Экран почти не меняется: 4 из 5 оборотов — отметки «без изменений», как на записи
+    # неподвижности. Именно на таком экране прежний предел выбирался мгновенно.
+    screen = FakeScreen(still_every=None, still_ratio=4)
     p = _profile(screen.w, screen.h)
     with Recorder(root, profile=p, source=screen.name, synthetic=False) as rec:
-        turns = run_turns(rec, source=screen, frames=300, first=screen.first(),
+        turns = run_turns(rec, source=screen, frames=None, first=screen.first(),
                           actor=Actor.HUMAN, actor_layer=ActorLayer.HUMAN,
-                          seconds=0.3, expected_fps=30.0)
+                          seconds=0.4, expected_fps=200.0)
     assert turns.stop_reason == "deadline"
-    assert turns.turns < 300, "запись досидела до числа кадров вместо срока"
-    assert 0.3 <= turns.elapsed_s < 2.0, turns.elapsed_s
+    assert turns.unchanged > turns.written, "экран менялся — проверка не про то"
+    # Допуск в один период кадра, и он **со знаком минус**: цикл не начинает оборот,
+    # который заведомо кончится за сроком, поэтому останавливается до срока, а не после.
+    # Записать лишний кадр после срока было бы хуже, чем недобрать один.
+    assert 0.4 - 1 / 200.0 <= turns.elapsed_s < 0.6, turns.elapsed_s
 
 
-def test_frames_still_means_frames(tmp_path: Path) -> None:
-    """`--frames` не изменился: столько кадров, сколько названо.
+def test_turn_limit_counts_turns_and_says_so(tmp_path: Path) -> None:
+    """`--turns` считает **обороты**, включая отметки «без изменений».
 
-    Два флага — два разных смысла, и это решение, а не недосмотр: за числом кадров
-    приходят, когда нужен ровный объём для сравнения прогонов.
+    Решение объявлено, а не выведено из удобства: считать только изменившиеся кадры
+    значило бы, что запись неподвижного экрана не кончится никогда — экран не меняется,
+    счётчик не растёт. Это обратная поломка к той, что нашлась в TASK-17.
     """
+    from harness.capture.record_loop import TURNS_MEAN
+
     root = tmp_path / "s"
-    screen = FakeScreen()
+    screen = FakeScreen(still_every=2)
     p = _profile(screen.w, screen.h)
     with Recorder(root, profile=p, source=screen.name, synthetic=False) as rec:
         turns = run_turns(rec, source=screen, frames=25, first=screen.first(),
                           actor=Actor.HUMAN, actor_layer=ActorLayer.HUMAN,
-                          expected_fps=30.0)
-    assert turns.stop_reason == "frames" and turns.turns == 25
+                          expected_fps=0.0, pace=False)
+    assert turns.stop_reason == "turns" and turns.turns == 25
+    assert turns.unchanged > 0, "в этом прогоне нет статики — предел проверяется не тот"
+    assert "оборот" in TURNS_MEAN and "без изменений" in TURNS_MEAN
+
+
+def test_neither_deadline_nor_limit_is_a_refusal(tmp_path: Path) -> None:
+    """Без срока и без предела запись не кончится — и это отказ, а не бесконечный цикл."""
+    root = tmp_path / "s"
+    screen = FakeScreen()
+    p = _profile(screen.w, screen.h)
+    with Recorder(root, profile=p, source=screen.name, synthetic=False) as rec:
+        with pytest.raises(ValueError, match="не кончится"):
+            run_turns(rec, source=screen, frames=None, first=screen.first(),
+                      actor=Actor.HUMAN, actor_layer=ActorLayer.HUMAN)
 
 
 def test_shortfall_against_the_target_rate_is_a_printed_number(tmp_path: Path) -> None:
@@ -900,3 +929,172 @@ def test_every_path_argument_expands_the_tilde() -> None:
     assert _path_arg("~").is_absolute()
     with pytest.raises(argparse.ArgumentTypeError, match="не раскрыл"):
         _path_arg("a/~/b")
+
+
+# --- TASK-18: частота, бюджет кадра, стоимость на движущемся экране ----------
+
+
+def test_the_loop_holds_the_target_rate(tmp_path: Path) -> None:
+    """Цикл ждёт между оборотами и не обгоняет цель.
+
+    Без ожидания у оператора вышло 246 кадр/с при цели 30. Дело не в сожжённом процессоре:
+    интервалы между кадрами становятся случайными, а на них стоят оптический поток, tau и
+    все временные оценки.
+    """
+    root = tmp_path / "s"
+    screen = FakeScreen()
+    slept: list[float] = []
+    clock = FakeClock()
+
+    def tick(sec: float) -> None:
+        # Поддельный сон обязан двигать поддельные часы. Иначе расписание уезжает от
+        # стоящего времени, и каждый следующий оборот просит ждать всё дольше — первая
+        # редакция этой проверки так и вышла, и поймала себя сама.
+        slept.append(sec)
+        clock.t += sec
+
+    p = _profile(screen.w, screen.h)
+    with Recorder(root, profile=p, source=screen.name, synthetic=False) as rec:
+        turns = run_turns(rec, source=screen, frames=20, first=screen.first(),
+                          actor=Actor.HUMAN, actor_layer=ActorLayer.HUMAN,
+                          expected_fps=50.0, now=clock, sleep=tick)
+    # Ожидание запрошено на каждом обороте, кроме первого: поддельный экран отдаёт кадр
+    # мгновенно, значит без ожидания частота была бы тысячами.
+    assert len(slept) == 19, f"ожиданий {len(slept)} на 20 оборотов"
+    assert turns.idle_ns > 0
+    # 20 оборотов при 50 Гц — это 0.4 с, из которых 19 периодов по 20 мс ушли в ожидание.
+    assert sum(slept) == pytest.approx(0.38, abs=1e-9)
+    assert turns.stages()["idle_share"] == pytest.approx(1.0, abs=0.01)
+
+
+def test_pacing_schedules_from_the_start_not_from_the_previous_turn(tmp_path: Path) -> None:
+    """Расписание считается от старта: «период после предыдущего» накапливает отставание.
+
+    За минуту записи с оборотом дороже периода запись уехала бы на секунды, и все три часа
+    записи разошлись бы с настенным временем.
+    """
+    root = tmp_path / "s"
+    screen = FakeScreen()
+    slept: list[float] = []
+    clock = FakeClock()
+
+    def tick(sec: float) -> None:
+        slept.append(sec)
+        clock.t += sec
+
+    p = _profile(screen.w, screen.h)
+    with Recorder(root, profile=p, source=screen.name, synthetic=False) as rec:
+        run_turns(rec, source=screen, frames=5, first=screen.first(),
+                  actor=Actor.HUMAN, actor_layer=ActorLayer.HUMAN,
+                  expected_fps=10.0, now=clock, sleep=tick)
+    # Часы двигает только ожидание, работа мгновенна: значит каждый оборот ждёт ровно
+    # период, и время к пятому обороту равно четырём периодам, а не пяти.
+    # Четыре ожидания на пять оборотов: у первого расписание — это сам старт, ждать нечего.
+    assert slept == pytest.approx([0.1, 0.1, 0.1, 0.1], abs=1e-9), slept
+
+
+def test_idle_share_is_printed_and_recorded(tmp_path: Path, monkeypatch,
+                                            capsys) -> None:
+    """Холостая доля печатается: без неё «едва успевает» и «ждёт три четверти» одинаковы."""
+    root = tmp_path / "rec"
+    code = _run_record(["record", str(root), "--turns", "12", "--no-audio"],
+                       FakeScreen(), monkeypatch)
+    out = capsys.readouterr().out
+    assert code == 0
+    assert "ждал, чтобы не обогнать цель" in out, out
+    with Session.open(root) as s:
+        costs = [e.event for e in s.journal
+                 if e.kind is Kind.INTERVENTION and e.event.get("code") == "cost"]
+    assert costs and costs[0]["stages"]["idle_share"] > 0
+
+
+def test_bottleneck_is_judged_against_the_frame_budget() -> None:
+    """Узкое место объявляется по бюджету кадра, а не сравнением стадий между собой.
+
+    Прежний вывод сравнивал стадии («ждал кадр 3.1, писал 0.8 → узкое место в захвате») и
+    потому находил узкое место **всегда**: у двух чисел одно непременно больше. 3.1 мс при
+    бюджете 33 мс — десятикратный запас.
+    """
+    from harness.cost import budget_ms, verdict
+
+    assert budget_ms(30.0) == pytest.approx(33.333, abs=0.01)
+
+    ok = verdict({"capture_ms": 3.1, "record_ms": 0.8, "idle_ms": 29.0}, fps=30.0)
+    assert ok.fits and "укладываемся в бюджет" in ok.text()
+    assert "запас 29.4 мс" in ok.text()
+    assert "узкое место" not in ok.text()
+
+    # Ожидание между оборотами в работу не входит: иначе узким местом объявлялось бы
+    # собственное добровольное ожидание.
+    assert ok.busy_ms == pytest.approx(3.9)
+
+    bad = verdict({"capture_ms": 100.0, "record_ms": 54.0}, fps=30.0)
+    assert not bad.fits and "бюджет кадра превышен" in bad.text()
+    assert "ожидание кадра от экрана" in bad.text()
+    assert bad.max_fps == pytest.approx(6.5, abs=0.05), "потолок считается неверно"
+
+
+def test_a_fast_machine_is_never_called_a_bottleneck(tmp_path: Path, monkeypatch,
+                                                     capsys) -> None:
+    """На быстрой машине приговор — «укладываемся», и слова «узкое место» нет вовсе."""
+    root = tmp_path / "rec"
+    _run_record(["record", str(root), "--turns", "10", "--no-audio"],
+                FakeScreen(), monkeypatch)
+    out = capsys.readouterr().out
+    assert "укладываемся в бюджет" in out, out
+    assert "узкое место" not in out, out
+
+
+def test_cost_scan_declares_what_changed_and_measures_it() -> None:
+    """Стоимость снимается при объявленной доле изменения, и доля **измеряется**.
+
+    `TASK-18`, пункт 4: загадка 6.5 кадр/с была обойдена — во втором прогоне экран почти не
+    менялся, и 14 КиБ на кадр не имеют отношения к 1.37 МиБ из первого. Условия надо
+    воспроизводить, а не ждать.
+    """
+    from harness.cost import CASES, scan
+
+    rows = scan(width=256, height=192, frames=6, level=6, keyframe=30, fps=30.0)
+    assert len(rows) == len(CASES)
+    still = rows[0]
+    moving = [r for r in rows if r["kind"] == "shift"][-1]
+    noise = [r for r in rows if r["kind"] == "noise"][0]
+
+    assert still["change_measured"] == 0.0, "неподвижный случай оказался подвижным"
+    assert moving["change_measured"] > 0.3, moving["change_measured"]
+    # Заявленная доля и измеренная — разные числа, и печатается измеренная: сдвиг
+    # однотонной области не меняет ни одного пикселя.
+    assert moving["change_measured"] < moving["change_declared"]
+    assert noise["change_measured"] > 0.99
+
+    # Порядок стоимости: неподвижный дешевле движущегося, движущийся дешевле шума.
+    assert still["kib_per_frame"] < moving["kib_per_frame"] < noise["kib_per_frame"]
+    assert noise["meaning"].startswith("шум"), "предел не подписан как предел"
+
+
+def test_cost_command_names_the_worst_case_and_the_budget(capsys) -> None:
+    """`harness cost` называет худший случай и сравнивает его с бюджетом кадра."""
+    from harness.cli import main
+
+    code = main(["cost", "--frames", "4", "--width", "256", "--height", "192"])
+    out = capsys.readouterr().out
+    assert code == 0
+    assert "бюджет кадра" in out and "худший случай" in out
+    assert "шум" in out, "верхняя граница не показана"
+    assert "harness record" in out, "не сказано, с чем сравнивать живую запись"
+
+
+def test_change_share_is_reported_so_two_runs_are_comparable(tmp_path: Path, monkeypatch,
+                                                             capsys) -> None:
+    """Доля изменившихся кадров печатается: без неё две записи несравнимы.
+
+    6.5 кадр/с и 246 кадр/с сняты на разных экранах — меняющемся и неподвижном. Это не
+    разные машины, и пока доля не напечатана, разница выглядит загадкой.
+    """
+    root = tmp_path / "rec"
+    _run_record(["record", str(root), "--turns", "12", "--no-audio"],
+                FakeScreen(still_ratio=4), monkeypatch)
+    out = capsys.readouterr().out
+    assert "изменившихся кадров" in out, out
+    assert "стоимость кадра здесь не показательна" in out, out
+    assert "harness cost" in out

@@ -758,7 +758,8 @@ def cmd_record(args: argparse.Namespace) -> int:
     from .core.journal import Actor, ActorLayer
     from .core.profile import MILESTONE_0
     from .corpus.live import plan_text
-    from .capture.record_loop import STOP_REASONS, run_turns
+    from .capture.record_loop import STOP_REASONS, TURNS_MEAN, run_turns
+    from .cost import verdict
     from .paths import PathError, resolve_input, show
     from .progress import Progress, dir_bytes
     from .session import Recorder, describe_existing
@@ -782,20 +783,24 @@ def cmd_record(args: argparse.Namespace) -> int:
     # чем был: ровно столько кадров, сколько названо, сколько бы это ни заняло.
     fps = float(MILESTONE_0.parameters["capture_fps"])
     seconds: float | None = None
-    if args.frames is not None:
-        frames = args.frames
+    frames: int | None = None
+    if args.turns is not None:
+        frames = args.turns
         if args.seconds is not None:
-            print("указаны и --frames, и --seconds; беру --frames: это счёт кадров, "
+            print("указаны и --turns, и --seconds; беру --turns: это счёт оборотов, "
                   "а не срок", file=sys.stderr)
-        print(f"{frames} кадров при цели {fps:g} кадр/с — это не меньше "
+        print(f"{frames} оборотов при цели {fps:g} кадр/с — это около "
               f"{frames / fps:.0f} с, а на медленной машине больше")
+        print(f"  {TURNS_MEAN}")
     else:
         seconds = args.seconds if args.seconds is not None else 10.0
-        # Предел по кадрам всё равно нужен: он ловит машину, которая **быстрее** цели, и
-        # не даёт записи вырасти сверх заявленного объёма.
-        frames = max(1, int(seconds * fps))
-        print(f"{seconds:g} с — срок. При цели {fps:g} кадр/с это до {frames} кадров; "
-              f"если машина не успевает, кадров будет меньше, и это будет сказано")
+        # **Предел оборотов при срочной записи не применяется вовсе.** TASK-17 сделал срок
+        # в печати, но оставил предел в условии выхода: `--seconds 10` кончилась за секунду
+        # с причиной «набрано заданное число кадров», потому что 29 кадров и 271 отметка
+        # «без изменений» дали 300 оборотов = 10 × 30. Совмещать срок с пределом нельзя: на
+        # записи неподвижности отметок почти сто процентов, и минута кончается за секунды.
+        print(f"{seconds:g} с — срок, и только он: предел оборотов не применяется. "
+              f"При цели {fps:g} кадр/с ожидается около {int(seconds * fps)} оборотов")
 
     # Занятый каталог проверяется **до** открытия захвата: иначе оператор ждёт выбора
     # механизма, первого кадра и звукового входа, чтобы получить отказ о том, что было
@@ -878,6 +883,7 @@ def cmd_record(args: argparse.Namespace) -> int:
     # неподвижности мигающая строка в терминале попала бы в кадр как изменение, а
     # изменение там — измеряемая величина.
     prog = Progress.from_profile(profile, total_turns=frames, path=target,
+                                 seconds=seconds,
                                  kind=getattr(args, "kind", None),
                                  channel=getattr(args, "progress", None))
     hello = prog.open()
@@ -919,15 +925,20 @@ def cmd_record(args: argparse.Namespace) -> int:
     # Недобор частоты — свойство машины, и он печатается числом, а не растягиванием
     # записи. Молчать об этом нельзя: по числу кадров, делённому на заявленную частоту,
     # длительность записи вышла бы 10 с там, где прошло 46.
-    got_fps = turns.turns / turns.elapsed_s if turns.elapsed_s > 0 else 0.0
-    print(f"частота: {got_fps:.1f} кадр/с достигнуто при цели "
+    st = turns.stages()
+    print(f"частота: {st['achieved_fps']:.1f} кадр/с достигнуто при цели "
           f"{profile.parameters['capture_fps']:g}; оборотов {turns.turns}, "
           f"ожидалось к этому сроку {turns.expected_turns}")
+    # Холостая доля: сколько цикл **ждал**, чтобы не обогнать цель. Без неё не отличить
+    # «машина едва успевает» от «машина ждёт три четверти времени», а это разные машины.
+    print(f"из них ждал, чтобы не обогнать цель: {st['idle_share']:.0%} времени "
+          f"({st['idle_ms']:.1f} мс на оборот)")
     if turns.expected_turns and turns.turns < turns.expected_turns * 0.9:
         print(f"машина не успевала за целью: недобор "
               f"{100 * (1 - turns.turns / turns.expected_turns):.0f} %. Запись годна, "
               f"но заявленной частоте не верьте — верьте этой строке")
-    for line in _cost_lines(turns, cost):
+    for line in _cost_lines(turns, cost,
+                            fps=float(profile.parameters["capture_fps"])):
         print(line)
     if interrupted:
         print("прервано вами; запись закрыта и годна к приёму — отметка о прерывании "
@@ -944,14 +955,16 @@ def cmd_record(args: argparse.Namespace) -> int:
     return 0
 
 
-def _cost_lines(turns: Any, cost: dict[str, Any]) -> list[str]:
-    """Разбивка времени по стадиям. `TASK-17`, пункт 2.
+def _cost_lines(turns: Any, cost: dict[str, Any], *, fps: float) -> list[str]:
+    """Разбивка времени по стадиям и приговор по **бюджету кадра**. `TASK-18`, пункт 3.
 
-    Печатается всегда, а не по ключу: живая запись дала 6.5 кадр/с против 32.5 в
-    `selftest` на той же машине, и объяснения не было ни у кого. Числа снимаются там, где
-    идёт запись, — на машине оператора, — потому что в контейнере другой диск и другой
-    процессор.
+    Приговор выносится сравнением с бюджетом `1000 / capture_fps`, а не сравнением стадий
+    между собой. Прежний вывод сравнивал стадии («ждал кадр 3.1, писал 0.8 → узкое место в
+    захвате») и потому находил узкое место **всегда**: у двух чисел одно непременно больше.
+    3.1 мс при бюджете 33 мс — десятикратный запас, а не узкое место.
     """
+    from .cost import verdict as _verdict
+
     st = turns.stages()
     if not st["turns"]:
         return []
@@ -959,6 +972,7 @@ def _cost_lines(turns: Any, cost: dict[str, Any]) -> list[str]:
     rows = [
         f"на что ушло время (мс на оборот из {st['turns']}): "
         f"ждал кадр {st['capture_ms']:.1f}, писал {st['record_ms']:.1f}",
+        "  " + _verdict(st, fps=fps).text(),
     ]
     if frames_cost.get("calls"):
         rows.append(
@@ -969,25 +983,126 @@ def _cost_lines(turns: Any, cost: dict[str, Any]) -> list[str]:
                if frames_cost.get("ratio") else ""))
         rows.append(
             f"  ключевых кадров {frames_cost['keyframes']} из {frames_cost['calls']}")
-        # Куда смотреть, если частота не добрана. Названа **настройка профиля**, а не
-        # «попробуйте что-нибудь»: обе ручки уже в схеме, и обе меняют profile_hash, то
-        # есть выбор принимает исследователь, а не команда за него.
+        # Совет про настройку даётся только тогда, когда бюджет **превышен** и превышен
+        # записью, а не ожиданием кадра. Иначе совет крутить сжатие приходит на запись с
+        # десятикратным запасом — и это не совет, а шум.
+        v = _verdict(st, fps=fps)
         inside = (frames_cost["delta_ms_per_call"] + frames_cost["compress_ms_per_call"]
                   + frames_cost["write_ms_per_call"])
-        # Совет про уровень сжатия даётся только там, где запись **и есть** узкое место.
-        # Иначе два совета противоречат друг другу: «крутите сжатие» и «дело в захвате»,
-        # причём верен второй, и оператор пойдёт крутить не то.
-        writing_dominates = st["record_ms"] >= st["capture_ms"]
-        if writing_dominates and inside > 0 and (
-                frames_cost["compress_ms_per_call"] / inside > 0.5):
+        if (not v.fits and st["record_ms"] >= st["capture_ms"] and inside > 0
+                and frames_cost["compress_ms_per_call"] / inside > 0.5):
             rows.append(
                 f"  сжатие — {frames_cost['compress_ms_per_call'] / inside:.0%} времени "
-                "записи кадра. Если частота не добрана, дешевле всего frame_compress_level "
+                "записи кадра. Дешевле всего frame_compress_level "
                 "(замер: docs/measurements/record_cost.json). Это меняет profile_hash")
-        if st["capture_ms"] > st["record_ms"]:
-            rows.append("  больше всего ждали кадр от экрана, а не писали: узкое место в "
-                        "захвате, и настройки хранения тут не помогут")
+    if st["change_share"] is not None:
+        # Доля изменившихся кадров — то, чего не хватало, чтобы понять чужую запись.
+        # 6.5 кадр/с и 246 кадр/с сняты на разных экранах, и без этой доли они несравнимы.
+        rows.append(
+            f"  изменившихся кадров {st['change_share']:.0%} оборотов: "
+            + ("экран почти не менялся, и стоимость кадра здесь не показательна — "
+               "для стоимости нужен движущийся экран (harness cost)"
+               if st["change_share"] < 0.5 else
+               "экран менялся, стоимость кадра показательна"))
     return rows
+
+
+def _frame_size_for_cost(width: int | None, height: int | None) -> tuple[int, int, str]:
+    """Размер кадра для замера стоимости — и **откуда он взят**.
+
+    Порядок: сказанное ключами, затем настоящий экран этой машины, затем 1920×1080 как
+    заведомо крупный случай. Из профиля не берётся вовсе: там 320×180 — размер
+    синтетического мира, и посчитанная по нему стоимость меньше настоящей в 36 раз, потому
+    что сжатие линейно по числу пикселей. Это ровно та ложь профиля о кадре, из-за которой
+    расчёт места ошибался в тридцать шесть раз (TASK-10, часть 4).
+    """
+    if width and height:
+        return int(width), int(height), "задано ключами"
+    from .capture.select import open_screen
+    from .core.profile import MILESTONE_0
+    from .machine import detect as detect_machine
+
+    try:
+        choice = open_screen(detect_machine(),
+                             gray=MILESTONE_0.structural["frame_format"] == "gray8")
+        src = choice.source
+        if src is not None:
+            try:
+                frame = src.read()
+                for _ in range(5):
+                    if frame is not None and not isinstance(frame, bool) and \
+                            getattr(frame, "image", None) is not None:
+                        break
+                    frame = src.read()
+                if frame is not None and getattr(frame, "image", None) is not None:
+                    h, w = frame.image.shape[:2]
+                    return (int(width or w), int(height or h),
+                            f"снято с вашего экрана механизмом {choice.chosen.name}")
+            finally:
+                src.stop()
+    except Exception:
+        # Дисплея нет или захват не открылся — это не повод не считать: считаем на
+        # заведомо крупном кадре и **говорим**, что размер не с этой машины.
+        pass
+    return int(width or 1920), int(height or 1080), "дисплея нет, взят монитор 1920×1080"
+
+
+def cmd_cost(args: argparse.Namespace) -> int:
+    """Сколько стоит кадр **на этой машине** при разной доле изменения экрана.
+
+    `TASK-18`, пункт 4. Загадка 6.5 кадр/с была обойдена, а не решена: во втором прогоне
+    оператора экран почти не менялся — 271 отметка «без изменений» из 300 оборотов, — и 14
+    КиБ на кадр не имеют отношения к 1.37 МиБ из первого. Ждать, когда условия повторятся
+    сами, незачем: доля изменения задаётся здесь и объявляется в таблице.
+
+    Дисплей не нужен: мерится не захват, а то, что делают с кадром после него. Поэтому
+    команда работает и там, где записывать нечего.
+    """
+    from .cost import scan
+    from .core.profile import MILESTONE_0
+
+    p = MILESTONE_0.parameters
+    fps = args.fps or float(p["capture_fps"])
+    # Размер кадра берётся **у экрана**, а не из профиля. В профиле 320×180 — это размер
+    # синтетического мира, и стоимость кадра, посчитанная по нему, к живой записи отношения
+    # не имеет: сжатие линейно по числу пикселей, а разница здесь в 36 раз.
+    w, h, whence = _frame_size_for_cost(args.width, args.height)
+    level = args.compress_level if args.compress_level is not None else \
+        int(p["frame_compress_level"])
+    keyframe = args.keyframe or int(p["frame_keyframe_interval"])
+
+    # При `--json` на выходе **только** json: заголовок перед ним делает вывод
+    # непарсимым, а ключ `--json` заводится ровно для того, чтобы его парсили.
+    if not args.json:
+        print(f"кадр {w}×{h} ({whence}), уровень сжатия {level}, ключевой каждые "
+              f"{keyframe}, бюджет кадра при {fps:g} кадр/с — {1000 / fps:.1f} мс")
+        print(f"кадров на точку: {args.frames}; экран синтетический (рабочий стол), "
+              "и это сказано потому, что на своём экране цифры будут свои")
+    rows = scan(width=w, height=h, frames=args.frames, level=level, keyframe=keyframe,
+                fps=fps)
+    if args.json:
+        _print_json({"width": w, "height": h, "fps": fps, "compress_level": level,
+                     "keyframe_interval": keyframe, "rows": rows})
+        return 0
+    print()
+    print("  изменилось   разность  сжатие   файл    всего   потолок   на кадр   что это")
+    for r in rows:
+        mark = "" if r["fits_budget"] else "  ← бюджет превышен"
+        print(f"  {r['change_measured']:>8.0%}   {r['delta_ms']:7.1f}  "
+              f"{r['compress_ms']:6.1f}  {r['write_ms']:5.1f}  {r['total_ms']:7.1f}  "
+              f"{r['max_fps']:6.1f}/с  {r['kib_per_frame']:7.1f} КиБ   "
+              f"{r['meaning']}{mark}")
+    worst = max(rows, key=lambda r: r["total_ms"])
+    print()
+    print(f"худший случай — {worst['meaning']}: {worst['total_ms']:.1f} мс на кадр, "
+          f"потолок {worst['max_fps']:.1f} кадр/с, {worst['kib_per_frame']:.1f} КиБ/кадр")
+    if not worst["fits_budget"]:
+        print(f"в бюджет {1000 / fps:.1f} мс он не влезает: на таком экране запись "
+              f"будет медленнее цели, и это свойство машины, а не поломка")
+    else:
+        print(f"в бюджет {1000 / fps:.1f} мс влезает даже он")
+    print("\nСравнить с живой записью: строка «на что ушло время» в конце harness record")
+    return 0
 
 
 def cmd_doctor(args: argparse.Namespace) -> int:
@@ -1255,8 +1370,13 @@ def build_parser() -> argparse.ArgumentParser:
 
     rec = sub.add_parser("record", help="запись с живого экрана")
     rec.add_argument("path", type=_path_arg, nargs="?", default=Path("."))
-    rec.add_argument("--frames", type=int, default=None,
-                     help="сколько кадров; по умолчанию считается из --seconds")
+    # `--turns` — точное имя: предел считает **обороты**, то есть взгляды на экран, а не
+    # изменившиеся кадры. `--frames` оставлен синонимом, потому что он уже написан в
+    # SETUP.md и в чужих заметках, но имя, расходящееся со смыслом, — это то, на чём
+    # спотыкаются дважды (TASK-17, пункт 1).
+    rec.add_argument("--turns", "--frames", dest="turns", type=int, default=None,
+                     help="сколько оборотов записать (взглядов на экран, включая "
+                          "отметки «без изменений»); срок задаётся --seconds")
     # Секунды, а не только кадры: «3 мин» приходилось умножать на частоту в голове,
     # и это ровно то место, где человек ошибается на порядок и получает запись на
     # четыре секунды вместо трёх минут.
@@ -1285,6 +1405,20 @@ def build_parser() -> argparse.ArgumentParser:
     rec.add_argument("--no-audio", action="store_true",
                      help="не писать звук вовсе (записи он не блокирует)")
     rec.set_defaults(fn=cmd_record)
+
+    co = sub.add_parser("cost", help="сколько стоит кадр на этой машине")
+    co.add_argument("--frames", type=int, default=30,
+                    help="кадров на каждую долю изменения")
+    co.add_argument("--width", type=int, default=None)
+    co.add_argument("--height", type=int, default=None)
+    co.add_argument("--fps", type=float, default=None,
+                    help="целевая частота, по ней считается бюджет кадра")
+    co.add_argument("--compress-level", type=int, default=None,
+                    dest="compress_level")
+    co.add_argument("--keyframe", type=int, default=None,
+                    help="интервал ключевых кадров")
+    co.add_argument("--json", action="store_true")
+    co.set_defaults(fn=cmd_cost)
 
     doc = sub.add_parser("doctor", help="что на этой машине мешает записывать")
     doc.add_argument("--path", type=_path_arg, default=None,

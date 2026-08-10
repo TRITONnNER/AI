@@ -86,6 +86,7 @@ MODULE_PATHS: tuple[tuple[str, tuple[Path_, ...]], ...] = (
     ("capture/", (Path_.LIVE,)),
     ("selftest.py", (Path_.LIVE,)),
     ("progress.py", (Path_.LIVE,)),
+    ("cost.py", (Path_.LIVE,)),
     ("doctor.py", (Path_.LIVE,)),
     ("machine.py", (Path_.LIVE,)),
     ("inject/", (Path_.LIVE,)),

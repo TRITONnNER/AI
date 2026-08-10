@@ -38,9 +38,8 @@ sys.path.insert(0, str(ROOT / "src"))
 
 import numpy as np                                              # noqa: E402
 
-from harness.core.blobstore import FrameStore                   # noqa: E402
-from harness.core.profile import from_schema                    # noqa: E402
-from harness.corpus.domains import make_domain                  # noqa: E402
+from harness.cost import (budget_ms, desktop_frames,             # noqa: E402
+                          scan, stage_costs)
 
 #: Кадр записи оператора: монитор целиком, серый. Уменьшать нельзя — стоимость сжатия
 #: линейна по числу пикселей, и на 320×180 все настройки покажутся мгновенными.
@@ -51,22 +50,6 @@ W, H = 1920, 1080
 #: точки в пространстве профиля: результат применим правкой профиля, а не патчем.
 LEVELS: tuple[int, ...] = (1, 3, 6, 9)
 KEYFRAMES: tuple[int, ...] = (30, 300)
-
-
-def desktop_frames(n: int, *, seed: int = 17) -> list[np.ndarray]:
-    """Кадры рабочего стола 1920×1080: обои, окна, сглаженный текст, курсор.
-
-    Синтетика, но **та самая**, на которой TASK-09 получил 65.8 КиБ на кадр против 49.3 на
-    живом экране: расхождение с живым известно и невелико. Однотонный или случайный кадр
-    здесь не годится в обе стороны — первый сжимается в сотни раз, второй не сжимается
-    вовсе, и ни один не похож на экран.
-    """
-    p = from_schema("ЗАМЕР-стоимость", capture_width=W, capture_height=H)
-    d = make_domain("desktop", p, seed=seed)
-    out = []
-    for _ in range(n):
-        out.append(np.ascontiguousarray(d.step(None, with_audio=False).frame))
-    return out
 
 
 def delta_forms(frames: list[np.ndarray]) -> dict[str, float]:
@@ -90,29 +73,13 @@ def delta_forms(frames: list[np.ndarray]) -> dict[str, float]:
 
 
 def one_setting(frames: list[np.ndarray], *, level: int, keyframe: int) -> dict[str, Any]:
-    """Прогнать кадры через настоящее хранилище с этими настройками."""
-    with tempfile.TemporaryDirectory(prefix="record-cost-") as tmp:
-        store = FrameStore(Path(tmp) / "frames", mode="a", shard_bytes=64 << 20,
-                           compress_level=level, keyframe_interval=keyframe)
-        t0 = time.perf_counter()
-        for f in frames:
-            store.append_frame(f)
-        wall = time.perf_counter() - t0
-        store.close()
-        c = store.cost
-        n = max(1, c.calls)
-        return {
-            "compress_level": level, "keyframe_interval": keyframe,
-            "frames": c.calls, "keyframes": c.keyframes,
-            "delta_ms": c.delta_ns / n / 1e6,
-            "compress_ms": c.compress_ns / n / 1e6,
-            "write_ms": c.write_ns / n / 1e6,
-            "total_ms": c.total_ns / n / 1e6,
-            "wall_ms": wall / n * 1e3,
-            "kib_per_frame": c.bytes_out / n / 1024,
-            "ratio": c.bytes_in / c.bytes_out if c.bytes_out else None,
-            "max_fps": (1000.0 / (c.total_ns / n / 1e6)) if c.total_ns else None,
-        }
+    """Прогнать кадры через настоящее хранилище с этими настройками.
+
+    Считает `harness.cost.stage_costs` — тот же код, которым считает команда `harness cost`
+    на машине оператора. Две копии этого счёта разошлись бы молча, и тогда числа замера и
+    числа с его машины перестали бы быть сравнимыми.
+    """
+    return stage_costs(frames, level=level, keyframe=keyframe)
 
 
 def main(argv: list[str]) -> int:
@@ -123,7 +90,7 @@ def main(argv: list[str]) -> int:
     args = ap.parse_args(argv[1:])
 
     print(f"кадры {W}×{H} рабочего стола, по {args.frames} на настройку…")
-    frames = desktop_frames(args.frames)
+    frames = desktop_frames(args.frames, width=W, height=H)
 
     forms = delta_forms(frames)
     print(f"  разность кадра: через int16 {forms['int16_ms']:.1f} мс, "
@@ -138,6 +105,17 @@ def main(argv: list[str]) -> int:
                   f"разность {row['delta_ms']:5.1f} мс, сжатие {row['compress_ms']:6.1f}, "
                   f"файл {row['write_ms']:4.1f} → предел {row['max_fps']:5.1f} кадр/с, "
                   f"{row['kib_per_frame']:6.1f} КиБ/кадр")
+
+    # Второй разрез: стоимость при **разной доле изменения экрана**. TASK-18, пункт 4 —
+    # без него 6.5 кадр/с и 246 кадр/с с одной машины выглядят загадкой, хотя это просто
+    # два разных экрана.
+    print("\nстоимость при разной доле изменения экрана (уровень 6):")
+    change = scan(width=W, height=H, frames=args.frames, level=6, keyframe=30, fps=30.0)
+    for r in change:
+        print(f"  изменилось {r['change_measured']:>5.0%}: "
+              f"разность {r['delta_ms']:5.1f} мс, сжатие {r['compress_ms']:6.1f}, "
+              f"файл {r['write_ms']:5.1f} → предел {r['max_fps']:6.1f} кадр/с, "
+              f"{r['kib_per_frame']:7.1f} КиБ/кадр — {r['meaning']}")
 
     now = [r for r in rows if r["compress_level"] == 6 and r["keyframe_interval"] == 30]
     best = min(rows, key=lambda r: r["total_ms"])
@@ -157,7 +135,9 @@ def main(argv: list[str]) -> int:
             "note": "числа из отчёта оператора, обе записи на одной машине",
         },
         "delta_forms": forms,
-        "frame_period_ms_at_30fps": 1000.0 / 30.0,
+        "change_scan": change,
+        "operator_kib_per_frame": 1.37 * 1024,
+        "frame_period_ms_at_30fps": budget_ms(30.0),
         "rows": rows,
         "current": now[0] if now else None,
         "cheapest": best,

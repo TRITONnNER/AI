@@ -87,7 +87,14 @@ class Sample:
     total_s: float
     written: int
     unchanged: int
-    total_turns: int
+    #: `None` — записью правит срок, а не число оборотов. Тогда доля и остаток считаются
+    #: **по времени**: она обязана мерить то, что запись действительно остановит.
+    #:
+    #: TASK-16 считал долю только по оборотам, и это было верно **тогда**: срок переводился
+    #: в число кадров, и обороты были единственным условием выхода. С TASK-18 срок стал
+    #: сроком, и доля по оборотам показывала бы 100 % на середине записи неподвижности,
+    #: где обороты набираются мгновенно.
+    total_turns: int | None
     disk_bytes: int
     #: Раньше этого срока расход не выдаётся. Окно в миллисекунду делит байты сессии
     #: (`session.json`, ветка журнала) на почти ноль и печатает «3.4 ГиБ/ч» на записи, где
@@ -101,12 +108,13 @@ class Sample:
 
     @property
     def share(self) -> float:
-        """Доля пройденного. По оборотам, а не по времени.
+        """Доля пройденного — по тому, что запись остановит.
 
-        Обороты — то, чем задана длина записи (`--seconds` переводится в кадры на
-        старте), и по ним доля не соврёт на машине, отдающей 28 кадров вместо тридцати.
-        Время при этом печатается тоже: оператор ждёт секунды, а не обороты.
+        Срок задан (`total_turns is None`) — по времени. Задан предел оборотов — по
+        оборотам. Мерить не тем, чем кончится, значит показывать 100 % на середине.
         """
+        if self.total_turns is None:
+            return 0.0 if self.total_s <= 0 else min(1.0, self.elapsed_s / self.total_s)
         return 0.0 if self.total_turns <= 0 else min(1.0, self.turns / self.total_turns)
 
     @property
@@ -120,12 +128,18 @@ class Sample:
 
     @property
     def left_s(self) -> float | None:
-        """Оценка остатка по достигнутому темпу оборотов. `None` — темпа ещё нет.
+        """Сколько ещё ждать. `None` — сказать пока нечем.
 
-        По достигнутому, а не по заявленной частоте: заявленная — цель цикла, и на
-        машине, отдающей 20 кадров вместо тридцати, оценка по ней врала бы в полтора
-        раза именно там, где оператор решает, ждать ли ему дальше.
+        При сроке это вычитание, а не оценка: срок известен точно, и гадать по темпу
+        оборотов там, где ответ известен, значило бы выдавать оценку за факт.
+
+        При пределе оборотов — оценка по **достигнутому** темпу, а не по заявленной
+        частоте: заявленная есть цель цикла, и на машине, отдающей 20 кадров вместо
+        тридцати, оценка по ней врала бы в полтора раза именно там, где оператор решает,
+        ждать ли ему дальше.
         """
+        if self.total_turns is None:
+            return None if self.total_s <= 0 else max(0.0, self.total_s - self.elapsed_s)
         if self.turns <= 0 or self.elapsed_s <= 0 or self.total_turns <= 0:
             return None
         per_turn = self.elapsed_s / self.turns
@@ -175,14 +189,18 @@ class Progress:
     терминала, а на машине оператора остаётся ровно то же поведение.
     """
 
-    def __init__(self, *, total_turns: int, fps: float, path: Path,
+    def __init__(self, *, total_turns: int | None, fps: float, path: Path,
                  channel: str = "line", why: str = "",
                  min_interval_s: float = 1.0,
+                 seconds: float | None = None,
                  out: TextIO | None = None,
                  now: Callable[[], float] = time.monotonic) -> None:
         if channel not in CHANNELS:
             raise ValueError(f"неизвестный канал хода {channel!r}; набор: {CHANNELS}")
-        self.total_turns = int(total_turns)
+        if total_turns is None and seconds is None:
+            raise ValueError("ход не знает, чем кончится запись: ни срока, ни оборотов")
+        self.seconds = None if seconds is None else float(seconds)
+        self.total_turns = None if total_turns is None else int(total_turns)
         self.fps = float(fps)
         self.path = Path(path)
         self.channel = channel
@@ -204,8 +222,9 @@ class Progress:
         self._log: TextIO | None = None
 
     @classmethod
-    def from_profile(cls, profile: Any, *, total_turns: int, path: Path,
+    def from_profile(cls, profile: Any, *, total_turns: int | None, path: Path,
                      kind: str | None = None, channel: str | None = None,
+                     seconds: float | None = None,
                      out: TextIO | None = None,
                      now: Callable[[], float] = time.monotonic) -> Progress:
         """Собрать ход по профилю записи. Обе настройки читаются **здесь**.
@@ -219,7 +238,7 @@ class Progress:
         default = str(channel or p["progress_channel"])
         chosen, why = channel_for(kind, default=default)
         return cls(total_turns=total_turns, fps=float(p["capture_fps"]), path=path,
-                   channel=chosen, why=why,
+                   channel=chosen, why=why, seconds=seconds,
                    min_interval_s=float(p["progress_min_interval_s"]),
                    out=out, now=now)
 
@@ -227,7 +246,14 @@ class Progress:
 
     @property
     def total_s(self) -> float:
-        return 0.0 if self.fps <= 0 else self.total_turns / self.fps
+        """Сколько запись должна длиться. При сроке — срок; при пределе оборотов — оценка
+        по цели частоты, и это единственное место, где заявленная частота уместна: она и
+        есть то, из чего оператор считал, когда задавал предел."""
+        if self.seconds is not None:
+            return self.seconds
+        if self.fps <= 0 or self.total_turns is None:
+            return 0.0
+        return self.total_turns / self.fps
 
     def open(self) -> str:
         """Открыть канал и вернуть строку, которую надо сказать оператору сразу.
