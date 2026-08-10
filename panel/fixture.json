@@ -2960,6 +2960,7 @@
    "capture_area",
    "env_dependence",
    "identity",
+   "live_cycle",
    "live_penalty",
    "params_audit",
    "record_cost",
@@ -5015,7 +5016,7 @@
   "source": "core.settings.SCHEMA"
  },
  "about": {
-  "session": "/tmp/panel-session-wg376rbx/session",
+  "session": "/tmp/panel-session-9x_e8i_t/session",
   "origins": {
    "живая запись оператора": "снято на машине оператора",
    "синтетический прогон": "посчитано по журналу этого прогона",

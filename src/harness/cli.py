@@ -1314,6 +1314,13 @@ def _parallax_help() -> str:
             f"опорным для ожидания не является)")
 
 
+def _scenarios() -> tuple[str, ...]:
+    """Имена сценариев арены — из одного места, а не списком здесь."""
+    from .behaviour.arena import SCENARIOS
+
+    return tuple(SCENARIOS)
+
+
 def _source_kinds() -> tuple[str, ...]:
     """Виды источников — из одного места (`capture.source.KINDS`), а не списком здесь.
 
@@ -1323,6 +1330,62 @@ def _source_kinds() -> tuple[str, ...]:
     from .capture.source import KINDS
 
     return KINDS
+
+
+def cmd_m4_live(args: argparse.Namespace) -> int:
+    """Прогнать М4 по живому корпусу: слои, тождество, опись расхождений. TASK-22.
+
+    Код возврата: 0 — прогон состоялся (расхождения в описи это **не** ошибка команды),
+    1 — прогонять нечего. Расхождения нарочно не влияют на код: первый прогон — опись, и
+    сценарий, падающий от найденного расхождения, заставлял бы чинить вслепую.
+    """
+    from .m4live import run, write_json
+
+    rep = run(args.path, method=args.method,
+              on_step=None if args.json else (lambda s: print(f"… {s}", flush=True)))
+    if args.json:
+        _print_json(rep.as_dict())
+    else:
+        print(rep.render_text())
+    if args.out:
+        written = write_json(rep, Path(args.out))
+        if not args.json:
+            print(f"\nзаписано: {written}")
+    return 1 if rep.refused else 0
+
+
+def cmd_live(args: argparse.Namespace) -> int:
+    """Живой цикл на арене: контуры, субсумпция, респавн, конфабуляция. Начало М5.
+
+    Дисплей не нужен и восприятие не участвует: цикл проверяется на том, что зрения не
+    требует. Возвращает 1, если нарушено хоть одно из условий вехи — мир останавливался
+    или слой-инициатор не заполнен, — потому что это не «плохое число», а сломанный цикл.
+    """
+    from .behaviour.arena import SCENARIOS
+    from .core.profile import from_schema
+    from .livecycle import run
+    from .paths import show
+
+    profile = from_schema(f"М5-{args.scenario}", capture_width=args.width,
+                          capture_height=args.height)
+    scenario = SCENARIOS[args.scenario](profile)
+    print(f"сценарий «{scenario.name}»: {scenario.why}")
+    print(f"частоты контуров ускорены в {args.hz_scale:g} раз относительно оборотов: "
+          "на синтетическом мире оборот дешевле кадра, и без ускорения планировщик за "
+          "прогон запустился бы единицы раз")
+    got = run(args.path, scenario=scenario, profile=profile, seconds=args.seconds,
+              seed=args.seed, hz_scale=args.hz_scale)
+    if args.json:
+        _print_json(got.as_dict())
+    else:
+        print()
+        print(got.render_text())
+        print()
+        print(f"запись: {show(args.path)}")
+    ok = got.world_never_paused and got.layers_complete
+    if not ok and not args.json:
+        print("условия вехи М5 нарушены: см. строки выше", file=sys.stderr)
+    return 0 if ok else 1
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -1585,6 +1648,27 @@ def build_parser() -> argparse.ArgumentParser:
                          f"{_parallax_help()}")
     bl.add_argument("--json", action="store_true")
     bl.set_defaults(fn=cmd_bench_live)
+
+    m4 = sub.add_parser("m4-live", help="прогнать М4 по живому корпусу и описать расхождения")
+    m4.add_argument("path", type=_path_arg, default=Path("corpus/live"), nargs="?")
+    m4.add_argument("--method", choices=("arbiter", "parallax"), default="arbiter")
+    m4.add_argument("--out", type=_path_arg, default=None,
+                    help="куда записать опись машинно (json)")
+    m4.add_argument("--json", action="store_true")
+    m4.set_defaults(fn=cmd_m4_live)
+
+    lv = sub.add_parser("live", help="живой цикл на арене: контуры без паузы мира (М5)")
+    lv.add_argument("path", type=_path_arg)
+    lv.add_argument("--scenario", default="дойти", choices=tuple(_scenarios()),
+                    help="какой короткий сценарий крутить")
+    lv.add_argument("--seconds", type=float, default=10.0)
+    lv.add_argument("--seed", type=int, default=0)
+    lv.add_argument("--width", type=int, default=160)
+    lv.add_argument("--height", type=int, default=90)
+    lv.add_argument("--hz-scale", dest="hz_scale", type=float, default=20.0,
+                    help="во сколько раз ускорить часы контуров относительно оборотов")
+    lv.add_argument("--json", action="store_true")
+    lv.set_defaults(fn=cmd_live)
 
     return ap
 

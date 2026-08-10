@@ -612,8 +612,12 @@ def test_setup_names_every_command_it_promises() -> None:
             known |= set(action.choices)
     assert known, "не удалось получить список подкоманд"
 
-    used = set(re.findall(r"harness ([a-z-]+)", text))
-    unknown = used - known - {"live"}          # «harness-live» — путь, не команда
+    # Цифры в имени команды тоже бывают: `m4-live` называет веху, и разбор без цифр
+    # выхватывал из него «m» — то есть обещал команду, которой нет, из-за своего же шаблона.
+    used = set(re.findall(r"harness ([a-z0-9-]+)", text))
+    # Исключения нет: `live` стал настоящей командой (М5), и держать его в списке
+    # «это не команда» значило бы прикрывать настоящую опечатку, если она появится.
+    unknown = used - known
     assert not unknown, f"SETUP.md обещает команды, которых нет: {sorted(unknown)}"
 
 

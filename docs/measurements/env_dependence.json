@@ -2,38 +2,38 @@
   "runs": [
     {
       "env": "container",
-      "passed": 759,
+      "passed": 771,
       "failed": [],
       "skipped": 0,
-      "total": 759
+      "total": 771
     },
     {
       "env": "x11",
-      "passed": 758,
+      "passed": 770,
       "failed": [],
       "skipped": 1,
-      "total": 759
+      "total": 771
     },
     {
       "env": "wayland",
-      "passed": 758,
+      "passed": 770,
       "failed": [],
       "skipped": 1,
-      "total": 759
+      "total": 771
     },
     {
       "env": "windows",
-      "passed": 758,
+      "passed": 770,
       "failed": [],
       "skipped": 1,
-      "total": 759
+      "total": 771
     },
     {
       "env": "macos",
-      "passed": 758,
+      "passed": 770,
       "failed": [],
       "skipped": 1,
-      "total": 759
+      "total": 771
     }
   ],
   "environments": {
@@ -99,7 +99,7 @@
   "flipped": [],
   "false_green_share": 0.0,
   "coverage": {
-    "tests_run": 759,
+    "tests_run": 771,
     "environments": 5,
     "note": "покрытие — по числу тестов, исполненных в каждом окружении. Замер видит только то, что запускалось: тест, пропущенный во всех окружениях, о своей зависимости не сообщает никак"
   },
