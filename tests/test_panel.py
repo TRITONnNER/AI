@@ -151,8 +151,14 @@ def test_source_is_declared_once(html: str) -> None:
     # Объявление ровно одно, а обращений к нему сколько угодно: правка в одном месте
     # означает единственность **объявления**, а не единственность упоминания.
     assert html.count("const SOURCE") == 1
-    assert len(re.findall(r"fetch\(", html)) == 1, "второй запрос — второй путь к данным"
-    assert "fetch(SOURCE)" in html
+    # Фикстура читается ровно из одного места. С TASK-19 запросов в панели два — фикстура
+    # и обращения к серверу записи, — поэтому проверяется не число `fetch`, а то, что
+    # **данные** идут одним путём: чтение фикстуры одно, остальные запросы — к /api/.
+    fetches = re.findall(r"fetch\((\w+|SOURCE)", html)
+    assert fetches.count("SOURCE") == 1, "фикстура читается больше чем из одного места"
+    assert set(fetches) <= {"SOURCE", "path"}, f"неизвестный путь к данным: {fetches}"
+    assert "function loadFixture" in html, "нет единственного входа чтения фикстуры"
+    assert 'fetch(path' in html and '"/api/' in html, "обращения к серверу не через /api/"
 
 
 def test_fixture_says_how_to_swap(fixture: dict) -> None:
@@ -188,24 +194,54 @@ def test_numbers_are_monospaced_with_tabular_figures(html: str) -> None:
 
 
 def test_exactly_one_saturated_colour(html: str) -> None:
-    """Насыщенный цвет один и означает только тревогу."""
+    """Насыщенный цвет один, и каждое его применение — тревога. Проверяется по ролям.
+
+    Раньше здесь стоял предел на число применений, и с восьмым экраном он был бы просто
+    поднят — то есть проверка превратилась бы в ритуал. Считается не число, а **роли**:
+    каждое место, где применён тревожный цвет, обязано быть в объявленном списке, и список
+    читается как утверждение «красным помечается только это».
+    """
     assert "--alarm:#c0392b" in html
     body = html.split("</style>")[0]
-    # Тревожный цвет применяется к индикатору, к рамке величины за границей и к СТОПу —
-    # и больше нигде: иначе «светится всё» и не выделено ничего.
-    assert body.count("var(--alarm)") <= 6
+    roles = {
+        "#alarm.on .dot": "индикатор тревоги в полосе состояния",
+        "#stop": "кнопка СТОП",
+        ".value.alarm": "величина за границей",
+        ".rec-card .state.bad": "запись не годна для того, ради чего делалась",
+        ".rec-btn.stop": "кнопка «Прервать»",
+        ".warnbox": "отказ или негодная запись",
+        "#warn": "предупреждение о форке журнала в конфигураторе",
+    }
+    used = []
+    for block in body.split("}"):
+        if "var(--alarm)" not in block:
+            continue
+        sel = block.split("{")[0].strip().splitlines()[-1].strip()
+        used.append(sel)
+    unknown = [s for s in used if not any(s.startswith(k) or k in s for k in roles)]
+    assert not unknown, f"тревожный цвет применён без объявленной роли: {unknown}"
+    # Сколько правил на роль — не важно (рамка и текст величины за границей это одна
+    # роль в двух правилах). Важно, что каждая роль объявлена, и что ролей не больше
+    # объявленного: список читается как «красным помечается только это».
+    covered = {k for k in roles for s in used if s.startswith(k) or k in s}
+    assert covered == set(roles), f"объявлены роли без применения: {set(roles) - covered}"
 
 
 # --- семь экранов, у каждого свой вопрос ----------------------------------------
 
 
-def test_seven_screens_each_with_a_question(html: str) -> None:
-    """Один экран — один вопрос, и вопрос записан рядом с экраном."""
+def test_eight_screens_each_with_a_question(html: str) -> None:
+    """Один экран — один вопрос, и вопрос записан рядом с экраном.
+
+    Восемь с TASK-19: восьмой — «Запись». Число здесь проверяется потому, что экран без
+    вопроса — это экран, про который никто не решил, зачем он.
+    """
     screens = re.findall(r'\["(s-[a-z]+)",\s*"([^"]+)",\s*"([^"]+)"\]', html)
-    assert len(screens) == 7
+    assert len(screens) == 8
     ids = [s[0] for s in screens]
     assert ids[0] == "s-live", "первый экран — «Живое», он же по умолчанию"
-    assert len(set(ids)) == 7
+    assert ids[-1] == "s-rec", "запись — последний экран: смотрят в него реже всего"
+    assert len(set(ids)) == 8
     for _id, name, question in screens:
         assert question and not question.endswith("."), f"{name}: вопрос не записан"
     assert 'class="screen sel" id="s-live"' in html, "по умолчанию открыт первый"

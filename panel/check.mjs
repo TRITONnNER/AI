@@ -16,7 +16,7 @@
 const { chromium } = await import(process.env.PLAYWRIGHT || "playwright");
 
 const URL = process.env.PANEL_URL || "http://localhost:8000/index.html";
-const KEYS = ["1", "2", "3", "4", "5", "6", "7"];
+const KEYS = ["1", "2", "3", "4", "5", "6", "7", "8"];
 
 const browser = await chromium.launch({
   executablePath: process.env.CHROMIUM || "/opt/pw-browsers/chromium",
@@ -90,6 +90,29 @@ await page.waitForTimeout(120);
 const warn = (await page.textContent("#warn")) || "";
 say(warn.includes("форк") || warn.includes("журнал форкается"),
     `касание блока Б предупреждает: «${warn.slice(0, 60)}…»`);
+
+/* 7. Экран «Запись»: карточки из плана и кнопка у каждой. TASK-19.
+   Проверяется в браузере потому, что карточки строятся из ответа сервера: по разметке их
+   не видно вовсе, а по чтению кода не видно, отрисовались ли они. */
+await page.keyboard.press("8");
+await page.waitForSelector("#s-rec.sel");
+await page.waitForTimeout(300);
+const cards = await page.$$eval(".rec-card", (e) => e.length);
+const buttons = await page.$$eval(".rec-btn", (e) => e.length);
+const served = !!(await page.$('meta[name="harness-token"]'));
+if (served) {
+  say(cards === 5 && buttons === cards,
+      `карточек записи ${cards}, кнопок ${buttons} — по одной на карточку`);
+  const head = (await page.textContent("#r-cards .why")) || "";
+  say(/закрыто \d+ из \d+/.test(head), `сколько закрыто, сказано: «${head.slice(0, 40)}…»`);
+} else {
+  /* Панель подана не сервером записи: правильный ответ — сказать, что записывать нечем,
+     а не рисовать кнопку, которая ничего не делает. */
+  const text = (await page.textContent("#r-cards")) || "";
+  say(text.includes("записывать отсюда нечем") && text.includes("harness panel"),
+      "панель без сервера прямо говорит, что записывать нечем, и называет команду");
+  say(buttons === 0, `кнопок записи без сервера: ${buttons} (должно быть 0)`);
+}
 
 say(errors.length === 0, `ошибок в консоли: ${errors.length}` +
     (errors.length ? " — " + errors.join("; ") : ""));

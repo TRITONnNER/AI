@@ -4988,7 +4988,7 @@
   "source": "core.settings.SCHEMA"
  },
  "about": {
-  "session": "/tmp/panel-session-j09gzs2p/session",
+  "session": "/tmp/panel-session-rtyp50um/session",
   "origins": {
    "живая запись оператора": "снято на машине оператора",
    "синтетический прогон": "посчитано по журналу этого прогона",

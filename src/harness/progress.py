@@ -220,6 +220,11 @@ class Progress:
         # невозможным по той же причине, из-за которой оператор уже напоролся.
         self.log_path = self.path.parent / f"{self.path.name}-progress.log"
         self._log: TextIO | None = None
+        #: Кому ещё показать наблюдение. Панель подписывается сюда и получает **те же**
+        #: числа, что печатаются в терминал, с той же частотой. Второй счётчик для панели
+        #: разошёлся бы с первым, и «в панели одно, в консоли другое» стало бы вопросом без
+        #: ответа.
+        self.on_sample: Callable[[Any], None] | None = None
 
     @classmethod
     def from_profile(cls, profile: Any, *, total_turns: int | None, path: Path,
@@ -357,6 +362,8 @@ class Progress:
         line = render_line(s)
         self.updates += 1
         self._write(line)
+        if self.on_sample is not None:
+            self.on_sample(s)
         return line
 
     def finish(self, *, written: int, unchanged: int,

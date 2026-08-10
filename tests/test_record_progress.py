@@ -17,6 +17,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Any
 
 import numpy as np
 import pytest
@@ -46,7 +47,11 @@ class FakeScreen:
     def __init__(self, *, w: int = 64, h: int = 48, still_every: int | None = 0,
                  still_ratio: int = 0,
                  interrupt_at: int | None = None, ends_at: int | None = None,
-                 delay_s: float = 0.0) -> None:
+                 delay_s: float = 0.0, clock: Any = None, tick_s: float = 0.0) -> None:
+        # Поддельные часы можно двигать **чтением кадра**: время в записи идёт потому, что
+        # идут кадры, и проверка отметки «прервано на N из M» иначе меряет ноль.
+        self.clock = clock
+        self.tick_s = float(tick_s)
         self.w, self.h = w, h
         self.still_every = still_every or 0
         # `still_ratio = 4` — четыре оборота из пяти без изменений, как на записи
@@ -67,6 +72,8 @@ class FakeScreen:
 
     def read(self):
         self.reads += 1
+        if self.clock is not None and self.tick_s:
+            self.clock.t += self.tick_s
         if self.delay_s:
             import time
 
@@ -276,11 +283,18 @@ def test_interrupt_leaves_a_readable_session_with_a_mark(tmp_path: Path) -> None
     вовсе — прерванная запись была неотличима от полной.
     """
     root = tmp_path / "s"
-    screen = FakeScreen(interrupt_at=5)
     clock = FakeClock()
+    # Секунда на кадр: к пятому обращению к экрану пройдёт четыре секунды.
+    screen = FakeScreen(interrupt_at=5, clock=clock, tick_s=1.0)
     prog = Progress(total_turns=300, fps=30.0, path=root, channel="none", now=clock)
-    clock.t = 4.0
-    turns = _record(root, screen=screen, frames=300, prog=prog)
+    # Часы отдаются **и** циклу: прошедшее время в отметке берётся у цикла, а не у хода
+    # записи. Так честнее — считает тот, кто крутится, — но и подменять надо там же.
+    p = _profile(screen.w, screen.h)
+    with Recorder(root, profile=p, source=screen.name, synthetic=False,
+                  lineage_id="lin-test") as rec:
+        turns = run_turns(rec, source=screen, frames=300, first=screen.first(),
+                          actor=Actor.HUMAN, actor_layer=ActorLayer.HUMAN,
+                          progress=prog, now=clock, pace=False)
 
     # Пять, а не четыре: первый оборот берёт кадр, снятый до открытия записи, поэтому
     # пятое обращение к экрану приходится на шестой оборот.
@@ -290,7 +304,9 @@ def test_interrupt_leaves_a_readable_session_with_a_mark(tmp_path: Path) -> None
         assert mark is not None, "отметки о прерывании нет"
         assert mark["frames_written"] == 5
         assert mark["total_s"] == pytest.approx(10.0)
-        assert "прервано на 4 с из 10 с" in mark["note"]
+        # Пять секунд, а не четыре: пятое обращение к экрану сдвинуло часы и **потом**
+        # прервалось. Отметка говорит время цикла, а не время последнего записанного кадра.
+        assert "прервано на 5 с из 10 с" in mark["note"]
         assert s.verify()["ok"], "прерванная запись обязана быть целой"
         assert len(s) == 5, "кадры до прерывания читаются"
 

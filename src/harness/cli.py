@@ -9,6 +9,7 @@
     harness replay PATH [--at N]         пройти запись покадрово
     harness selfworld PATH               разделить экранный и мировой слои (0.6)
     harness record PATH                  запись с живого экрана
+    harness panel                        панель в браузере: запись, ход, итог
 
 Команда `record` на машине без дисплея честно отказывается, а не пишет чёрные
 кадры: см. `harness backends`.
@@ -758,11 +759,12 @@ def cmd_record(args: argparse.Namespace) -> int:
     from .core.journal import Actor, ActorLayer
     from .core.profile import MILESTONE_0
     from .corpus.live import plan_text
-    from .capture.record_loop import STOP_REASONS, TURNS_MEAN, run_turns
+    from .capture.record_loop import STOP_REASONS, TURNS_MEAN
     from .cost import verdict
     from .paths import PathError, resolve_input, show
-    from .progress import Progress, dir_bytes
-    from .session import Recorder, describe_existing
+    from .progress import Progress
+    from .recording import Plan, RecordRefused, record
+    from .session import describe_existing
 
     if args.plan:
         print(plan_text(getattr(args, "plan_set", "minimal")))
@@ -810,117 +812,48 @@ def cmd_record(args: argparse.Namespace) -> int:
         print(describe_existing(target), file=sys.stderr)
         return 2
 
-    human = args.actor == "human"
-    actor = Actor.HUMAN if human else Actor.NONE
-    layer = ActorLayer.HUMAN if human else ActorLayer.NONE
+    # Дальше — общий путь записи (`recording.record`), тот же, которым пишет панель.
+    # Второй цикл записи в сервере разошёлся бы с этим через месяц, как трижды разошлось
+    # знание о Wayland (TASK-15). Печать остаётся здесь: модуль записи ничего не печатает.
+    plan = Plan(path=target, kind=getattr(args, "kind", None), seconds=seconds,
+                turns=frames, actor_human=args.actor == "human",
+                with_audio=not args.no_audio, audio_device=args.audio_device,
+                note=args.note, progress_channel=getattr(args, "progress", None))
 
-    # Механизм выбирается тем же кодом, что у доктора: иначе доктор проверит один
-    # путь, а запись пойдёт другим, и первое живое число окажется не о том.
-    from .capture.select import open_screen
-    from .machine import detect as detect_machine
-
-    machine_now = detect_machine()
-    choice = open_screen(machine_now,
-                         gray=MILESTONE_0.structural["frame_format"] == "gray8")
-    if choice.source is None:
-        print(f"захват недоступен: {choice.why_text()}", file=sys.stderr)
-        print("\nЧто именно чинить и какой командой: harness doctor",
-              file=sys.stderr)
-        return 2
-    cap = choice.source
-    print(f"механизм: {choice.why_text()}")
-    if choice.caveat:
-        print(f"ВНИМАНИЕ: {choice.caveat}")
-
-    # Линия записи оператора выводится из его машины, а не берётся у контейнера:
-    # экран, оператор и часы здесь другие, и это отдельная линия по построению.
-    from .core.lineage import lineage_id
-    from .machine import detect
-
-    machine = detect()
-    lid = lineage_id(MILESTONE_0, seed=None,
-                     note=f"живая запись: {machine.os_name}/{machine.session}")
-
-    # Звук: пишется, если петлевой вход открылся, и **не блокирует**, если нет.
-    # Молча его пропускать нельзя — доктор велел оператору настроить стерео, и
-    # запись без звука после этого выглядела бы как выполненная настройка.
-    audio_src = None
-    audio_note = "без звука"
-    if not args.no_audio:
-        from .capture.screen import LoopbackAudio
-
-        try:
-            audio_src = LoopbackAudio(
-                rate=int(MILESTONE_0.parameters["audio_rate"]),
-                channels=int(MILESTONE_0.structural["audio_channels"]),
-                block_ms=float(MILESTONE_0.parameters["audio_block_ms"]),
-                device=args.audio_device)
-            audio_src.start()
-            audio_note = "со звуком"
-        except Exception as e:                 # sounddevice бросает своё
-            audio_src = None
-            audio_note = f"без звука ({e})"
-            print(f"звук не пишется: {e}", file=sys.stderr)
+    def say_ready(o: Any) -> None:
+        print(f"механизм: {o.mechanism}")
+        if o.mechanism_caveat:
+            print(f"ВНИМАНИЕ: {o.mechanism_caveat}")
+        print(f"кадр {o.frame[0]}×{o.frame[1]}: профиль записи построен по нему, "
+              f"а не по значению из схемы")
+        if o.audio_note.startswith("без звука ("):
+            print(f"звук не пишется: {o.audio_note[11:-1]}", file=sys.stderr)
             print("это не мешает записи; настроить вход поможет harness doctor",
                   file=sys.stderr)
 
-    # Первый кадр берётся до открытия записи: по нему строится профиль. Заявить в
-    # записи 320×180 над кадрами 1080p значит записать ложь о себе, и посчитанное по
-    # такому профилю ошибётся в тридцать шесть раз.
-    first = cap.read()
-    while first is UNCHANGED:
-        first = cap.read()
-    if first is None:
-        print("захват не отдал ни одного кадра", file=sys.stderr)
-        cap.stop()
-        return 2
-    profile = MILESTONE_0.for_frame(first.image)
-    if profile is not MILESTONE_0:
-        print(f"кадр {first.image.shape[1]}×{first.image.shape[0]}: профиль записи "
-              f"построен по нему, а не по значению из схемы")
-
-    # Ход записи. Канал выбирается по виду записи и объявляется вслух: на записи
-    # неподвижности мигающая строка в терминале попала бы в кадр как изменение, а
-    # изменение там — измеряемая величина.
-    prog = Progress.from_profile(profile, total_turns=frames, path=target,
-                                 seconds=seconds,
-                                 kind=getattr(args, "kind", None),
-                                 channel=getattr(args, "progress", None))
+    prog = Progress.from_profile(
+        MILESTONE_0, total_turns=frames, path=target, seconds=seconds,
+        kind=getattr(args, "kind", None), channel=getattr(args, "progress", None))
     hello = prog.open()
     if hello:
         print(hello)
-
-    cost: dict[str, Any] = {}
     try:
-        with Recorder(target, profile=profile, source=cap.name,
-                      synthetic=False, note=args.note, lineage_id=lid) as rec:
-            # Сам цикл — в `capture.record_loop`: он обязан проверяться офлайн, без
-            # дисплея, и прерывание перехватывает внутри открытой сессии. Снаружи уже
-            # поздно: `with` закрывает хранилища, и записать отметку некуда — ровно
-            # поэтому её и не было.
-            turns = run_turns(rec, source=cap, frames=frames, first=first,
-                              actor=actor, actor_layer=layer, audio=audio_src,
-                              progress=prog, seconds=seconds,
-                              expected_fps=float(profile.parameters["capture_fps"]),
-                              disk_bytes=lambda: dir_bytes(target))
-            cost = rec.cost()
-            # Разбивка идёт в журнал: «почему на этой машине 6.5 кадр/с» — вопрос о
-            # записи, и ответ обязан лежать в ней, а не в консоли, которую закрыли.
-            rec.record_intervention("cost", {**cost, "stages": turns.stages()})
-    finally:
-        cap.stop()
-        if audio_src is not None:
-            audio_src.stop()
+        out = record(plan, progress=prog, on_ready=say_ready)
+    except RecordRefused as e:
+        print(e.why, file=sys.stderr)
+        if e.hint:
+            print(e.hint, file=sys.stderr)
+        return 2
+    turns, cost = out.turns, out.cost
     written, unchanged = turns.written, turns.unchanged
     audio_blocks, interrupted = turns.audio_blocks, turns.interrupted
+    audio_note, layer, lid = out.audio_note, ("human" if plan.actor_human else "none"), \
+        out.lineage_id
+    profile = MILESTONE_0
 
-    # Итог — те же числа, что показывались в ходе, плюс путь. Печатается **один раз** и
-    # печатается здесь: до TASK-17 строку писал и `finish`, и этот `print`, и оператор
-    # видел её дважды. Два числа кадров, а не одно: «кадров» и «без изменений». Одно
-    # означало бы либо потерянную статику, либо мнимые потери.
-    print(prog.finish(written=written, unchanged=unchanged,
-                      disk_bytes=lambda: dir_bytes(target),
-                      interrupted=interrupted, audio_note=audio_note))
+    # Итог печатается **один раз** и печатается здесь: до TASK-17 строку писал и `finish`,
+    # и этот `print`, и оператор видел её дважды.
+    print(out.final_line)
     print(f"почему кончилось: {STOP_REASONS[turns.stop_reason]}")
     # Недобор частоты — свойство машины, и он печатается числом, а не растягиванием
     # записи. Молчать об этом нельзя: по числу кадров, делённому на заявленную частоту,
@@ -1045,6 +978,19 @@ def _frame_size_for_cost(width: int | None, height: int | None) -> tuple[int, in
         # заведомо крупном кадре и **говорим**, что размер не с этой машины.
         pass
     return int(width or 1920), int(height or 1080), "дисплея нет, взят монитор 1920×1080"
+
+
+def cmd_panel(args: argparse.Namespace) -> int:
+    """Поднять панель и открыть браузер. Одна команда на всё. `TASK-19`.
+
+    Дальше оператору не нужен терминал: запись запускается с экрана 8, ход виден там же,
+    «Прервать» закрывает сессию тем же путём, что `Ctrl+C`, а фикстура после записи
+    пересобирается сама.
+    """
+    from .panelserver import serve
+
+    return serve(port=args.port, open_browser=not args.no_browser,
+                 live_root=args.live_root, verbose=args.verbose)
 
 
 def cmd_cost(args: argparse.Namespace) -> int:
@@ -1405,6 +1351,17 @@ def build_parser() -> argparse.ArgumentParser:
     rec.add_argument("--no-audio", action="store_true",
                      help="не писать звук вовсе (записи он не блокирует)")
     rec.set_defaults(fn=cmd_record)
+
+    pa = sub.add_parser("panel", help="открыть панель в браузере и записывать из неё")
+    pa.add_argument("--port", type=int, default=8765,
+                    help="порт на 127.0.0.1; наружу ничего не открывается")
+    pa.add_argument("--no-browser", action="store_true",
+                    help="не открывать браузер самому")
+    pa.add_argument("--live-root", type=_path_arg, default=None,
+                    help="куда класть записи; по умолчанию ~/harness-live")
+    pa.add_argument("--verbose", action="store_true",
+                    help="печатать обращения браузера")
+    pa.set_defaults(fn=cmd_panel)
 
     co = sub.add_parser("cost", help="сколько стоит кадр на этой машине")
     co.add_argument("--frames", type=int, default=30,

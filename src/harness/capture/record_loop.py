@@ -37,7 +37,14 @@ STOP_REASONS: dict[str, str] = {
     "turns": "набрано заданное число оборотов",
     "interrupted": "прервано оператором",
     "source_ended": "источник кадров кончился",
+    "stopped": "остановлено из панели",
 }
+
+#: Исходы, при которых запись остановил **человек**. Их два, потому что нажать можно в двух
+#: местах — `Ctrl+C` в терминале и «Прервать» в панели, — но означают они одно, и отметка в
+#: журнале у них одна: `record_interrupted`. Разделять их значило бы заводить два класса
+#: одного события и потом сравнивать записи, сделанные «по-разному».
+BY_HUMAN: tuple[str, ...] = ("interrupted", "stopped")
 
 #: **Что считает предел записи.** Оборот — один взгляд на экран, а не один изменившийся
 #: кадр. Отметка «без изменений» — тоже оборот: она занимает то же время и даёт ту же
@@ -126,6 +133,7 @@ def run_turns(rec: Any, *, source: Any, frames: int | None, first: Any,
               sleep: Callable[[float], None] | None = None,
               expected_fps: float = 0.0,
               pace: bool = True,
+              should_stop: Callable[[], bool] | None = None,
               disk_bytes: Callable[[], int] | None = None) -> Turns:
     """Записать `seconds` секунд **либо** `frames` оборотов. Ровно одно из двух.
 
@@ -164,6 +172,14 @@ def run_turns(rec: Any, *, source: Any, frames: int | None, first: Any,
         while frames is None or t.turns < frames:
             if deadline is not None and clock() >= deadline:
                 t.stop_reason = "deadline"
+                break
+            if should_stop is not None and should_stop():
+                # Остановка снаружи — то же, что `Ctrl+C`: решение человека, а не поломка.
+                # Поэтому и отметка та же, и путь тот же; кнопка «Прервать» в панели не
+                # заводит второго класса события.
+                t.stop_reason = "stopped"
+                t.interrupted = True
+                _mark_interrupted(rec, t, progress, clock, started)
                 break
             if period:
                 # Ждём до начала следующего оборота по расписанию от старта, а не «период
@@ -232,14 +248,7 @@ def run_turns(rec: Any, *, source: Any, frames: int | None, first: Any,
     except KeyboardInterrupt:
         t.interrupted = True
         t.stop_reason = "interrupted"
-        elapsed = 0.0
-        total = 0.0
-        if progress is not None:
-            elapsed = progress.sample(written=t.written, unchanged=t.unchanged,
-                                      disk_bytes=0).elapsed_s
-            total = progress.total_s
-        rec.record_interrupted(elapsed_s=elapsed, total_s=total,
-                               written=t.written, unchanged=t.unchanged)
+        _mark_interrupted(rec, t, progress, clock, started)
     t.elapsed_s = clock() - started
     # Сколько оборотов машина обязана была успеть к этому моменту по заявленной частоте.
     # Число нужно именно рядом с достигнутым: `capture_fps` — цель цикла, и расхождение
@@ -252,6 +261,22 @@ def run_turns(rec: Any, *, source: Any, frames: int | None, first: Any,
         # ответом может быть именно мигавшая в терминале строка.
         rec.record_intervention("progress", progress.stats())
     return t
+
+
+def _mark_interrupted(rec: Any, t: Turns, progress: Any,
+                      clock: Callable[[], float], started: float) -> None:
+    """Отметка «прервано на N из M». Одна на оба способа остановки.
+
+    Пишется **внутри** открытой сессии: снаружи `with` уже закрыл хранилища, и записать
+    некуда — ровно поэтому отметки и не было до TASK-16.
+    """
+    elapsed = clock() - started
+    total = 0.0
+    if progress is not None:
+        total = progress.total_s
+    reason = "Ctrl+C" if t.stop_reason == "interrupted" else "кнопка «Прервать» в панели"
+    rec.record_interrupted(elapsed_s=elapsed, total_s=total,
+                           written=t.written, unchanged=t.unchanged, reason=reason)
 
 
 def dir_bytes(root: Path) -> int:

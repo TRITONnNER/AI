@@ -45,6 +45,38 @@ body{background:var(--bg);color:var(--ink);font:14px/1.4 var(--sans);
       letter-spacing:.14em;padding:12px 22px;cursor:pointer}
 #stop:active{background:#8f2b20}
 
+/* ---------- экран «Запись» ---------- */
+/* Карточка записи. Кнопка одна и большая: оператор жмёт её, отвернувшись от экрана,
+   и искать её глазами не должен. */
+.rec-card{border:1px solid var(--line);background:var(--panel);padding:10px 12px;
+          margin-bottom:8px;display:flex;gap:12px;align-items:flex-start}
+.rec-card .body{flex:1 1 auto;min-width:0}
+.rec-card h3{margin:0 0 3px;font:600 14px/1.2 var(--sans)}
+.rec-card h3 .dur{color:var(--dim);font-weight:400;margin-left:8px;font-size:12px}
+.rec-card .how{color:var(--ink);margin:4px 0 0}
+.rec-card .why{color:var(--dim);font-size:12px;margin:3px 0 0}
+.rec-card .path{font-family:var(--mono);font-size:11px;color:var(--dim);margin-top:4px}
+.rec-card .state{font-size:12px;margin-top:5px}
+.rec-card .state.ok{color:var(--ok)}
+.rec-card .state.bad{color:var(--alarm)}
+.rec-card .state.none{color:var(--dim)}
+.rec-btn{flex:0 0 auto;background:var(--agent);color:#10161a;border:1px solid #55707f;
+         font:600 13px/1 var(--sans);letter-spacing:.06em;padding:11px 16px;cursor:pointer}
+.rec-btn:disabled{background:var(--line);color:var(--dim);border-color:var(--line);
+                  cursor:default}
+.rec-btn.stop{background:var(--alarm);color:#fff;border-color:#8f2b20}
+#r-live{border:1px solid var(--line);background:var(--panel);padding:10px 12px}
+#r-live .big{font-family:var(--mono);font-variant-numeric:tabular-nums;font-size:22px}
+#r-nums{display:flex;flex-wrap:wrap;gap:0 18px;margin-top:6px}
+#r-nums div{font-family:var(--mono);font-variant-numeric:tabular-nums;font-size:13px}
+#r-nums span{color:var(--dim);font-family:var(--sans);font-size:11px;margin-right:4px}
+#r-bar{height:6px;background:var(--line);margin-top:8px}
+#r-bar i{display:block;height:100%;background:var(--agent)}
+#r-verdict{margin-top:8px;font-size:12px;white-space:pre-wrap}
+.warnbox{border-left:3px solid var(--alarm);padding:6px 10px;margin-top:8px;
+         background:#2a1f1e}
+.okbox{border-left:3px solid var(--ok);padding:6px 10px;margin-top:8px;background:#1f251f}
+
 /* ---------- корешки экранов ---------- */
 #tabs{display:flex;gap:0;border-bottom:1px solid var(--line);flex:0 0 auto;
       background:var(--bg)}
@@ -234,6 +266,18 @@ td.n,th.n{font-family:var(--mono);font-variant-numeric:tabular-nums;text-align:r
     </div>
   </section>
 
+  <section class="screen" id="s-rec">
+    <div class="col" style="flex:1 1 auto">
+      <div class="box scroll" style="flex:1 1 auto"><h2>что записать</h2>
+        <p class="q">вопрос экрана: что из пяти записей ещё не сделано</p>
+        <div id="r-cards"></div></div>
+      <div class="grid2" style="flex:0 0 46%">
+        <div class="box scroll"><h2>ход записи</h2><div id="r-live"></div></div>
+        <div class="box scroll"><h2>итог последней записи</h2><div id="r-result"></div></div>
+      </div>
+    </div>
+  </section>
+
   <!-- конфигуратор: поверх любого экрана, по P -->
   <div id="cfg">
     <h2>конфигуратор профиля <span class="dimtext">— P закрывает</span></h2>
@@ -262,6 +306,7 @@ const SCREENS = [
   ["s-journal", "Журнал",       "почему он это сделал"],
   ["s-body",    "Тело",         "чем он умеет действовать"],
   ["s-exp",     "Опыты",        "помогла ли правка"],
+  ["s-rec",     "Запись",       "что ещё не записано"],
 ];
 
 const $ = (id) => document.getElementById(id);
@@ -625,6 +670,222 @@ function drawConfig(d) {
   $("cfg-b").appendChild(bTable);
 }
 
+/* ---------- экран 8: запись ---------- */
+/* Панель может быть открыта двумя способами, и это разные возможности:
+   - подана сервером `harness panel` — тогда можно записывать;
+   - открыта файлом или чужим http-сервером — тогда записывать нечем, и панель говорит
+     это прямо, а не показывает кнопку, которая ничего не делает. */
+const TOKEN = (document.querySelector('meta[name="harness-token"]') || {}).content || "";
+let SERVER = null, POLL = null, LAST_FIXTURE = "", FIXTURE_TRIES = 0;
+
+const hms = (s) => {
+  if (s === null || s === undefined) return "—";
+  const n = Math.max(0, Math.round(s));
+  return `${Math.floor(n / 60)}:${String(n % 60).padStart(2, "0")}`;
+};
+
+async function api(path, body) {
+  const opt = body === undefined ? {} : {
+    method: "POST", headers: {"Content-Type": "application/json",
+                              "X-Harness-Token": TOKEN},
+    body: JSON.stringify(body),
+  };
+  const r = await fetch(path, opt);
+  const d = await r.json().catch(() => ({}));
+  return {ok: r.ok, code: r.status, data: d};
+}
+
+function noServer(msg) {
+  $("r-cards").innerHTML =
+    `<div class="warnbox"><b>записывать отсюда нечем.</b> ${msg}<br><br>` +
+    "Панель — статический HTML: запускать программы она не может. Сервер, который это " +
+    "умеет, поднимается одной командой:<br><br><code>harness panel</code><br><br>" +
+    "Он слушает только 127.0.0.1 и наружу ничего не открывает.</div>";
+  $("r-live").innerHTML = '<div class="why">хода нет: запись не отсюда</div>';
+  $("r-result").innerHTML = '<div class="why">итога нет: запись не отсюда</div>';
+}
+
+function drawCards(cards, busy) {
+  $("r-cards").innerHTML = "";
+  const doneCount = cards.filter((c) => c.done.recorded && (c.done.usable || {}).ok).length;
+  const head = document.createElement("div");
+  head.className = "why";
+  head.style.marginBottom = "8px";
+  head.innerHTML = `закрыто ${doneCount} из ${cards.length}. ` +
+    "Кнопка записывает сама: путь подставляется по виду записи, набирать ничего не надо.";
+  $("r-cards").appendChild(head);
+
+  cards.forEach((c) => {
+    const el = document.createElement("div");
+    el.className = "rec-card";
+    const d = c.done;
+    let state = '<div class="state none">ещё не записано</div>';
+    if (d.broken) {
+      state = `<div class="state bad">запись есть, но не открывается: ${d.broken}</div>`;
+    } else if (d.recorded) {
+      const u = d.usable || {};
+      state = `<div class="state ${u.ok ? "ok" : "bad"}">` +
+        `${u.ok ? "годна" : "НЕ ГОДНА"}: ${u.why}` +
+        `<br>оборотов ${d.turns}, из них без изменений ${d.unchanged}` +
+        (d.interrupted ? `<br>${d.interrupted_note}` : "") +
+        (d.verify_ok ? "" : "<br>verify не проходит: запись повреждена") +
+        "</div>";
+    }
+    el.innerHTML =
+      `<div class="body"><h3>${c.title}<span class="dur">${c.duration}</span></h3>` +
+      `<div class="how">как: ${c.how}</div>` +
+      `<div class="why">зачем: ${c.why}</div>` +
+      `<div class="path">${d.recorded ? c.free_path : c.path}` +
+      (c.progress_to_file ? " · ход пишется в файл, не на экран: здесь мерится "
+                            + "отсутствие изменений" : "") + "</div>" +
+      state + "</div>";
+    const b = document.createElement("button");
+    b.className = "rec-btn";
+    b.textContent = d.recorded ? "Записать ещё" : "Записать";
+    b.disabled = !!busy;
+    b.onclick = async () => {
+      b.disabled = true;
+      const got = await api("/api/record", {kind: c.kind});
+      if (!got.ok) {
+        $("r-live").innerHTML =
+          `<div class="warnbox"><b>${got.data.why || "отказ"}</b><br>` +
+          `${got.data.hint || ""}</div>`;
+      }
+      refresh();
+    };
+    el.appendChild(b);
+    $("r-cards").appendChild(el);
+  });
+}
+
+function drawRunning(st) {
+  const s = st.sample || {};
+  const ready = st.ready || {};
+  if (!st.running && !s.turns) {
+    $("r-live").innerHTML = '<div class="why">запись не идёт</div>';
+    return;
+  }
+  const box = document.createElement("div");
+  box.innerHTML =
+    `<div class="big">${hms(s.elapsed_s)} из ${hms(s.total_s)}` +
+    `<span class="u"> · ${((s.share || 0) * 100).toFixed(0)}%</span></div>` +
+    `<div id="r-bar"><i style="width:${((s.share || 0) * 100).toFixed(1)}%"></i></div>` +
+    `<div id="r-nums">` +
+    `<div><span>кадров</span>${s.written ?? 0}</div>` +
+    `<div><span>без изменений</span>${s.unchanged ?? 0}</div>` +
+    `<div><span>изменившихся</span>${s.change_share === null || s.change_share === undefined
+        ? "—" : (s.change_share * 100).toFixed(0) + "%"}</div>` +
+    `<div><span>на диске</span>${(s.mib ?? 0).toFixed(1)} МиБ</div>` +
+    `<div><span>расход</span>${s.gib_per_hour === null || s.gib_per_hour === undefined
+        ? "не измерен" : s.gib_per_hour.toFixed(1) + " ГиБ/ч"}</div>` +
+    `<div><span>осталось</span>${hms(s.left_s)}</div>` +
+    `</div>` +
+    (ready.mechanism
+      ? `<div class="why" style="margin-top:6px">${ready.mechanism}; кадр ` +
+        `${ready.frame.width}×${ready.frame.height}, ${ready.audio}. ` +
+        `Пишется в ${ready.path}</div>`
+      : "");
+  $("r-live").innerHTML = "";
+  $("r-live").appendChild(box);
+  if (st.running) {
+    const stop = document.createElement("button");
+    stop.className = "rec-btn stop";
+    stop.style.marginTop = "8px";
+    stop.textContent = st.stop_asked ? "останавливаю…" : "Прервать";
+    stop.disabled = !!st.stop_asked;
+    stop.onclick = async () => { stop.disabled = true; await api("/api/stop", {}); };
+    $("r-live").appendChild(stop);
+    const note = document.createElement("div");
+    note.className = "why";
+    note.style.marginTop = "6px";
+    note.textContent = "прерванная запись закрывается правильно и годна к приёму: " +
+      "в журнал ложится отметка «прервано на N из M»";
+    $("r-live").appendChild(note);
+  }
+}
+
+function drawResult(st) {
+  const r = st.result || {}, ref = st.refusal || {}, fx = st.fixture || {};
+  if (ref.refused) {
+    $("r-result").innerHTML =
+      `<div class="warnbox"><b>записать не удалось: ${ref.why}</b><br>${ref.hint || ""}</div>`;
+    return;
+  }
+  if (!r.final_line) {
+    $("r-result").innerHTML = '<div class="why">итога пока нет</div>';
+    return;
+  }
+  const st2 = r.stages || {}, v = r.verdict || {}, u = r.usable || {};
+  const cost = (r.cost || {}).frames || {};
+  $("r-result").innerHTML =
+    `<div class="mono" style="font-size:13px">${r.final_line}</div>` +
+    `<div class="why" style="margin-top:4px">почему кончилось: ${r.stop_reason_text}</div>` +
+    `<div id="r-verdict">` +
+    `частота ${(st2.achieved_fps || 0).toFixed(1)} кадр/с; ` +
+    `ждал, чтобы не обогнать цель, ${((st2.idle_share || 0) * 100).toFixed(0)} % времени\n` +
+    `на что ушло время (мс на оборот): ждал кадр ${(st2.capture_ms || 0).toFixed(1)}, ` +
+    `писал ${(st2.record_ms || 0).toFixed(1)}\n` +
+    (cost.calls
+      ? `  внутри записи кадра: разность ${cost.delta_ms_per_call.toFixed(1)}, ` +
+        `сжатие ${cost.compress_ms_per_call.toFixed(1)}, ` +
+        `файл ${cost.write_ms_per_call.toFixed(1)}` +
+        (cost.ratio ? `; сжатие в ${cost.ratio.toFixed(1)} раза` : "") + "\n"
+      : "") +
+    (v.fits
+      ? `укладываемся в бюджет: ${v.busy_ms.toFixed(1)} мс при бюджете ` +
+        `${v.budget_ms.toFixed(1)} мс, запас ${v.slack_ms.toFixed(1)} мс`
+      : `бюджет кадра превышен: ${v.busy_ms.toFixed(1)} мс при бюджете ` +
+        `${v.budget_ms.toFixed(1)} мс; больше всего съедает «${v.worst_stage}», ` +
+        `потолок ${v.max_fps} кадр/с`) +
+    `</div>` +
+    `<div class="${u.ok ? "okbox" : "warnbox"}">` +
+    `<b>${u.ok ? "запись годна" : "запись НЕ годна"}</b><br>${u.why}</div>` +
+    (fx.why
+      ? `<div class="${fx.rebuilt ? "okbox" : "warnbox"}">${fx.why}` +
+        (fx.rebuilt ? " — экран 1 теперь показывает вашу запись" : "") + "</div>"
+      : "");
+  /* Фикстура пересобрана — перечитать её, иначе на первом экране остаётся прежнее
+     зеркало, и оператор видит чужую запись под видом своей. */
+  if (fx.rebuilt && fx.why !== LAST_FIXTURE) {
+    LAST_FIXTURE = fx.why;
+    reloadFixture();
+  }
+}
+
+async function refresh() {
+  if (!SERVER) return;
+  const st = (await api("/api/progress")).data;
+  const plan = (await api("/api/plan")).data;
+  drawCards(plan.cards || [], st.running);
+  drawRunning(st);
+  drawResult(st);
+}
+
+function reloadFixture() {
+  /* Перечитывается тем же единственным входом `loadFixture`, что и при открытии панели:
+     второе место чтения фикстуры означало бы второй путь к данным, и подмена источника
+     перестала бы быть правкой одной строки. */
+  loadFixture().then((d) => {
+    DATA = d;
+    drawBar(d); drawGoals(d); drawMemory(d); drawBody(d); drawExperiments(d);
+    if (cur === 0) drawLive(d);
+  }).catch(() => {});
+}
+
+async function initRecording() {
+  const got = await api("/api/plan");
+  if (!got.ok || !got.data.server) {
+    noServer("панель открыта не сервером записи.");
+    return;
+  }
+  SERVER = got.data;
+  await refresh();
+  /* Опрос раз в секунду: ровно та частота, с которой обновляется ход записи
+     (`progress_min_interval_s`). Чаще спрашивать нечего — новых чисел не появится. */
+  if (POLL) clearInterval(POLL);
+  POLL = setInterval(refresh, 1000);
+}
+
 /* ---------- переключение экранов ---------- */
 
 function buildTabs() {
@@ -673,14 +934,22 @@ $("stop").onclick = () => {
 
 window.addEventListener("resize", () => show(cur));
 
-fetch(SOURCE).then((r) => {
-  if (!r.ok) throw new Error(r.status + " " + r.statusText);
-  return r.json();
-}).then((d) => {
+/* ЕДИНСТВЕННОЕ место чтения фикстуры. Открытие панели и пересборка после записи зовут
+   его же; метка времени в запросе нужна затем, что после пересборки браузер иначе отдаёт
+   прежний файл из кэша, и оператор видит чужую запись под видом своей. */
+function loadFixture() {
+  return fetch(SOURCE + "?v=" + String(FIXTURE_TRIES++)).then((r) => {
+    if (!r.ok) throw new Error(r.status + " " + r.statusText);
+    return r.json();
+  });
+}
+
+loadFixture().then((d) => {
   DATA = d;
   buildTabs();
   drawBar(d);
   drawGoals(d); drawMemory(d); drawBody(d); drawExperiments(d);
+  initRecording().catch((e) => noServer("панель открыта файлом: " + e.message));
   show(0);
 }).catch((e) => {
   document.querySelector("main").style.display = "none";
