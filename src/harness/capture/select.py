@@ -71,6 +71,12 @@ MSS_PLAIN = Backend(
     "mss через X11: единственный написанный механизм для этой оконной системы")
 
 #: Кандидаты по оконной системе, в порядке предпочтения.
+#:
+#: **Единственное место, где проект знает, для какой оконной системы механизм есть.**
+#: Знание было в трёх копиях — здесь, в `machine.HAS_CAPTURE` и внутри
+#: `ScreenCapture.start`, — и копии уже расходились: реестр считал Wayland годным, а
+#: backend на нём отказывал. Тест на согласие копий поставили, копии оставили; TASK-15
+#: убирает сами копии, потому что тест на согласие двух правд — это не одна правда.
 CANDIDATES: dict[Session, tuple[Backend, ...]] = {
     Session.X11: (MSS_PLAIN,),
     Session.WAYLAND: (),          # нужен PipeWire; backend не написан
@@ -78,6 +84,37 @@ CANDIDATES: dict[Session, tuple[Backend, ...]] = {
     Session.MACOS: (MSS_PLAIN,),
     Session.NONE: (),
 }
+
+#: Почему для этой системы кандидатов нет и что делать. Заполняется для каждой системы
+#: с пустым списком: пустой список без причины неотличим от недосмотра в таблице.
+NO_BACKEND: dict[Session, str] = {
+    Session.WAYLAND:
+        "сеанс Wayland: захвата под него в проекте нет. Нужен PipeWire с портальным "
+        "разрешением, и этот backend не написан. mss под Wayland отдала бы чёрный кадр "
+        "или только окна XWayland — то есть запись, неотличимую по формату от настоящей "
+        "и мусорную по содержанию",
+    Session.NONE:
+        "графической сессии нет: захватывать нечего. Запускайте на машине с экраном; "
+        "по ssh без проброса X это не работает",
+}
+
+
+def supported(session: Session) -> bool:
+    """Есть ли для этой оконной системы хоть какой-то механизм захвата."""
+    return bool(CANDIDATES.get(session))
+
+
+def why_unsupported(session: Session) -> str:
+    """Почему механизма нет. Для систем с кандидатами — пустая строка."""
+    if supported(session):
+        return ""
+    got = NO_BACKEND.get(session)
+    if got is None:
+        raise KeyError(
+            f"для {session} кандидатов нет и причина не объявлена. Пустой список без "
+            "причины неотличим от забытой строки в таблице: припишите причину в "
+            "NO_BACKEND")
+    return got
 
 
 @dataclass(slots=True)
@@ -167,6 +204,18 @@ def open_screen(machine: Machine, *, gray: bool = True,
             source.start()
         except BackendUnavailable as e:
             rejected.append((b.name, str(e)))
+            continue
+        except Exception as e:
+            # Ловится **любое** исключение, а не только объявленное. Механизм захвата —
+            # чужой код на чужой машине: dxcam умеет падать в `ctypes`, mss — бросать
+            # свои типы, драйвер — уносить всё что угодно. Отказ одного кандидата не
+            # имеет права уносить осмотр целиком: доктор для того и нужен, чтобы
+            # сказать, что именно не работает.
+            #
+            # Найдено замером окружений (TASK-15): под подменённым окружением, где
+            # пакет установлен, но не работает, `harness doctor` падал с трассировкой
+            # вместо доклада — то есть ровно там, где оператор его и запускает.
+            rejected.append((b.name, f"{type(e).__name__}: {e}"))
             continue
         return Choice(chosen=b, considered=considered, rejected=rejected,
                       source=source)

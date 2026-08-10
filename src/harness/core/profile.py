@@ -41,8 +41,58 @@ class ProfileError(ValueError):
     """Профиль собран так, что хеш перестал что-либо значить."""
 
 
-def _check_group(name: str, group: Mapping[str, Any]) -> dict[str, Scalar]:
-    out: dict[str, Scalar] = {}
+class Settings(dict):
+    """Словарь настроек, который на отсутствующем ключе объясняет, а не роняет KeyError.
+
+    Зачем отдельный тип. Профиль записи, собранный **до** того, как настройку завели, её
+    не содержит — и это законно: запись старая, и врать о себе она не должна. Но читатель
+    получал `KeyError: 'confab_min_episodes'` — сообщение, из которого не следует ни
+    причина, ни что делать. Так и вышло на машине оператора: `make_panel_fixture` упал на
+    записи, сделанной до TASK-12, и выглядело это как поломка инструмента.
+
+    `KeyError` здесь неверен по существу. Отсутствие ключа означает одно из двух, и это
+    разные диагнозы:
+
+    - **опечатка в имени** — ключа нет ни в профиле, ни в схеме. Это ошибка вызывающего;
+    - **профиль старше схемы** — в схеме ключ есть, в профиле нет. Это свойство записи, и
+      читателю надо сказать, чем она старая и что с этим делать.
+
+    Дополнить профиль значениями по умолчанию молча нельзя: это изменит `profile_hash`, то
+    есть запись начнёт заявлять настройки, которых в ней не было, и сравнение с другими
+    прогонами станет ложным. Поэтому дополнение — отдельное явное действие
+    (`Profile.filled_from_schema`), и в сообщении оно названо.
+    """
+
+    __slots__ = ("group",)
+
+    def __init__(self, *a: Any, group: str = "parameters", **kw: Any) -> None:
+        super().__init__(*a, **kw)
+        self.group = group
+
+    def __missing__(self, key: str) -> Scalar:
+        from .settings import BY_KEY
+
+        known = BY_KEY.get(key)
+        if known is None:
+            near = sorted(k for k in BY_KEY if k.startswith(str(key)[:6]))
+            raise ProfileError(
+                f"настройки {key!r} нет ни в профиле, ни в схеме. Это опечатка в имени"
+                + (f"; похожие: {near[:3]}" if near else ""))
+        where = "structural" if known.structural else "parameters"
+        raise ProfileError(
+            f"в профиле записи нет настройки {key!r}, а в схеме она есть "
+            f"({where}, группа «{known.group}», по умолчанию {known.default!r}). "
+            "Профиль собран более старой версией схемы — запись законна, и дополнять её "
+            "молча нельзя: значения по умолчанию изменят profile_hash, и запись начнёт "
+            "заявлять настройки, которых в ней не было.\n"
+            "Что делать, на выбор:\n"
+            "  • собрать по свежей записи: python3 tools/make_panel_fixture.py\n"
+            "  • или дополнить явно, приняв смену хеша: "
+            "Profile.filled_from_schema() либо флаг --fill-old-profile у инструмента")
+
+
+def _check_group(name: str, group: Mapping[str, Any]) -> Settings:
+    out: Settings = Settings(group=name)
     for k, v in group.items():
         if not isinstance(k, str) or not k:
             raise ProfileError(f"{name}: ключ не строка: {k!r}")
@@ -106,6 +156,47 @@ class Profile:
             )
         object.__setattr__(self, "parameters", _check_group("parameters", self.parameters))
         object.__setattr__(self, "structural", _check_group("structural", self.structural))
+
+    def missing_settings(self) -> list[str]:
+        """Каких настроек текущей схемы в профиле нет. Пустой список — профиль полный."""
+        from .settings import SCHEMA
+
+        have = set(self.parameters) | set(self.structural)
+        return sorted(s.key for s in SCHEMA if s.key not in have)
+
+    def unknown_settings(self) -> list[str]:
+        """Какие настройки профиля схеме неизвестны: профиль **новее** схемы или правлен."""
+        from .settings import BY_KEY
+
+        return sorted(k for k in (*self.parameters, *self.structural) if k not in BY_KEY)
+
+    def era(self) -> str:
+        """Одна строка о том, насколько профиль сходится с текущей схемой."""
+        miss, extra = self.missing_settings(), self.unknown_settings()
+        if not miss and not extra:
+            return "профиль полон по текущей схеме"
+        parts = []
+        if miss:
+            parts.append(f"нет {len(miss)} настроек ({', '.join(miss[:4])}"
+                         + (", …" if len(miss) > 4 else "") + ")")
+        if extra:
+            parts.append(f"{len(extra)} настроек схеме неизвестны ({', '.join(extra[:4])})")
+        return "профиль собран другой версией схемы: " + "; ".join(parts)
+
+    def filled_from_schema(self) -> "Profile":
+        """Дополнить недостающее значениями по умолчанию. **Хеш при этом меняется.**
+
+        Отдельное явное действие, а не поведение по умолчанию. Дополненный профиль годится
+        для того, чтобы прочитать старую запись новым инструментом, и **не годится** для
+        сравнения прогонов: он заявляет настройки, которых в записи не было.
+        """
+        from .settings import BY_KEY
+
+        p, st = dict(self.parameters), dict(self.structural)
+        for key in self.missing_settings():
+            setting = BY_KEY[key]
+            (st if setting.structural else p)[key] = setting.default
+        return Profile(self.name, p, st)
 
     # --- хеши ---------------------------------------------------------------
 

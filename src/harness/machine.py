@@ -37,20 +37,10 @@ class Session(StrEnum):
     NONE = "none"          # графической сессии нет: сервер, контейнер, ssh
 
 
-#: Есть ли для этой оконной системы **хоть какой-то** механизм захвата.
-#:
-#: Не «какой именно»: выбор между несколькими живёт в `capture.select`, потому что он
-#: зависит от того, что установлено и что запустилось, а здесь этого знать нельзя.
-#: Раньше здесь стояло одно имя на систему, и из-за этого на Windows брался mss при
-#: установленном и работающем dxcam — таблица просто не предусматривала, что
-#: кандидатов может быть двое.
-HAS_CAPTURE: dict[Session, bool] = {
-    Session.X11: True,
-    Session.WAYLAND: False,      # нужен PipeWire; backend не написан
-    Session.WINDOWS: True,
-    Session.MACOS: True,
-    Session.NONE: False,
-}
+# Таблицы «есть ли захват для этой системы» здесь больше нет. Она была третьей копией
+# одного знания (реестр кандидатов, эта таблица, проверка внутри `ScreenCapture.start`),
+# и копии расходились. Единственный источник — `capture.select.CANDIDATES`; здесь у него
+# только спрашивают.
 
 
 @dataclass(frozen=True, slots=True)
@@ -65,8 +55,15 @@ class Machine:
 
     @property
     def has_capture(self) -> bool:
-        """Есть ли механизм в принципе. Какой именно — решает `capture.select`."""
-        return HAS_CAPTURE[self.session]
+        """Есть ли механизм в принципе. Какой именно — решает `capture.select`.
+
+        Импорт внутри метода, а не наверху файла: `capture.select` импортирует `Session`
+        отсюда, и импорт наверху был бы круговым. Это цена единственного источника
+        знания, и она дешевле двух таблиц, которые расходятся.
+        """
+        from .capture.select import supported
+
+        return supported(self.session)
 
     @property
     def capture_backend(self) -> str | None:

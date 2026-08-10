@@ -1,0 +1,118 @@
+{
+  "runs": [
+    {
+      "env": "container",
+      "passed": 648,
+      "failed": [
+        "tests/test_panel.py::test_experiments_come_from_real_measurements"
+      ],
+      "skipped": 0,
+      "total": 649
+    },
+    {
+      "env": "x11",
+      "passed": 647,
+      "failed": [
+        "tests/test_panel.py::test_experiments_come_from_real_measurements"
+      ],
+      "skipped": 1,
+      "total": 649
+    },
+    {
+      "env": "wayland",
+      "passed": 647,
+      "failed": [
+        "tests/test_panel.py::test_experiments_come_from_real_measurements"
+      ],
+      "skipped": 1,
+      "total": 649
+    },
+    {
+      "env": "windows",
+      "passed": 647,
+      "failed": [
+        "tests/test_panel.py::test_experiments_come_from_real_measurements"
+      ],
+      "skipped": 1,
+      "total": 649
+    },
+    {
+      "env": "macos",
+      "passed": 647,
+      "failed": [
+        "tests/test_panel.py::test_experiments_come_from_real_measurements"
+      ],
+      "skipped": 1,
+      "total": 649
+    }
+  ],
+  "environments": {
+    "container": {
+      "session": "none",
+      "system": "Linux",
+      "packages": []
+    },
+    "x11": {
+      "session": "x11",
+      "system": "Linux",
+      "packages": [
+        "mss"
+      ]
+    },
+    "wayland": {
+      "session": "wayland",
+      "system": "Linux",
+      "packages": [
+        "mss"
+      ]
+    },
+    "windows": {
+      "session": "windows",
+      "system": "Windows",
+      "packages": [
+        "dxcam",
+        "mss"
+      ]
+    },
+    "macos": {
+      "session": "macos",
+      "system": "Darwin",
+      "packages": [
+        "mss"
+      ]
+    }
+  },
+  "before": {
+    "на машине оператора": {
+      "окружение": "Windows 10, дисплей есть, dxcam и mss установлены",
+      "упало": 5,
+      "прошло": 636,
+      "почему": "три теста сравнивали поведение с наличием DISPLAY, ждали отказа от установленного пакета и ждали кода 2 от прошедшей записи; два выставляли XDG_SESSION_TYPE, чего detect на Windows не читает"
+    },
+    "в подменённых окружениях": {
+      "окружение": "windows / x11 / macos, подменено плагином",
+      "упало": 6,
+      "прошло": 637,
+      "почему": "к пяти добавился шестой: `harness doctor` падал с трассировкой, когда установленный пакет захвата бросал не BackendUnavailable, а своё исключение. Это дефект кода, а не теста, и нашёл его замер"
+    }
+  },
+  "blind_spot": {
+    "что": "пустой тест — утверждение под условием о машине, недостижимым в этом окружении. Исход не меняется, потому что проверки не было ни в одном",
+    "кем найдено": "статическая проверка объявления окружения",
+    "сколько": 3,
+    "какие": [
+      "test_operator.py::test_doctor_says_which_mechanism_and_why — утверждение под `if check.state is YES`, а в контейнере графической сессии нет: не выполнялось ни разу",
+      "test_operator.py::test_blocking_and_later_are_separate_and_cannot_be_mixed — утверждение под `if uinput.state is not YES`",
+      "test_operator.py::test_every_missing_check_carries_a_command_to_copy — цикл только по нехваткам: там, где всё зелёное, витков нет"
+    ]
+  },
+  "flipped": [],
+  "false_green_share": 0.0,
+  "coverage": {
+    "tests_run": 649,
+    "environments": 5,
+    "note": "покрытие — по числу тестов, исполненных в каждом окружении. Замер видит только то, что запускалось: тест, пропущенный во всех окружениях, о своей зависимости не сообщает никак"
+  },
+  "unit": "тест",
+  "why_not_env_vars": "переменные окружения не подменяются: на Windows их нет, и подмена их ничего не меняет. Подменяется machine.detect — единственное место, где проект отвечает, что за машина"
+}

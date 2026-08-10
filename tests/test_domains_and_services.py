@@ -16,8 +16,6 @@
 
 from __future__ import annotations
 
-import os
-
 import numpy as np
 import pytest
 
@@ -530,36 +528,31 @@ def test_benchmark_does_not_score_where_truth_changed() -> None:
 # --- бесплатные сервисы описания --------------------------------------------
 
 
-def test_no_key_means_loud_refusal_not_a_stub() -> None:
+def test_no_key_means_loud_refusal_not_a_stub(without_key) -> None:
     """Молчаливая заглушка здесь — худшее, что может быть: эксперимент испортится
-    незаметно. Без ключа описатель обязан отказаться и назвать переменную."""
+    незаметно. Без ключа описатель обязан отказаться и назвать переменную.
+
+    Отсутствие ключа **объявлено** фикстурой, а не взято с машины: там, где ключ задан,
+    этот тест проверял бы противоположный путь и был бы зелёным по другой причине.
+    """
     from harness.capture.base import BackendUnavailable
     from harness.perception import describers as mod
 
+    without_key("GROQ_API_KEY")
     d = mod.make("groq")
-    monkey = os.environ.pop("GROQ_API_KEY", None)
-    try:
-        ok, why = d.probe()
-        assert not ok and "GROQ_API_KEY" in why
-        with pytest.raises(BackendUnavailable, match="GROQ_API_KEY"):
-            d.require()
-    finally:
-        if monkey is not None:
-            os.environ["GROQ_API_KEY"] = monkey
+    ok, why = d.probe()
+    assert not ok and "GROQ_API_KEY" in why
+    with pytest.raises(BackendUnavailable, match="GROQ_API_KEY"):
+        d.require()
 
 
-def test_available_returns_empty_when_nothing_is_configured() -> None:
+def test_available_returns_empty_when_nothing_is_configured(without_key) -> None:
     """Пустая цепочка — честный ответ, а не повод подсунуть локальную выдумку."""
     from harness.capture.base import BackendUnavailable
     from harness.perception import describers as mod
 
-    saved = {k: os.environ.pop(k, None) for k in ("GROQ_API_KEY", "MISTRAL_API_KEY")}
-    try:
-        chain = mod.available(names=["groq", "mistral"])
-    finally:
-        for k, v in saved.items():
-            if v is not None:
-                os.environ[k] = v
+    without_key("GROQ_API_KEY", "MISTRAL_API_KEY")
+    chain = mod.available(names=["groq", "mistral"])
     assert chain.describers == []
     with pytest.raises(BackendUnavailable, match="ни одного описателя"):
         chain.describe(np.zeros((8, 8), dtype=np.uint8), "что?")

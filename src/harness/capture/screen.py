@@ -46,27 +46,28 @@ class ScreenCapture:
 
     def start(self) -> None:
         from ..machine import Session, detect, install_capture, switch_to_x11
+        from .select import supported, why_unsupported
 
         machine = detect()
-        if machine.session is Session.NONE:
+        # Своей ветки про Wayland здесь больше нет: причина берётся из реестра
+        # кандидатов — единственного места, где это знание живёт. Копия здесь уже
+        # расходилась с реестром, и тест на их согласие проблему не снял, а закрепил.
+        if not supported(machine.session):
+            hint = (f" Что делать: {switch_to_x11()}"
+                    if machine.session is Session.WAYLAND else "")
             raise BackendUnavailable(
-                "графической сессии нет: захватывать нечего "
-                f"({machine.session_source}). Запускайте на машине с экраном; "
-                "по ssh без проброса X это не работает")
-        if machine.session is Session.WAYLAND:
-            raise BackendUnavailable(
-                "сеанс Wayland: захвата под него в проекте нет. Нужен PipeWire с "
-                "портальным разрешением, и этот backend не написан. mss под Wayland "
-                "отдала бы чёрный кадр или только окна XWayland — то есть запись, "
-                "неотличимую по формату от настоящей и мусорную по содержанию. "
-                f"Что делать: {switch_to_x11()}")
+                f"{why_unsupported(machine.session)} ({machine.session_source}).{hint}")
         try:
             import mss  # noqa: PLC0415 — импорт по требованию: это платформенная зависимость
         except ImportError as e:
             raise BackendUnavailable(
                 f"нет пакета mss. Поставьте: {install_capture(machine)}"
             ) from e
-        self._sct = mss.mss()
+        # `mss.MSS`, а не `mss.mss`: второе устарело в mss 10.2 и предупреждает при
+        # каждом запуске. Устаревший вызов на машине оператора — это строка
+        # предупреждения в выводе `harness record`, то есть шум там, где смотрят на
+        # диагностику.
+        self._sct = (mss.MSS if hasattr(mss, "MSS") else mss.mss)()
         if self.region is None:
             self._monitor = self._sct.monitors[1]
         else:

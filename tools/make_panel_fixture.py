@@ -44,6 +44,10 @@ from typing import Any
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "src"))
 
+#: Дополнять ли профиль старой записи значениями по умолчанию. Ставится флагом
+#: `--fill-old-profile`: молча дополнять нельзя, это меняет `profile_hash`.
+FILL_OLD = False
+
 LIVE = "живая запись оператора"
 SYNTH = "синтетический прогон"
 ABSENT = "нет источника"
@@ -102,6 +106,23 @@ def make_session(where: Path, *, rounds: int, seed: int) -> Path:
     return where
 
 
+def make_frames(where: Path, *, seed: int) -> Path:
+    """Запись с кадрами — для зеркала первого экрана.
+
+    Отдельная запись, а не подмешивание кадров в основную: зеркало из другой записи — не
+    то, что агент видел в этот момент, и панель об этом **говорит** (`mirror_from`).
+    Пишется тем же `gen-corpus`, которым записывает оператор.
+    """
+    where.parent.mkdir(parents=True, exist_ok=True)
+    import os
+
+    subprocess.run([sys.executable, "-m", "harness.cli", "gen-corpus", str(where),
+                    "--seed", str(seed)],
+                   check=True, capture_output=True,
+                   env={**os.environ, "PYTHONPATH": str(ROOT / "src")})
+    return where
+
+
 def frame_png(image: Any) -> str:
     """Кадр записи как data-URI. Зеркало экрана агента — настоящий кадр, не заглушка."""
     import matplotlib
@@ -118,6 +139,37 @@ def frame_png(image: Any) -> str:
 # ---------------------------------------------------------------------------
 
 
+def check_profile(where: Path, profile: Any) -> Any:
+    """Проверить, что профиль записи сходится со схемой, и сказать внятно, если нет.
+
+    Запись, сделанная до того как настройку завели, законна: она не обязана знать о
+    настройках, появившихся позже. Незаконно другое — падать на ней `KeyError` из
+    словаря, как было на машине оператора: из `KeyError: 'confab_min_episodes'` не
+    следует ни причина, ни что делать.
+
+    Дополнение значениями по умолчанию меняет `profile_hash`, поэтому делается только по
+    явному флагу и **говорит об этом**: дополненный профиль годится, чтобы прочитать
+    старую запись, и не годится, чтобы сравнивать прогоны.
+    """
+    missing = profile.missing_settings()
+    if not missing:
+        return profile
+    if not FILL_OLD:
+        raise SystemExit(
+            f"запись {where}: {profile.era()}.\n"
+            "Фикстуру по ней собрать нельзя, не решив, что делать с недостающим.\n"
+            "  • по свежей записи:  python3 tools/make_panel_fixture.py\n"
+            f"  • или по этой, дополнив значениями по умолчанию (profile_hash изменится, "
+            f"сравнивать её с другими прогонами после этого нельзя):\n"
+            f"      python3 tools/make_panel_fixture.py --session {where} "
+            "--fill-old-profile")
+    filled = profile.filled_from_schema()
+    print(f"профиль записи дополнен значениями по умолчанию: {', '.join(missing)}")
+    print(f"  profile_hash изменился: {profile.profile_hash[:8]} → "
+          f"{filled.profile_hash[:8]}. Для сравнения прогонов эта фикстура не годится")
+    return filled
+
+
 def collect(session_path: Path, frames_path: Path | None = None) -> dict[str, Any]:
     from harness.core.levels import Ceiling
     from harness.doctor import BYTES_PER_FRAME_1080P
@@ -128,7 +180,7 @@ def collect(session_path: Path, frames_path: Path | None = None) -> dict[str, An
 
     out: dict[str, Any] = {}
     with Session.open(session_path) as s:
-        profile = s.profile
+        profile = check_profile(session_path, s.profile)
         v = vitals.from_journal(s.journal, profile=profile)
         conf = confabulation.measure(
             s.journal, min_episodes=int(profile.parameters["confab_min_episodes"]))
@@ -146,6 +198,20 @@ def collect(session_path: Path, frames_path: Path | None = None) -> dict[str, An
         mirror_from = "эта же запись" if len(s) else ""
         mirror_size = (int(profile.parameters["capture_width"]),
                        int(profile.parameters["capture_height"]))
+        # Всё, что считается по журналу **основной** записи, считается здесь, внутри её
+        # `with`. До TASK-15 эти восемь строк стояли внутри ветки «зеркало взять из другой
+        # записи», и без `--frames-from` сборка падала `UnboundLocalError: goals` — то есть
+        # сборка по умолчанию не работала вовсе, а замечено это было только тогда, когда
+        # её впервые запустили без аргументов.
+        errors = [e.state.prediction_error for e in s.journal
+                  if e.state.prediction_error is not None]
+        moods = [tuple(e.state.mood) for e in s.journal if e.state.mood is not None]
+        drives_last = next((e.state.drives for e in reversed(list(s.journal))
+                            if e.state.drives), {})
+        goals = [e.event for e in s.journal if str(e.kind) == "goal"]
+        layers = confabulation.layer_histogram(s.journal)
+        body = rebuilt.body.stats()
+        entries = len(s.journal)
     if not mirror and frames_path is not None:
         # Кадров в записи нет: `harness loop` их не пишет — цикл лепета кадры видит,
         # но в журнал не кладёт. Зеркало берётся из отдельной записи с кадрами, и это
@@ -156,15 +222,6 @@ def collect(session_path: Path, frames_path: Path | None = None) -> dict[str, An
             mirror_from = f"другая запись: {frames_path.name}"
             mirror_size = (int(f.profile.parameters["capture_width"]),
                            int(f.profile.parameters["capture_height"]))
-        errors = [e.state.prediction_error for e in s.journal
-                  if e.state.prediction_error is not None]
-        moods = [tuple(e.state.mood) for e in s.journal if e.state.mood is not None]
-        drives_last = next((e.state.drives for e in reversed(list(s.journal))
-                            if e.state.drives), {})
-        goals = [e.event for e in s.journal if str(e.kind) == "goal"]
-        layers = confabulation.layer_histogram(s.journal)
-        body = rebuilt.body.stats()
-        entries = len(s.journal)
 
     # --- верхняя полоса ---------------------------------------------------
     # Часы — три, и третьи гаснут, когда содержимого нет: `t_content` в этом прогоне
@@ -500,21 +557,36 @@ def main(argv: list[str]) -> int:
                     help="готовая запись; по умолчанию пишется своя через harness loop")
     ap.add_argument("--frames-from", type=Path, default=None,
                     help="запись с кадрами для зеркала, если в основной их нет")
+    ap.add_argument("--fill-old-profile", action="store_true",
+                    help="дополнить профиль старой записи значениями по умолчанию; "
+                         "profile_hash при этом изменится")
     ap.add_argument("--rounds", type=int, default=24)
     ap.add_argument("--seed", type=int, default=23)
     ap.add_argument("--out", type=Path, default=ROOT / "panel" / "fixture.json")
     args = ap.parse_args(argv[1:])
 
+    global FILL_OLD
+    FILL_OLD = bool(args.fill_old_profile)
+
     tmp: tempfile.TemporaryDirectory | None = None
+    frames_from = args.frames_from
     if args.session is None:
         tmp = tempfile.TemporaryDirectory(prefix="panel-session-")
         session = make_session(Path(tmp.name) / "session", rounds=args.rounds,
-                              seed=args.seed)
+                               seed=args.seed)
         print(f"записана сессия: {session}")
+        if frames_from is None:
+            # Кадров `harness loop` не пишет, а главный объект первого экрана — зеркало.
+            # Поэтому запись с кадрами делается **здесь**, а не требуется флагом: до
+            # TASK-15 команда из `panel/README.md` без `--frames-from` собирала фикстуру
+            # без зеркала, то есть документированный путь давал не тот артефакт, который
+            # лежит в репозитории.
+            frames_from = make_frames(Path(tmp.name) / "panel-frames", seed=args.seed)
+            print(f"записана запись с кадрами для зеркала: {frames_from}")
     else:
         session = args.session
 
-    data = collect(session, args.frames_from)
+    data = collect(session, frames_from)
     data["experiments"] = experiments()
     data["profile"] = profile_blocks()
     data["about"] = {
@@ -538,7 +610,11 @@ def main(argv: list[str]) -> int:
     print(f"величин на первом экране: {n_live}")
     print(f"из них без числа: {len(absent)} — {', '.join(absent) or 'нет'}")
     print(f"прогонов на экране «Опыты»: {len(data['experiments']['runs'])}")
-    print(f"записано: {args.out.relative_to(ROOT)} "
+    # Путь печатается относительным, если он внутри репозитория, и абсолютным иначе:
+    # `relative_to` на чужом пути бросает ValueError, и падение на **последней** строке
+    # успешной работы обесценивает всё, что она сделала.
+    shown = (args.out.relative_to(ROOT) if args.out.is_relative_to(ROOT) else args.out)
+    print(f"записано: {shown} "
           f"({args.out.stat().st_size / 1024:.0f} КиБ)")
     return 0
 

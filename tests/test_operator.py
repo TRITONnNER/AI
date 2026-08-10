@@ -53,10 +53,10 @@ def test_wayland_wins_over_display_variable() -> None:
 
 def test_no_capture_backend_for_wayland() -> None:
     """Под Wayland механизма нет, и это объявлено, а не выясняется чёрным кадром."""
-    from harness.capture.select import CANDIDATES
-    from harness.machine import HAS_CAPTURE
+    from harness.capture.select import CANDIDATES, supported, why_unsupported
 
-    assert HAS_CAPTURE[Session.WAYLAND] is False
+    assert supported(Session.WAYLAND) is False
+    assert "Wayland" in why_unsupported(Session.WAYLAND)
     assert CANDIDATES[Session.WAYLAND] == ()
     assert [b.name for b in CANDIDATES[Session.X11]] == ["screen_mss"]
     assert [b.name for b in CANDIDATES[Session.MACOS]] == ["screen_mss"]
@@ -78,26 +78,43 @@ def test_windows_prefers_desktop_duplication_over_mss() -> None:
     assert "не" in mss.caveat and "захватыва" in mss.caveat
 
 
-def test_screen_capture_refuses_wayland_loudly(monkeypatch: pytest.MonkeyPatch) -> None:
+@pytest.mark.environment("сессия подменяется на Wayland")
+def test_screen_capture_refuses_wayland_loudly(as_session) -> None:
+    """Под Wayland захват отказывает громко, а не отдаёт чёрный кадр.
+
+    Сессия **объявляется**, а не выставляется переменными окружения. Прежняя редакция
+    ставила `XDG_SESSION_TYPE=wayland` и падала на машине оператора: на Windows
+    `detect()` смотрит `platform.system()` и о переменной не знает, сессия оставалась
+    windows, mss был установлен — и захват успешно запускался вместо отказа.
+    """
     from harness.capture.screen import ScreenCapture
 
-    monkeypatch.setenv("XDG_SESSION_TYPE", "wayland")
-    monkeypatch.setenv("WAYLAND_DISPLAY", "wayland-0")
-    monkeypatch.setenv("DISPLAY", ":0")
+    as_session(Session.WAYLAND)
     with pytest.raises(BackendUnavailable, match="Wayland"):
         ScreenCapture().start()
 
 
-def test_backend_registry_agrees_with_the_backend(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Реестр и сам backend отвечают по одному знанию, а не по двум копиям.
+@pytest.mark.environment("сессия подменяется на Wayland")
+def test_backend_registry_and_backend_share_one_source(as_session) -> None:
+    """Реестр и backend отвечают по **одному** знанию, а не по двум согласованным.
 
-    Копий было две, и они уже расходились: реестр считал Wayland годным.
+    Копий было три: `CANDIDATES`, `machine.HAS_CAPTURE` и ветка внутри
+    `ScreenCapture.start`. На прошлом заходе поставили тест на их согласие и копии
+    оставили — то есть закрепили расхождение вместо того, чтобы его убрать. Теперь
+    источник один (`capture.select.CANDIDATES` плюс `NO_BACKEND`), а этот тест проверяет,
+    что второго не появилось: причина отказа backend'а обязана быть **той самой
+    строкой** из реестра.
     """
     from harness.capture.base import describe_backends
+    from harness.capture.screen import ScreenCapture
+    from harness.capture.select import why_unsupported
 
-    monkeypatch.setenv("XDG_SESSION_TYPE", "wayland")
-    monkeypatch.setenv("WAYLAND_DISPLAY", "wayland-0")
+    as_session(Session.WAYLAND)
     assert describe_backends()["screen_mss"]["available"] is False
+    with pytest.raises(BackendUnavailable) as exc:
+        ScreenCapture().start()
+    assert why_unsupported(Session.WAYLAND) in str(exc.value), (
+        "backend сочинил свою формулировку — значит у него своя копия знания")
 
 
 # ---------------------------------------------------------------------------
@@ -119,13 +136,20 @@ def test_doctor_on_a_machine_without_a_display_says_no_and_why() -> None:
     assert "экраном" in rep.verdict(), "не сказано, что именно чинить первым"
 
 
-def test_every_missing_check_carries_a_command_to_copy() -> None:
-    """Правило вывода: не «установите ffmpeg», а строка, которую можно скопировать."""
+def test_every_missing_check_carries_a_command_to_copy(as_session) -> None:
+    """Правило вывода: не «установите ffmpeg», а строка, которую можно скопировать.
+
+    Окружение объявлено, и объявлено именно то, в котором нехватки **есть**: на машине,
+    где все пункты зелёные, цикл не выполнит ни одного витка, и тест окажется зелёным,
+    ничего не проверив. Поэтому число осмотренных нехваток проверяется отдельно.
+    """
+    as_session(Session.NONE)
     rep = doctor.run()
-    for c in rep.checks:
-        if c.state is not doctor.State.YES:
-            assert c.fix, f"{c.name}: нехватка без команды"
-            assert len(c.fix) > 10, f"{c.name}: подсказка {c.fix!r} слишком коротка"
+    missing = [c for c in rep.checks if c.state is not doctor.State.YES]
+    assert missing, "в объявленном окружении нет ни одной нехватки — проверять нечего"
+    for c in missing:
+        assert c.fix, f"{c.name}: нехватка без команды"
+        assert len(c.fix) > 10, f"{c.name}: подсказка {c.fix!r} слишком коротка"
 
 
 def test_a_check_cannot_be_created_without_a_fix() -> None:
@@ -134,13 +158,20 @@ def test_a_check_cannot_be_created_without_a_fix() -> None:
         doctor.Check("что-то", doctor.State.NO, "нет")
 
 
-def test_blocking_and_later_are_separate_and_cannot_be_mixed() -> None:
-    """Отсутствие /dev/uinput записи не мешает — иначе оператор чинит лишнее."""
+def test_blocking_and_later_are_separate_and_cannot_be_mixed(as_session) -> None:
+    """Отсутствие /dev/uinput записи не мешает — иначе оператор чинит лишнее.
+
+    Ветка «сказано нет — сказано и к чему понадобится» проверяется на объявленном
+    окружении, где она достижима: на macOS инъекция не реализована, и пункт всегда
+    отрицательный. На Linux с доступным `/dev/uinput` её не было бы видно вовсе.
+    """
+    as_session(Session.MACOS)
     rep = doctor.run()
     uinput = next(c for c in rep.checks if "инъекц" in c.name)
     assert not uinput.blocks, "права на инъекцию ввода записи не мешают"
-    if uinput.state is not doctor.State.YES:
-        assert uinput.later, "сказано «нет», но не сказано, к чему понадобится"
+    assert uinput.state is not doctor.State.YES, (
+        "на macOS инъекция не реализована — окружение объявлено не то")
+    assert uinput.later, "сказано «нет», но не сказано, к чему понадобится"
     with pytest.raises(ValueError, match="разные вещи"):
         doctor.Check("х", doctor.State.NO, "н", blocks=True, later="М5", fix="ввести")
 
@@ -148,13 +179,16 @@ def test_blocking_and_later_are_separate_and_cannot_be_mixed() -> None:
     assert not ffmpeg.blocks, "ffmpeg нужен третьему уровню журнала, не записи"
 
 
-def test_black_frame_is_a_failure_not_a_success() -> None:
+def test_black_frame_is_a_failure_not_a_success(as_session) -> None:
     """Кадр правильной формы, заполненный нулями, — отказ.
 
     Ровно так ведёт себя macOS без разрешения «Запись экрана». Проверка «вернулся ли
     кадр» отвечает «да», и потому её здесь нет.
+
+    Окружение объявлено: утверждение про чёрный кадр не зависит от машины, и объявление
+    делает это видимым, а не оставляет на волю того, где идёт прогон.
     """
-    m = detect()
+    m = as_session(Session.X11)
     probe = _blind(doctor.State.NO, "кадр 1920×1080 целиком чёрный",
                    (1920, 1080), True)
     check = doctor.check_display(m, probe(m))
@@ -205,13 +239,17 @@ def _probe_with(source: Any) -> tuple[Any, str, Any, bool]:
         select_mod.open_screen = real                     # type: ignore[assignment]
 
 
-def test_free_space_is_reported_in_hours_not_gigabytes(tmp_path: Path) -> None:
+def test_free_space_is_reported_in_hours_not_gigabytes(as_session, tmp_path: Path) -> None:
     """Гигабайты оператору ничего не говорят: чтобы понять, хватит ли, нужен код."""
-    check = doctor.check_disk(detect(), path=tmp_path, fps=30.0, size=(1920, 1080))
+    m = as_session(Session.X11)
+    check = doctor.check_disk(m, path=tmp_path, fps=30.0, size=(1920, 1080))
     assert "ч " in check.detail and "кадр/с" in check.detail
 
 
-def test_doctor_json_is_machine_readable() -> None:
+def test_doctor_json_is_machine_readable(as_session) -> None:
+    """Формат отчёта от машины не зависит — и окружение объявлено, чтобы это было видно
+    из подписи, а не выводилось из того, где идёт прогон."""
+    as_session(Session.NONE)
     payload = json.dumps(doctor.run().as_dict(), ensure_ascii=False)
     back = json.loads(payload)
     assert "verdict" in back and "checks" in back and "machine" in back
@@ -875,19 +913,29 @@ def test_setup_has_the_three_symptoms_from_the_first_live_run() -> None:
     assert "Установка не прошла" in text and "не активировано" in text
 
 
-def test_doctor_says_which_mechanism_and_why() -> None:
-    """Строка «есть» без причины выбора — дефект вывода, а не мелочь оформления."""
-    check = doctor.check_session(detect())
-    if check.state is doctor.State.YES:
-        assert ":" in check.detail, "не сказано, почему выбран именно этот механизм"
+def test_doctor_says_which_mechanism_and_why(as_session, with_package) -> None:
+    """Строка «есть» без причины выбора — дефект вывода, а не мелочь оформления.
+
+    До TASK-15 утверждение стояло под `if check.state is YES`, а в контейнере сессии нет
+    вовсе, и пункт всегда отрицательный: **проверка не выполнялась ни разу** и была
+    зелёной 643 прогона подряд. Окружение теперь объявлено таким, в котором механизм
+    действительно выбирается, — иначе проверять причину выбора не на чем.
+    """
+    with_package("mss")
+    m = as_session(Session.X11)
+    check = doctor.check_session(m)
+    assert check.state is doctor.State.YES, (
+        f"в объявленном окружении механизм не выбрался: {check.detail}")
+    assert ":" in check.detail, "не сказано, почему выбран именно этот механизм"
     text = (ROOT / "SETUP.md").read_text(encoding="utf-8")
     assert "screen_dxcam" in text and "screen_mss" in text, (
         "оператор должен знать имена механизмов: доктор печатает именно их")
 
 
-def test_storage_estimate_names_both_ends() -> None:
+def test_storage_estimate_names_both_ends(as_session) -> None:
     """Одного числа расхода не существует: разброс тысячекратный по содержимому."""
-    check = doctor.check_disk(detect(), path=Path("."), fps=30.0, size=(1920, 1080))
+    m = as_session(Session.X11)
+    check = doctor.check_disk(m, path=Path("."), fps=30.0, size=(1920, 1080))
     assert "замера не было" in check.detail, (
         "без замера оценка обязана называться оценкой, а не выдаваться за факт")
     assert "несжимаемом" in check.detail and "экранном" in check.detail, (
@@ -901,7 +949,8 @@ def test_storage_estimate_names_both_ends() -> None:
         "снова не накроет обычный экран")
 
 
-def test_doctor_prefers_the_measurement_over_the_estimate(tmp_path: Path) -> None:
+def test_doctor_prefers_the_measurement_over_the_estimate(as_session,
+                                                         tmp_path: Path) -> None:
     """`TASK-09`, часть 2, пункт 2: после selftest доктор берёт измеренное.
 
     Расчёт по константе разошёлся с действительностью в 25 раз в TASK-08 и в 14 в
@@ -909,10 +958,11 @@ def test_doctor_prefers_the_measurement_over_the_estimate(tmp_path: Path) -> Non
     """
     from harness.selftest import Measured
 
+    m = as_session(Session.WINDOWS)
     measured = Measured(bytes_per_frame=50483.0, frame_w=1920, frame_h=1080,
                         fps=30.0, compression=41.1, mechanism="screen_dxcam",
                         entries=300, at_unix=1_700_000_000.0)
-    check = doctor.check_disk(detect(), path=tmp_path, fps=30.0,
+    check = doctor.check_disk(m, path=tmp_path, fps=30.0,
                               size=(1920, 1080), measured=measured)
     assert "по замеру" in check.detail
     assert "41×" in check.detail, "степень сжатия обязана быть видна"

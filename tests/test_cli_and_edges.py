@@ -16,19 +16,40 @@ from harness.session import Recorder, Session, SessionError
 # --- CLI -------------------------------------------------------------------
 
 
-def test_cli_backends_reports_honestly(capsys: pytest.CaptureFixture[str]) -> None:
-    from harness.cli import main
+@pytest.mark.environment("подменяются и сессия, и наличие пакета mss")
+def test_cli_backends_reports_honestly(capsys: pytest.CaptureFixture[str],
+                                      as_session, with_package,
+                                      without_package) -> None:
+    """Доклад о доступности соответствует **объявленной** машине, а не текущей.
 
-    assert main(["backends"]) == 0
-    out = capsys.readouterr().out
-    assert "synthetic" in out and "replay" in out
-    # На машине без дисплея захват экрана обязан быть помечен как недоступный,
-    # а не молча «доступный».
-    for line in out.splitlines():
-        if "screen_mss" in line:
-            import os
-            has_display = bool(os.environ.get("DISPLAY") or os.environ.get("WAYLAND_DISPLAY"))
-            assert ("[есть]" in line) == has_display
+    Прежняя редакция сравнивала строку доклада с наличием `DISPLAY` и падала на машине
+    оператора: на Windows этой переменной нет вовсе, графическая сессия определяется
+    через `platform.system()`, и тест сравнивал доклад с признаком, которого на этой
+    платформе не существует. Проверялось окружение, а не поведение.
+
+    Доступность — **конъюнкция**: нужна графическая сессия и нужен пакет. Объявляются
+    оба условия, и проверяются три случая, потому что двух мало: «есть сессия, нет
+    пакета» и «нет сессии, есть пакет» — разные причины недоступности, и доклад,
+    путающий их, отправит оператора чинить не то.
+    """
+    from harness.cli import main
+    from harness.machine import Session
+
+    cases = ((Session.X11, True, True),      # сессия и пакет — доступен
+             (Session.X11, False, False),    # пакета нет
+             (Session.NONE, True, False))    # сессии нет
+    for session, has_mss, expect in cases:
+        as_session(session)
+        (with_package("mss") if has_mss else without_package("mss"))
+        assert main(["backends"]) == 0
+        out = capsys.readouterr().out
+        assert "synthetic" in out and "replay" in out
+        lines = [ln for ln in out.splitlines() if "screen_mss" in ln]
+        assert lines, "механизм захвата экрана вообще не упомянут в докладе"
+        for line in lines:
+            assert ("[есть]" in line) == expect, (
+                f"объявлено: сессия {session}, mss {'есть' if has_mss else 'нет'} — "
+                f"а доклад говорит иначе: {line!r}")
 
 
 def test_cli_profile_shows_both_hashes(capsys: pytest.CaptureFixture[str]) -> None:
@@ -69,13 +90,33 @@ def test_cli_verify_fails_on_broken_session(tmp_path: Path,
     assert '"ok": false' in capsys.readouterr().out
 
 
-def test_cli_record_without_display_fails_loudly(tmp_path: Path,
-                                                monkeypatch: pytest.MonkeyPatch) -> None:
-    """Без дисплея запись обязана отказать, а не писать чёрные кадры."""
-    from harness.cli import main
+@pytest.mark.environment("сессия подменяется на «ничего»")
+def test_cli_record_without_display_fails_loudly(tmp_path: Path, as_session) -> None:
+    """Без графической сессии запись отказывает, а не пишет чёрные кадры.
 
-    monkeypatch.delenv("DISPLAY", raising=False)
-    monkeypatch.delenv("WAYLAND_DISPLAY", raising=False)
+    Сессия **подменяется**, а не предполагается отсутствующей. Прежняя редакция удаляла
+    `DISPLAY` и ждала кода 2; на машине оператора дисплей есть, удаление переменных на
+    Windows не значит ничего, запись прошла и вернула 0. Тест падал, хотя код был прав.
+    """
+    from harness.cli import main
+    from harness.machine import Session
+
+    as_session(Session.NONE)
+    assert main(["record", str(tmp_path / "s"), "--frames", "1"]) == 2
+    assert not (tmp_path / "s" / "frames").exists()
+
+
+@pytest.mark.environment("сессия подменяется на Wayland")
+def test_cli_record_under_wayland_fails_loudly(tmp_path: Path, as_session) -> None:
+    """Под Wayland запись тоже отказывает: mss отдала бы чёрный кадр или XWayland.
+
+    Это второй случай отказа, и он важнее первого: сессия есть, захват формально
+    возможен, и молчаливая запись была бы неотличима по формату от настоящей.
+    """
+    from harness.cli import main
+    from harness.machine import Session
+
+    as_session(Session.WAYLAND)
     assert main(["record", str(tmp_path / "s"), "--frames", "1"]) == 2
     assert not (tmp_path / "s" / "frames").exists()
 
@@ -236,11 +277,18 @@ def test_symbol_collision_is_reported(tmp_path: Path) -> None:
         DebugChannel(tmp_path / "d", mode="r").symbol_table()
 
 
-def test_unavailable_backends_fail_loudly(monkeypatch: pytest.MonkeyPatch) -> None:
+@pytest.mark.environment("подменяются сессия и отсутствие пакетов dxcam, mss")
+def test_unavailable_backends_fail_loudly(as_session, without_package) -> None:
     """Недоступный backend падает с внятным текстом, а не отдаёт чёрные кадры.
 
     Это главное правило проекта в действии: функция, возвращающая правдоподобное
     значение вместо реального, ломает эксперимент незаметно.
+
+    **Недоступность объявляется, а не берётся из окружения.** Прежняя редакция ждала
+    отказа от `WindowsScreenCapture`, полагаясь на то, что `dxcam` не установлен; на
+    машине оператора он установлен и работает (TASK-08), и тест падал, проверив
+    окружение вместо поведения. Теперь отсутствие пакета объявлено фикстурой, и
+    проверяется именно текст отказа — что он называет настоящую причину.
     """
     from harness.capture.base import BackendUnavailable
     from harness.capture.screen import (LoopbackAudio, MacScreenCapture, ScreenCapture,
@@ -248,9 +296,10 @@ def test_unavailable_backends_fail_loudly(monkeypatch: pytest.MonkeyPatch) -> No
     from harness.inject.base import InjectionUnavailable
     from harness.inject.stop import HotkeyListener, StopSwitch
     from harness.inject.uinput_device import WindowsSendInput
+    from harness.machine import Session
 
-    monkeypatch.delenv("DISPLAY", raising=False)
-    monkeypatch.delenv("WAYLAND_DISPLAY", raising=False)
+    as_session(Session.NONE)
+    without_package("dxcam", "mss")
 
     # ScreenCaptureKit по-прежнему не написан и говорит это прямо.
     with pytest.raises(BackendUnavailable, match="не реализован"):
