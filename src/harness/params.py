@@ -85,6 +85,7 @@ MODULE_PATHS: tuple[tuple[str, tuple[Path_, ...]], ...] = (
     # Только живая запись: захват экрана, инъекция ввода, осмотр машины.
     ("capture/", (Path_.LIVE,)),
     ("selftest.py", (Path_.LIVE,)),
+    ("progress.py", (Path_.LIVE,)),
     ("doctor.py", (Path_.LIVE,)),
     ("machine.py", (Path_.LIVE,)),
     ("inject/", (Path_.LIVE,)),

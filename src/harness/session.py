@@ -48,6 +48,71 @@ class SessionError(RuntimeError):
     pass
 
 
+#: Код записи о прерывании записи оператором. Вид записи — `INTERVENTION`, а не
+#: `CAPTURE_GAP`: разрыв означает **потерю** (кадры были, но не записались), а здесь
+#: ничего не потеряно — человек решил остановиться, и это его действие, `Actor.HUMAN`.
+#: Смешать одно с другим значило бы считать нажатие Ctrl+C поломкой захвата.
+INTERRUPTED = "record_interrupted"
+
+
+def next_free_path(root: Path) -> Path:
+    """Свободный путь рядом: `сессия`, `сессия-2`, `сессия-3`, …
+
+    Нужен для отказа, который **называет команду**: «каталог не пуст» без готовой строки
+    оператор читает как «делай что-нибудь», и в прошлый раз это кончилось тем, что он
+    не сделал ничего.
+    """
+    root = Path(root)
+    if not root.exists() or not any(root.iterdir()):
+        return root
+    for n in range(2, 1000):
+        candidate = root.parent / f"{root.name}-{n}"
+        if not candidate.exists() or not any(candidate.iterdir()):
+            return candidate
+    raise SessionError(f"рядом с {root} тысяча занятых имён — назовите путь сами")
+
+
+def describe_existing(root: Path) -> str:
+    """Что уже лежит в каталоге и что с этим делать. Для внятного отказа.
+
+    Три разных случая, и путать их нельзя: годная запись, прерванная запись и посторонние
+    файлы. Прежний отказ говорил одно и то же на все три — «не пуст», — и оператор,
+    прервавший запись на середине, получал его как приговор своей записи, хотя запись
+    была цела и годна к приёму.
+    """
+    root = Path(root)
+    free = next_free_path(root)
+    if not (root / SESSION_META).exists():
+        listed = sorted(p.name for p in root.iterdir())[:5]
+        return (f"{root} не пуст, и это не сессия: {', '.join(listed)}"
+                + (" …" if len(listed) == 5 else "")
+                + f"\nЗапись не пишется поверх чужих файлов. Свободный путь рядом:"
+                  f"\n  harness record {free}")
+    try:
+        with Session.open(root) as s:
+            entries = len(list(s.journal))
+            stop = s.interrupted
+    except Exception as e:                     # битая или недописанная запись
+        return (f"{root}: сессия есть, но не открывается ({type(e).__name__}: {e}).\n"
+                f"Проверить: harness verify {root}\n"
+                f"Писать новую: harness record {free}")
+    what = ("прервана: " + stop["note"]) if stop else "дописана до конца"
+    # Длина в предлагаемой команде — та, которую оператор **уже просил**, а не круглое
+    # число из головы: прерванная запись знает, на сколько её заводили, и «допишите то,
+    # что не дописалось» — это готовая команда, а не совет подумать. Там, где длины нет,
+    # ключа в команде тоже нет: выдуманное число в строке для копирования — тот же обман,
+    # что оценка, выданная за замер.
+    again = f"harness record {free}"
+    if stop and float(stop.get("total_s") or 0) > 0:
+        again += f" --seconds {float(stop['total_s']):.0f}"
+    return (f"{root}: здесь уже лежит сессия, {entries} записей, {what}.\n"
+            "Сессии не дописываются поверх: журнал только дозаписывается внутри своей "
+            "линии, а вторая запись — это другая линия.\n"
+            f"Эта запись годна к приёму: harness ingest {root} --corpus "
+            f"{root.parent / 'corpus'} --kind ВИД\n"
+            f"Писать следующую: {again}")
+
+
 #: Поля профиля, описывающие **свойство самой записи**, и место, где оно сверяется с
 #: записью. Правило общее (TASK-10, часть 4): расхождение — отказ, а не предупреждение.
 #:
@@ -111,9 +176,10 @@ class Recorder:
         self.root = Path(root)
         self.profile = profile
         if self.root.exists() and any(self.root.iterdir()):
-            raise SessionError(
-                f"{self.root} не пуст. Сессии не дописываются поверх чужих: "
-                "запись только дозаписывается внутри своей сессии")
+            # Отказ **осматривает** каталог и называет команду. Прежний говорил только
+            # «не пуст», и оператор, прервавший запись, получал этот отказ на повторную
+            # попытку — то есть на ровном месте вторично упирался в то же место.
+            raise SessionError(f"{self.root} не пуст.\n" + describe_existing(self.root))
         self.root.mkdir(parents=True, exist_ok=True)
         meta = SessionMeta(time.time(), profile.as_dict(), source, synthetic,
                            platform.platform(), __version__, note)
@@ -343,6 +409,27 @@ class Recorder:
                                    Actor.HUMAN, ActorLayer.HUMAN,
                                    event={"code": code, **detail})
 
+    def record_interrupted(self, *, elapsed_s: float, total_s: float,
+                           written: int, unchanged: int, reason: str = "Ctrl+C") -> Entry:
+        """Оператор остановил запись. На чём именно остановил — часть записи.
+
+        Пишется **до** закрытия хранилищ, поэтому попадает в журнал целиком, и запись
+        остаётся годной: частичный корпус — корпус, а трассировка из середины
+        `zlib.compress` — не результат ни в каком виде.
+
+        Отметка идёт в журнал, а не в `session.json`: журнал — источник истины, и всё
+        остальное из него выводимо (инвариант 1). `Session.interrupted` её оттуда и
+        читает, а не хранит вторую копию.
+        """
+        note = (f"прервано на {elapsed_s:.0f} с из {total_s:.0f} с "
+                f"({written} кадров, {unchanged} без изменений)")
+        return self.record_intervention(
+            INTERRUPTED,
+            {"elapsed_s": round(float(elapsed_s), 3),
+             "total_s": round(float(total_s), 3),
+             "frames_written": int(written), "unchanged": int(unchanged),
+             "reason": reason, "note": note})
+
     def record_note(self, text: str) -> Entry:
         return self.journal.append(EntryKind.NOTE, self.clocks.stamp(), Actor.HUMAN,
                                    ActorLayer.HUMAN,
@@ -503,10 +590,22 @@ class Session:
         }
         problems: list[str] = report["problems"]
 
-        if len(self._cursors) != len(self.frames):
+        # Отметка «без изменений» — запись журнала вида FRAME, ссылающаяся на **уже
+        # лежащий** блок: нового блока она не добавляет. Считать её кадром хранилища
+        # нельзя, и до TASK-16 именно это здесь и делалось: любая запись со статикой
+        # объявлялась сломанной. Первой такой была бы запись «неподвижность» — опорная
+        # запись минимального набора, у которой отметок больше, чем кадров, — то есть
+        # оператор получил бы приговор своей записи на самой важной из них.
+        marks = sum(1 for e in self.journal.frames()
+                    if e.event.get("code") == "unchanged")
+        fresh = len(self._cursors) - marks
+        report["unchanged_marks"] = marks
+        report["frames_new"] = fresh
+        if fresh != len(self.frames):
             problems.append(
-                f"кадров в журнале {len(self._cursors)}, в хранилище {len(self.frames)}: "
-                "часть кадров записана без записи журнала или наоборот")
+                f"новых кадров в журнале {fresh} (плюс {marks} отметок «без изменений»), "
+                f"в хранилище {len(self.frames)}: часть кадров записана без записи "
+                "журнала или наоборот")
 
         # Пропуски тиков мира: в вехе 0 тик мира — номер кадра, значит шаг 1.
         gaps = []
@@ -561,8 +660,25 @@ class Session:
                     problems.append(f"кадр {i} не читается: {exc}")
 
         report["branches"] = [b.branch_id for b in branch_chain(self.root / "journal")]
+        # Прерванная запись — **не** проблема целостности: она короче задуманной, но
+        # цела. Поэтому отметка идёт в отчёт отдельным полем, а в `problems` не идёт:
+        # иначе `harness verify` объявлял бы годный частичный корпус сломанным, и
+        # оператор второй раз получал бы приговор своей записи.
+        report["interrupted"] = self.interrupted
         report["ok"] = not problems
         return report
+
+    @property
+    def interrupted(self) -> dict[str, Any] | None:
+        """Отметка о прерывании, если она есть. Выводится из журнала, не хранится.
+
+        `None` — запись дописана до конца. Словарь — событие записи `INTERVENTION` с
+        кодом `record_interrupted`: на какой секунде из какой, сколько кадров успело.
+        """
+        for e in self.journal:
+            if e.kind is EntryKind.INTERVENTION and e.event.get("code") == INTERRUPTED:
+                return dict(e.event)
+        return None
 
     def close(self) -> None:
         self.frames.close()

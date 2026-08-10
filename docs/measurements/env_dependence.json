@@ -2,48 +2,38 @@
   "runs": [
     {
       "env": "container",
-      "passed": 648,
-      "failed": [
-        "tests/test_panel.py::test_experiments_come_from_real_measurements"
-      ],
+      "passed": 679,
+      "failed": [],
       "skipped": 0,
-      "total": 649
+      "total": 679
     },
     {
       "env": "x11",
-      "passed": 647,
-      "failed": [
-        "tests/test_panel.py::test_experiments_come_from_real_measurements"
-      ],
+      "passed": 678,
+      "failed": [],
       "skipped": 1,
-      "total": 649
+      "total": 679
     },
     {
       "env": "wayland",
-      "passed": 647,
-      "failed": [
-        "tests/test_panel.py::test_experiments_come_from_real_measurements"
-      ],
+      "passed": 678,
+      "failed": [],
       "skipped": 1,
-      "total": 649
+      "total": 679
     },
     {
       "env": "windows",
-      "passed": 647,
-      "failed": [
-        "tests/test_panel.py::test_experiments_come_from_real_measurements"
-      ],
+      "passed": 678,
+      "failed": [],
       "skipped": 1,
-      "total": 649
+      "total": 679
     },
     {
       "env": "macos",
-      "passed": 647,
-      "failed": [
-        "tests/test_panel.py::test_experiments_come_from_real_measurements"
-      ],
+      "passed": 678,
+      "failed": [],
       "skipped": 1,
-      "total": 649
+      "total": 679
     }
   ],
   "environments": {
@@ -109,7 +99,7 @@
   "flipped": [],
   "false_green_share": 0.0,
   "coverage": {
-    "tests_run": 649,
+    "tests_run": 679,
     "environments": 5,
     "note": "покрытие — по числу тестов, исполненных в каждом окружении. Замер видит только то, что запускалось: тест, пропущенный во всех окружениях, о своей зависимости не сообщает никак"
   },

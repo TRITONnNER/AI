@@ -89,14 +89,18 @@ def fig_identity(out: Path, data: dict[str, Any]) -> Path:
     after = [c["error_after"] for c in rows]
     ys = range(len(rows))
 
-    ax.barh([y + 0.19 for y in ys], before, 0.34, color=BEFORE)
-    ax.barh([y - 0.19 for y in ys], after, 0.34,
+    # Смещения со знаком минус у «до» — потому что ось перевёрнута (`invert_yaxis`), и
+    # `y + 0.19` рисуется **ниже**, а не выше. Первая редакция ставила «до» на `y + 0.19`
+    # при подписи «верхняя полоса — до пересмотра», то есть подпись говорила ровно
+    # обратное тому, что на картинке: читатель видел «ошибка 1 → 6» там, где было 6 → 1.
+    ax.barh([y - 0.19 for y in ys], before, 0.34, color=BEFORE)
+    ax.barh([y + 0.19 for y in ys], after, 0.34,
             color=[AFTER if a <= b else BAD for a, b in zip(after, before)])
     for y, (b, a) in enumerate(zip(before, after)):
-        ax.text(b + 0.12, y + 0.19, str(b), va="center", fontsize=LABEL_PT - 2,
-                color=NEUTRAL)
-        ax.text(a + 0.12, y - 0.19, str(a), va="center", fontsize=LABEL_PT - 2,
-                color=NEUTRAL)
+        ax.text(b + 0.12, y - 0.19, str(b), va="center", fontsize=LABEL_PT - 2,
+                color=BEFORE)
+        ax.text(a + 0.12, y + 0.19, str(a), va="center", fontsize=LABEL_PT - 2,
+                color=AFTER if a <= b else BAD)
     ax.set_yticks(list(ys))
     ax.set_yticklabels(labels, fontsize=LABEL_PT - 3)
     ax.set_xlim(0, max(before + after) + 1.2)
@@ -105,9 +109,12 @@ def fig_identity(out: Path, data: dict[str, Any]) -> Path:
                   "красная означала бы, что пересмотр сделал хуже", fontsize=LABEL_PT)
     ax.invert_yaxis()
 
+    # Подпись короче на две трети строки: прежняя обрезалась справа на слове «источник
+    # отпечатка», то есть единица независимости на картинке была не дочитываема, хотя
+    # инвариант 28 требует её присутствия.
     _stamp(fig, n=f"{len(cases)} прогонов, 2 источника отпечатков",
-           unit="карточка; для утверждения о методе — источник отпечатка",
-           compares="ошибка тождества до и после пересмотра, по каждому источнику")
+           unit="карточка; о методе — источник отпечатка",
+           compares="ошибка тождества до и после пересмотра, по источникам")
     return _save(fig, out / "22-tozhdestvo.png",
                  "Направление ошибки тождества задаёт отпечаток, а не механика.")
 

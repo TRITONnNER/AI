@@ -605,8 +605,13 @@ def plan_text(set_name: str = "minimal") -> str:
         rows.append(f"  {i}. {name:<11} {k['title']} — {k['duration']}")
         rows.append(f"     зачем: {k['why']}")
         rows.append(f"     как:   {k['how']}")
+        # `--kind` стоит уже в команде записи, а не только в команде приёма: от вида
+        # зависит **канал хода записи**. На записи неподвижности ход уходит в файл, потому
+        # что мигающая строка в терминале попала бы в кадр как изменение, а изменение там
+        # и есть измеряемая величина.
         rows.append(f"     команда: harness record ~/harness-live/{name} "
-                    f"--actor human --seconds {_seconds_of(k['duration'])}")
+                    f"--actor human --kind {name} "
+                    f"--seconds {_seconds_of(k['duration'])}")
         rows.append(f"              harness ingest ~/harness-live/{name} "
                     f"--corpus ~/harness-live/corpus --kind {name}")
         rows.append("")

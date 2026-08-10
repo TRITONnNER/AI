@@ -23,6 +23,17 @@ from typing import Any
 from pathlib import Path
 
 
+def _record_kinds() -> tuple[str, ...]:
+    """Виды записи для `--kind`. Из одного места (`corpus.live.KINDS`), а не списком.
+
+    Второй список здесь разошёлся бы с первым молча — ровно так же, как разошлись три
+    копии знания о Wayland (TASK-15).
+    """
+    from .corpus.live import KINDS
+
+    return tuple(sorted(KINDS))
+
+
 def _print_json(obj: object) -> None:
     print(json.dumps(obj, ensure_ascii=False, indent=2, sort_keys=True, default=str))
 
@@ -730,7 +741,9 @@ def cmd_record(args: argparse.Namespace) -> int:
     from .core.journal import Actor, ActorLayer
     from .core.profile import MILESTONE_0
     from .corpus.live import plan_text
-    from .session import Recorder
+    from .capture.record_loop import run_turns
+    from .progress import Progress, dir_bytes
+    from .session import Recorder, describe_existing
 
     if args.plan:
         print(plan_text(getattr(args, "plan_set", "minimal")))
@@ -745,6 +758,14 @@ def cmd_record(args: argparse.Namespace) -> int:
               f"= {frames} кадров")
     elif args.seconds is not None:
         print("указаны и --frames, и --seconds; беру --frames", file=sys.stderr)
+
+    # Занятый каталог проверяется **до** открытия захвата: иначе оператор ждёт выбора
+    # механизма, первого кадра и звукового входа, чтобы получить отказ о том, что было
+    # видно с самого начала.
+    if Path(args.path).exists() and any(Path(args.path).iterdir()):
+        print(f"{args.path} не пуст.", file=sys.stderr)
+        print(describe_existing(Path(args.path)), file=sys.stderr)
+        return 2
 
     human = args.actor == "human"
     actor = Actor.HUMAN if human else Actor.NONE
@@ -818,54 +839,44 @@ def cmd_record(args: argparse.Namespace) -> int:
     written = 0
     unchanged = 0
     audio_blocks = 0
+    interrupted = False
+
+    # Ход записи. Канал выбирается по виду записи и объявляется вслух: на записи
+    # неподвижности мигающая строка в терминале попала бы в кадр как изменение, а
+    # изменение там — измеряемая величина.
+    prog = Progress.from_profile(profile, total_turns=frames, path=Path(args.path),
+                                 kind=getattr(args, "kind", None),
+                                 channel=getattr(args, "progress", None))
+    hello = prog.open()
+    if hello:
+        print(hello)
+
     try:
         with Recorder(args.path, profile=profile, source=cap.name,
                       synthetic=False, note=args.note, lineage_id=lid) as rec:
-            while written + unchanged < frames:
-                frame = first if written + unchanged == 0 else cap.read()
-                if frame is UNCHANGED:
-                    # Экран не менялся. **Не пропуск.** На записи «неподвижность»
-                    # это основной исход: считать его потерей значило бы объявить
-                    # сломанной запись, прошедшую идеально.
-                    if written == 0:
-                        # До первого кадра ссылаться не на что — а первый кадр
-                        # Desktop Duplication отдаёт всегда. Значит это поломка.
-                        rec.record_gap("unchanged_before_first_frame",
-                                       {"turns": unchanged + 1})
-                        unchanged += 1
-                        continue
-                    rec.record_unchanged(actor=actor, actor_layer=layer)
-                    unchanged += 1
-                    continue
-                if frame is None:
-                    rec.record_gap("source_ended", {"after_frames": written})
-                    break
-                block = None
-                if audio_src is not None:
-                    try:
-                        got = audio_src.read()
-                        block = None if got is None else got.samples
-                    except AudioOverflow as over:
-                        # Переполнение — разрыв синхронизации, и он идёт в журнал.
-                        block = over.block.samples
-                        rec.record_gap("audio_overflow", {"after_frames": written})
-                    except Exception as e:
-                        rec.record_gap("audio_failed", {"after_frames": written,
-                                                        "reason": str(e)[:120]})
-                        audio_src = None
-                if block is not None:
-                    audio_blocks += 1
-                rec.record_frame(frame.image, t_world=frame.t_world,
-                                 audio=block, actor=actor, actor_layer=layer)
-                written += 1
+            # Сам цикл — в `capture.record_loop`: он обязан проверяться офлайн, без
+            # дисплея, и прерывание перехватывает внутри открытой сессии. Снаружи уже
+            # поздно: `with` закрывает хранилища, и записать отметку некуда — ровно
+            # поэтому её и не было.
+            turns = run_turns(rec, source=cap, frames=frames, first=first,
+                              actor=actor, actor_layer=layer, audio=audio_src,
+                              progress=prog,
+                              disk_bytes=lambda: dir_bytes(Path(args.path)))
+        written, unchanged = turns.written, turns.unchanged
+        audio_blocks, interrupted = turns.audio_blocks, turns.interrupted
     finally:
         cap.stop()
         if audio_src is not None:
             audio_src.stop()
-    # Два числа, а не одно: «кадров» и «без изменений». Одно число здесь означало бы
-    # либо потерянную статику, либо мнимые потери — и то и другое ломает опорный замер.
-    print(f"записано: {written} изменившихся кадров и {unchanged} отметок "
-          f"«без изменений» → {args.path} ({audio_note})")
+    # Итог — те же числа, что показывались в ходе, плюс путь. Два числа кадров, а не
+    # одно: «кадров» и «без изменений». Одно означало бы либо потерянную статику, либо
+    # мнимые потери — и то и другое ломает опорный замер.
+    print(prog.finish(written=written, unchanged=unchanged,
+                      disk_bytes=lambda: dir_bytes(Path(args.path)),
+                      interrupted=interrupted, audio_note=audio_note))
+    if interrupted:
+        print("прервано вами; запись закрыта и годна к приёму — отметка о прерывании "
+              "лежит в журнале")
     if unchanged and not written:
         print("ни одного изменившегося кадра: если это была запись неподвижности — "
               "так и должно быть", file=sys.stderr)
@@ -1153,6 +1164,15 @@ def build_parser() -> argparse.ArgumentParser:
     rec.add_argument("--note", default=None)
     rec.add_argument("--actor", choices=("human", "none"), default="none",
                      help="кто действует: human для демонстрации оператором")
+    # Вид записи нужен **до** приёма, а не только при `ingest`: от него зависит, куда
+    # идёт ход записи. На записи неподвижности мигающая строка в терминале попадёт в
+    # кадр как изменение, а изменение там — измеряемая величина.
+    rec.add_argument("--kind", default=None, choices=tuple(_record_kinds()),
+                     help="что записываете; от вида зависит канал хода записи "
+                          "(для stillness ход идёт в файл, а не на экран)")
+    rec.add_argument("--progress", default=None, choices=("line", "file", "none"),
+                     help="куда печатать ход: строкой на месте, в файл рядом с "
+                          "сессией или никуда. По умолчанию — из профиля")
     rec.add_argument("--plan", action="store_true",
                      help="только напечатать, что записать, и ничего не писать")
     rec.add_argument("--set", dest="plan_set", default="minimal",
