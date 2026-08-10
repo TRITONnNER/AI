@@ -69,10 +69,19 @@ class Plan:
     audio_device: str | None = None
     note: str | None = None
     progress_channel: str | None = None
+    #: Что попадает в кадр (TASK-21, часть 1). Вид — структурный переключатель профиля;
+    #: рамка и заголовок окна — условия одной записи, в хеш не входят.
+    source_kind: str = "display"
+    window: str = ""
+    region: tuple[int, int, int, int] | None = None
 
     def __post_init__(self) -> None:
         if self.seconds is None and self.turns is None:
             raise ValueError("в плане записи нет ни срока, ни числа оборотов")
+        from .capture.source import KINDS
+
+        if self.source_kind not in KINDS:
+            raise ValueError(f"нет такого источника: {self.source_kind!r}; есть {list(KINDS)}")
 
 
 @dataclass(slots=True)
@@ -90,6 +99,10 @@ class Outcome:
     cost: dict[str, Any] = field(default_factory=dict)
     final_line: str = ""
     interrupted: bool = False
+    #: Источник: вид, откуда рамка и хеш структуры. Печатается до записи (TASK-21, ч. 1).
+    source_kind: str = "display"
+    source_why: str = ""
+    structure_hash: str = ""
 
     def as_dict(self) -> dict[str, Any]:
         st = self.turns.stages() if self.turns is not None else {}
@@ -105,6 +118,8 @@ class Outcome:
             "stop_reason_text": STOP_REASONS.get(
                 getattr(self.turns, "stop_reason", ""), ""),
             "interrupted": self.interrupted,
+            "source": {"kind": self.source_kind, "why": self.source_why,
+                       "structure_hash": self.structure_hash},
             "stages": st, "cost": self.cost, "final_line": self.final_line,
         }
 
@@ -131,19 +146,38 @@ def record(plan: Plan, *,
     то есть когда уже известно, **что** записывается, но записывать ещё не начали. Панели
     это нужно, чтобы показать механизм и размер кадра сразу, а не после записи.
     """
+    from .capture.base import BackendUnavailable
     from .capture.select import open_screen
+    from .capture.source import (Region, SourceError, WindowFollowing, resolve,
+                                 system_windows)
     from .core.lineage import lineage_id
     from .machine import detect
 
     check_free(plan.path)
 
     machine = detect()
+    # Что снимать, решается **до** открытия механизма: рамка нужна самому механизму, а
+    # отказ «окна такого нет» должен прийти раньше, чем захват что-нибудь запишет.
+    try:
+        region, target, region_why = resolve(
+            plan.source_kind,
+            region=Region(*plan.region) if plan.region else None,
+            window=plan.window)
+    except (SourceError, BackendUnavailable) as e:
+        raise RecordRefused(f"источник задан неверно: {e}", code="bad_source",
+                            hint="виды источников: harness record --help") from e
     choice = open_screen(machine,
-                         gray=MILESTONE_0.structural["frame_format"] == "gray8")
+                         gray=MILESTONE_0.structural["frame_format"] == "gray8",
+                         region=region.as_tuple() if region else None)
     if choice.source is None:
         raise RecordRefused(f"захват недоступен: {choice.why_text()}", code="no_capture",
                             hint="что именно чинить и какой командой: harness doctor")
     cap = choice.source
+    if target is not None:
+        # Захват окна — это слежение за окном, а не съёмка прямоугольника, где окно
+        # однажды было. Обёртка перепрашивает рамку каждый оборот и превращает
+        # закрытие окна в наблюдение, а не в разрыв (часть 6).
+        cap = WindowFollowing(cap, target, system_windows())
 
     audio_src = None
     audio_note = "без звука"
@@ -175,7 +209,13 @@ def record(plan: Plan, *,
         if first is None:
             raise RecordRefused("захват не отдал ни одного кадра", code="no_frame",
                                 hint="harness doctor скажет, что с экраном")
+        # Профиль записи объявляет **действительный** источник: иначе запись, снятая с
+        # окна, лежала бы в той же ветке журнала, что запись экрана, и их числа сводились
+        # бы в одну медиану (TASK-21, часть 1). Вид меняет `structure_hash`, то есть
+        # форкает журнал, — это и означает «несравнимы».
         profile = MILESTONE_0.for_frame(first.image)
+        if plan.source_kind != profile.structural["capture_source"]:
+            profile = profile.with_structural(capture_source=plan.source_kind)
         h, w = first.image.shape[:2]
 
         prog = progress or Progress.from_profile(
@@ -187,7 +227,9 @@ def record(plan: Plan, *,
         out = Outcome(path=plan.path, mechanism=choice.why_text(),
                       mechanism_caveat=choice.caveat or "", audio_note=audio_note,
                       lineage_id="", profile_hash=profile.profile_hash[:8],
-                      frame=(int(w), int(h)))
+                      frame=(int(w), int(h)),
+                      source_kind=plan.source_kind, source_why=region_why,
+                      structure_hash=profile.structure_hash)
         lid = lineage_id(MILESTONE_0, seed=None,
                          note=f"живая запись: {machine.os_name}/{machine.session}")
         out.lineage_id = lid
@@ -198,6 +240,13 @@ def record(plan: Plan, *,
         layer = ActorLayer.HUMAN if plan.actor_human else ActorLayer.NONE
         with Recorder(plan.path, profile=profile, source=cap.name, synthetic=False,
                       note=plan.note, lineage_id=lid) as rec:
+            # Рамка и её происхождение — в журнал записью об источниках. Не в профиль:
+            # координаты окна зависят от того, куда его подвинули мышью, и форкать журнал
+            # при каждом перетаскивании было бы бессмысленно.
+            rec.record_source(kind=plan.source_kind,
+                              region=region.as_dict() if region else None,
+                              why=region_why,
+                              window=target.id if target is not None else "")
             turns = run_turns(rec, source=cap, frames=plan.turns, first=first,
                               actor=actor, actor_layer=layer, audio=audio_src,
                               progress=prog, seconds=plan.seconds,

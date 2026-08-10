@@ -815,10 +815,15 @@ def cmd_record(args: argparse.Namespace) -> int:
     # Дальше — общий путь записи (`recording.record`), тот же, которым пишет панель.
     # Второй цикл записи в сервере разошёлся бы с этим через месяц, как трижды разошлось
     # знание о Wayland (TASK-15). Печать остаётся здесь: модуль записи ничего не печатает.
+    from .capture.source import pairing
+
     plan = Plan(path=target, kind=getattr(args, "kind", None), seconds=seconds,
                 turns=frames, actor_human=args.actor == "human",
                 with_audio=not args.no_audio, audio_device=args.audio_device,
-                note=args.note, progress_channel=getattr(args, "progress", None))
+                note=args.note, progress_channel=getattr(args, "progress", None),
+                source_kind=getattr(args, "source_kind", "display"),
+                window=getattr(args, "window", "") or "",
+                region=(tuple(args.region) if getattr(args, "region", None) else None))
 
     def say_ready(o: Any) -> None:
         print(f"механизм: {o.mechanism}")
@@ -826,6 +831,18 @@ def cmd_record(args: argparse.Namespace) -> int:
             print(f"ВНИМАНИЕ: {o.mechanism_caveat}")
         print(f"кадр {o.frame[0]}×{o.frame[1]}: профиль записи построен по нему, "
               f"а не по значению из схемы")
+        # Источник печатается **до** записи вместе с тем, откуда взялась рамка: узнать
+        # после записи, что снималось не то, значит потерять запись целиком.
+        print(f"источник: {o.source_why}")
+        # Сочетание источника и области ввода объявляется **до** записи: «невидимая рука»
+        # — дефект постановки, и узнать о нём после записи значит записать зря.
+        pair = pairing(o.source_kind, str(MILESTONE_0.parameters["input_scope"]))
+        head = "ВНИМАНИЕ: " if not pair["declared"] else ""
+        print(f"{head}ввод и кадр — «{pair['kind']}»: {pair['text']}")
+        if o.source_kind != "display":
+            print(f"  запись попадёт в отдельную ветку журнала (structure_hash "
+                  f"{o.structure_hash[:8]}): записи «{o.source_kind}» и «display» "
+                  f"несравнимы и в одно число не сводятся")
         if o.audio_note.startswith("без звука ("):
             print(f"звук не пишется: {o.audio_note[11:-1]}", file=sys.stderr)
             print("это не мешает записи; настроить вход поможет harness doctor",
@@ -1017,6 +1034,10 @@ def cmd_cost(args: argparse.Namespace) -> int:
         int(p["frame_compress_level"])
     keyframe = args.keyframe or int(p["frame_keyframe_interval"])
 
+    # Разрезы по размеру и по рычагам печатают свой заголовок: у них другие столбцы.
+    # Общий заголовок здесь печатался бы вторым и противоречил бы их первому.
+    if getattr(args, "sizes", False) or getattr(args, "levels", False):
+        return _cost_by_area(args, fps=fps, level=level, keyframe=keyframe)
     # При `--json` на выходе **только** json: заголовок перед ним делает вывод
     # непарсимым, а ключ `--json` заводится ровно для того, чтобы его парсили.
     if not args.json:
@@ -1048,6 +1069,68 @@ def cmd_cost(args: argparse.Namespace) -> int:
     else:
         print(f"в бюджет {1000 / fps:.1f} мс влезает даже он")
     print("\nСравнить с живой записью: строка «на что ушло время» в конце harness record")
+    return 0
+
+
+def _cost_by_area(args: argparse.Namespace, *, fps: float, level: int,
+                  keyframe: int) -> int:
+    """Стоимость по размеру области и сравнение двух рычагов. TASK-21, часть 3.
+
+    Отдельной функцией, а не ветками внутри `cmd_cost`: у этих таблиц другие столбцы и
+    другой вывод. Ветки в одной печати уже дали бы третий формат, склеенный из двух.
+    """
+    from .cost import LEVER_CASES, levers, scan_sizes
+
+    rows = scan_sizes(frames=args.frames, level=level, keyframe=keyframe, fps=fps)
+    lever_rows = levers(frames=args.frames, keyframe=keyframe) \
+        if getattr(args, "levels", False) else []
+    if args.json:
+        _print_json({"fps": fps, "compress_level": level, "keyframe_interval": keyframe,
+                     "frames_per_size": args.frames, "sizes": rows,
+                     "levers": lever_rows, "lever_cases": list(LEVER_CASES)})
+        return 0
+
+    print(f"уровень сжатия {level}, ключевой каждые {keyframe}, бюджет кадра при "
+          f"{fps:g} кадр/с — {1000 / fps:.1f} мс")
+    print(f"кадров на размер: {args.frames}; экран синтетический (рабочий стол), доля "
+          "изменения полная — размеры сравниваются там, где бюджет и трещит")
+    print()
+    print("       кадр   пикселей   стоимость   дешевле    на кадр   потолок   что это")
+    for r in rows:
+        print(f"  {r['width']:>5}×{r['height']:<5} {r['pixel_share']:>7.1%}   "
+              f"{r['cost_share']:>8.1%}   {r['cheaper_times']:>6.2f}×  "
+              f"{r['kib_per_frame']:>7.1f} КиБ  {r['max_fps']:>6.0f}/с   {r['meaning']}")
+    win = next((r for r in rows if r["width"] == 960), rows[-1])
+    print()
+    print(f"окно {win['width']}×{win['height']} дешевле полного кадра в "
+          f"{win['cheaper_times']:.2f} раза при {win['pixel_share']:.0%} пикселей — то "
+          "есть стоимость падает по пикселям, а не быстрее и не медленнее")
+    if lever_rows:
+        big = lever_rows[0]
+        print()
+        print("Два рычага на одной опоре: уменьшить область или понизить сжатие.")
+        print("       рычаг                 мс/кадр   дешевле      на кадр   потолок")
+        for r in lever_rows:
+            print(f"  {r['label']:<24} {r['total_ms']:>7.2f}  {r['cheaper_times']:>6.2f}×  "
+                  f"{r['kib_per_frame']:>8.1f} КиБ  {r['max_fps']:>6.0f}/с")
+        area = next((r for r in lever_rows if r["lever"] == "область"), None)
+        lvl = next((r for r in lever_rows if r["lever"] == "сжатие"), None)
+        if area and lvl:
+            print()
+            print(f"Уменьшение области выигрывает по обеим величинам сразу: "
+                  f"{area['cheaper_times']:.2f}× по времени и "
+                  f"{big['kib_per_frame'] / area['kib_per_frame']:.2f}× по диску. "
+                  f"Понижение уровня даёт {lvl['cheaper_times']:.2f}× по времени и "
+                  f"**платит** диском: {lvl['kib_per_frame'] / big['kib_per_frame']:.2f}× "
+                  "байт на кадр")
+    print()
+    print("Переносимы **отношения**, а не сами миллисекунды: на своём содержимом сжатие "
+          "будет своё (у оператора 2.4× против ~35× здесь).")
+    if lever_rows:
+        print("Отдельно про «без сжатия»: в контейнере он выходит самым быстрым, потому "
+              "что запись идёт в файловую систему контейнера. На диске 2025 КиБ на кадр "
+              "при 30 кадр/с — это 59 МиБ/с непрерывной записи, и там рычаг развернётся. "
+              "Время стадии «запись», снятое здесь, к вашему диску отношения не имеет.")
     return 0
 
 
@@ -1231,6 +1314,17 @@ def _parallax_help() -> str:
             f"опорным для ожидания не является)")
 
 
+def _source_kinds() -> tuple[str, ...]:
+    """Виды источников — из одного места (`capture.source.KINDS`), а не списком здесь.
+
+    Второй список тех же значений расходится с первым молча: ровно так трижды разошлось
+    знание о Wayland между реестром механизмов и самим механизмом.
+    """
+    from .capture.source import KINDS
+
+    return KINDS
+
+
 def build_parser() -> argparse.ArgumentParser:
     """Разбор аргументов отдельно от запуска: иначе список команд не проверить.
 
@@ -1365,6 +1459,21 @@ def build_parser() -> argparse.ArgumentParser:
     rec.add_argument("--kind", default=None, choices=tuple(_record_kinds()),
                      help="что записываете; от вида зависит канал хода записи "
                           "(для stillness ход идёт в файл, а не на экран)")
+    # Источник захвата. Вид — структурный переключатель профиля, поэтому запись окна
+    # попадает в **другую ветку** журнала, чем запись экрана, и их числа не сводятся в
+    # одну медиану (TASK-21, часть 1).
+    rec.add_argument("--source", dest="source_kind", default="display",
+                     choices=_source_kinds(),
+                     help="что попадает в кадр: display — экран целиком, window — одно "
+                          "окно (границы приходят от системы, то есть агент получает "
+                          "готовую рамку), region — прямоугольник от исследователя. "
+                          "Меняет structure_hash: записи разных источников несравнимы")
+    rec.add_argument("--window", default="",
+                     help="часть заголовка окна для --source window. Заголовок нужен, "
+                          "чтобы указать окно, и в кадр агента он не попадает")
+    rec.add_argument("--region", nargs=4, type=int, default=None,
+                     metavar=("ЛЕВО", "ВЕРХ", "ШИРИНА", "ВЫСОТА"),
+                     help="рамка для --source region в экранных координатах")
     rec.add_argument("--progress", default=None, choices=("line", "file", "none"),
                      help="куда печатать ход: строкой на месте, в файл рядом с "
                           "сессией или никуда. По умолчанию — из профиля")
@@ -1402,6 +1511,16 @@ def build_parser() -> argparse.ArgumentParser:
                     dest="compress_level")
     co.add_argument("--keyframe", type=int, default=None,
                     help="интервал ключевых кадров")
+    # Второй разрез той же стоимости: по размеру области, а не по доле изменения. Нужен
+    # затем, что захват окна — рычаг бюджета, и «во сколько раз дешевле» имеет численный
+    # ответ (TASK-21, часть 3).
+    co.add_argument("--sizes", action="store_true",
+                    help="разрез по размеру кадра: во сколько раз дешевле окно, чем "
+                         "экран целиком. Доля изменения при этом полная — размеры "
+                         "сравниваются там, где бюджет и трещит")
+    co.add_argument("--levels", action="store_true",
+                    help="сравнить два рычага на одной опоре: уменьшить область против "
+                         "понизить уровень сжатия")
     co.add_argument("--json", action="store_true")
     co.set_defaults(fn=cmd_cost)
 

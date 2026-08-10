@@ -155,15 +155,46 @@ class Injector:
     """
 
     def __init__(self, sink: InjectionSink, journal: Journal, *, mask=None, stop=None,
-                 actor: Actor = Actor.AGENT) -> None:
+                 actor: Actor = Actor.AGENT, profile=None,
+                 scope: str | None = None) -> None:
+        """`profile` или `scope` задают область действия ввода. TASK-21, часть 2.
+
+        До этой правки область приходила **литералом из подписи** `submit`, а
+        `input_scope` из профиля читался только в карточку устройства
+        (`devices.Device.scope`), откуда попадал единственно в отчёт. Настройка выглядела
+        работающей, детектор мёртвых параметров считал её работающей, и при этом
+        переключение `input_scope` на `device` не меняло ни одного исхода доставки:
+        шлюз всегда спрашивал маску про «window».
+
+        Вреда не случилось по случайности: `window` — **самая узкая** из четырёх областей,
+        то есть подпись по недосмотру стояла на безопасной стороне. Расширить область
+        настройкой было нельзя, и это единственная причина, по которой недосмотр не стал
+        происшествием.
+
+        Откуда взялась область, пишется в журнал вместе с каждой доставкой (`scope_from`):
+        область по умолчанию и область, объявленная профилем, — разные условия опыта, и
+        различать их надо в записи, а не в памяти того, кто запускал.
+        """
         self.sink = sink
         self.journal = journal
         self.mask = mask
         self.stop = stop
         self.actor = actor
+        if scope is not None:
+            self.scope, self.scope_from = scope, "аргумент"
+        elif profile is not None:
+            self.scope = str(profile.parameters["input_scope"])
+            self.scope_from = "профиль"
+        else:
+            self.scope, self.scope_from = "window", "умолчание"
+        from .mask import SCOPES
+
+        if self.scope not in SCOPES:
+            raise ValueError(f"нет такой области действия ввода: {self.scope!r}; "
+                             f"есть {list(SCOPES)}")
 
     def submit(self, action: Action, stamp: Stamp, actor_layer: ActorLayer, *,
-               scope: str = "window") -> Outcome:
+               scope: str | None = None) -> Outcome:
         """Доставить действие. `actor_layer` — какой контур его начал.
 
         Слой обязателен и приходит снаружи, потому что здесь его знать неоткуда:
@@ -172,6 +203,10 @@ class Injector:
         конфабуляции считается ровно по разнице между заявленным и настоящим.
         """
         outputs = list(action.outputs_touched())
+        # Область берётся у шлюза (то есть из профиля), а не из подписи метода. Аргумент
+        # остался для случая, когда одно действие надо доставить в другой области явно, —
+        # но по умолчанию он ничего не подменяет.
+        scope = self.scope if scope is None else scope
 
         # 1. СТОП. Проверяется первым: он важнее всего остального.
         if self.stop is not None and self.stop.is_engaged:
@@ -211,6 +246,10 @@ class Injector:
         self.journal.append(
             EntryKind.ACTION, stamp, self.actor, actor_layer, action=recorded,
             event={"code": outcome.code, "reason": outcome.reason,
-                   "latency_ms": round(outcome.latency_ms, 3), "device": self.sink.name},
+                   "latency_ms": round(outcome.latency_ms, 3), "device": self.sink.name,
+                   # Область действия и её происхождение — часть условий доставки, а не
+                   # оформление: доставка в области `device` и в области `window` — разные
+                   # события, и по записи это должно быть видно.
+                   "scope": self.scope, "scope_from": self.scope_from},
         )
         return outcome

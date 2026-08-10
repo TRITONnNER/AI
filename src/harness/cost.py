@@ -57,6 +57,23 @@ CASES: tuple[dict[str, Any], ...] = (
 )
 
 
+#: Размеры кадра, между которыми выбирает оператор. TASK-21, часть 3: захват окна — это
+#: **рычаг бюджета**, и вопрос «во сколько раз он дешевле» имеет численный ответ.
+#:
+#: Набор закрыт и каждый размер значит что-то конкретное, а не «поменьше»: сравнение
+#: «1920×1080 против 960×540» отвечает на вопрос оператора (окно в пол-экрана по каждой
+#: стороне — это вчетверо меньше пикселей), а промежуточные размеры показывают, линейно ли
+#: падает стоимость по пикселям или нет. Без промежуточных пришлось бы верить, что падает
+#: линейно, а этого никто не мерил.
+FRAME_SIZES: tuple[dict[str, Any], ...] = (
+    {"width": 1920, "height": 1080, "meaning": "монитор 1080p целиком"},
+    {"width": 1600, "height": 900, "meaning": "окно почти во весь экран"},
+    {"width": 1280, "height": 720, "meaning": "обычное окно браузера"},
+    {"width": 960, "height": 540, "meaning": "окно в половину стороны: вчетверо пикселей"},
+    {"width": 640, "height": 360, "meaning": "маленькое окно: девятая часть пикселей"},
+)
+
+
 def budget_ms(fps: float) -> float:
     """Бюджет одного оборота при целевой частоте. Миллисекунды."""
     return 1000.0 / float(fps) if fps > 0 else 0.0
@@ -222,6 +239,98 @@ def stage_costs(frames: list[np.ndarray], *, level: int, keyframe: int,
             "ratio": c.bytes_in / c.bytes_out if c.bytes_out else None,
             "max_fps": (1000.0 / per_frame_ms) if per_frame_ms else None,
         }
+
+
+def scan_sizes(*, frames: int, level: int, keyframe: int, fps: float,
+               change: float = 1.0, sizes: tuple[dict[str, Any], ...] = FRAME_SIZES,
+               seed: int = 17) -> list[dict[str, Any]]:
+    """Стоимость кадра по размеру области. Ответ на «во сколько раз дешевле окно».
+
+    Доля изменения одна для всех размеров и по умолчанию **полная**: сравнивать размеры
+    надо в том случае, где бюджет и трещит. На неподвижном экране любой размер дешёв, и
+    сравнение размеров там ничего не показало бы — это было бы вакуумно по свойству случая
+    (инвариант 27), а не по нехватке данных.
+
+    Возвращает строки с долей от самого большого размера **по двум величинам сразу**:
+    по пикселям и по стоимости. Их отношение и есть ответ на вопрос, линейно ли падает
+    стоимость: одна доля без другой позволяет считать, что линейно, не проверив.
+    """
+    rows: list[dict[str, Any]] = []
+    for size in sizes:
+        w, h = int(size["width"]), int(size["height"])
+        base = desktop_frames(frames, width=w, height=h, seed=seed)
+        seq = with_change(base, float(change), seed=seed + 1)
+        got = stage_costs(seq, level=level, keyframe=keyframe)
+        got.update({"width": w, "height": h, "pixels": w * h,
+                    "meaning": size["meaning"],
+                    "change_declared": change,
+                    "change_measured": measured_change(seq),
+                    "budget_ms": budget_ms(fps),
+                    "fits_budget": got["total_ms"] <= budget_ms(fps) if fps > 0 else None})
+        rows.append(got)
+    if rows:
+        big = rows[0]
+        for r in rows:
+            r["pixel_share"] = r["pixels"] / big["pixels"]
+            r["cost_share"] = (r["total_ms"] / big["total_ms"]) if big["total_ms"] else None
+            r["bytes_share"] = (r["kib_per_frame"] / big["kib_per_frame"]
+                                if big["kib_per_frame"] else None)
+            # Во сколько раз дешевле — то самое число, за которым шли. Печатается как
+            # «раз», а не как доля: оператор спрашивает «во сколько раз», и переводить
+            # 0.27 в 3.7 в голове — лишний шаг, на котором ошибаются.
+            r["cheaper_times"] = (big["total_ms"] / r["total_ms"]
+                                  if r["total_ms"] else None)
+    return rows
+
+
+#: Два рычага бюджета на одной опоре. TASK-21, часть 3: гипотеза задачи была, что
+#: уменьшить область может оказаться дешевле, чем понизить уровень сжатия, — и это
+#: проверяемо в одном прогоне, если мерить оба одинаково.
+#:
+#: Уровень 0 стоит здесь как **ловушка среды**, и это надо читать вместе с оговоркой.
+#: В контейнере он выходит самым быстрым по времени (медиана 2.7 мс против 21.0 на уровне
+#: 6, три сида) — потому что запись идёт в файловую систему контейнера, где два мегабайта
+#: стоят ~1.2 мс. На диске оператора те же 2025 КиБ на кадр при 30 кадр/с — это 59 МиБ/с
+#: непрерывной записи, и там рычаг развернётся. Время стадии «запись», снятое здесь, к
+#: диску оператора отношения не имеет; отношения между **уровнями сжатия** и между
+#: **размерами** — имеет, потому что они про процессор.
+LEVER_CASES: tuple[dict[str, Any], ...] = (
+    {"lever": "ничего", "width": 1920, "height": 1080, "level": 6,
+     "label": "1080p, уровень 6"},
+    {"lever": "сжатие", "width": 1920, "height": 1080, "level": 1,
+     "label": "1080p, уровень 1"},
+    {"lever": "сжатие", "width": 1920, "height": 1080, "level": 0,
+     "label": "1080p, без сжатия"},
+    {"lever": "область", "width": 960, "height": 540, "level": 6,
+     "label": "окно 960×540, уровень 6"},
+    {"lever": "оба", "width": 960, "height": 540, "level": 1,
+     "label": "окно 960×540, уровень 1"},
+)
+
+
+def levers(*, frames: int, keyframe: int,
+           cases: tuple[dict[str, Any], ...] = LEVER_CASES,
+           seed: int = 17) -> list[dict[str, Any]]:
+    """Уменьшить область против понизить сжатие. Одна доля изменения, одни кадры.
+
+    Сравнение честно только при одинаковом содержимом, поэтому кадры для каждого размера
+    строятся одним и тем же генератором с одним сидом, а меняются ровно две величины:
+    размер и уровень. Первая строка — опора, от неё считается «во сколько раз дешевле».
+    """
+    rows: list[dict[str, Any]] = []
+    for case in cases:
+        w, h = int(case["width"]), int(case["height"])
+        seq = with_change(desktop_frames(frames, width=w, height=h, seed=seed), 1.0,
+                          seed=seed + 1)
+        got = stage_costs(seq, level=int(case["level"]), keyframe=keyframe)
+        got.update({"lever": case["lever"], "label": case["label"],
+                    "width": w, "height": h, "pixels": w * h})
+        rows.append(got)
+    if rows:
+        base = rows[0]["total_ms"]
+        for r in rows:
+            r["cheaper_times"] = (base / r["total_ms"]) if r["total_ms"] else None
+    return rows
 
 
 def scan(*, width: int, height: int, frames: int, level: int, keyframe: int,

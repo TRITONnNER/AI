@@ -434,6 +434,22 @@ class LiveScore:
     #: браузера с медианой по пяти доменам значит сравнивать её в том числе с `depth`.
     matched_domain: str = ""
     matched_iou: float | None = None
+    #: Что попадало в кадр: экран, окно или рамка (`capture_source`), и хеш структуры
+    #: записи. Оба поля нужны для сведения записей в одно число: захват окна выдаёт
+    #: границы окна от системы, то есть отвечает на другой вопрос (TASK-21, часть 1).
+    capture_source: str = "display"
+    structure_hash: str = ""
+    #: Откуда взялся источник: «запись» или «выведено». Записи, сделанные до появления
+    #: переключателя, настройки не содержат — и тогда «display» это **вывод**, а не факт.
+    #: Вывод верен (иного захвата тогда не было), но подставить его молча значило бы
+    #: сделать запись увереннее, чем она есть.
+    capture_source_from: str = "запись"
+    #: Каких настроек текущей схемы в профиле записи нет. Нужно, чтобы отличить «другая
+    #: структура» от «другая эпоха схемы»: во втором случае причина расхождения хеша —
+    #: добавленная позже настройка, а не иное устройство опыта. Диагнозы разные, и лечение
+    #: тоже: во втором случае помогает `Profile.filled_from_schema` (для чтения, не для
+    #: сравнения), в первом — ничего.
+    missing_settings: tuple[str, ...] = ()
 
     def as_dict(self) -> dict[str, Any]:
         return {"path": str(self.path), "kind": self.kind, "frames": self.frames,
@@ -452,6 +468,9 @@ class LiveScore:
                 "truth_px": self.truth_px,
                 "trivial": None if self.trivial is None else round(self.trivial, 4),
                 "beats_trivial": self.beats_trivial,
+                "capture_source": self.capture_source,
+                "capture_source_from": self.capture_source_from,
+                "structure_hash": self.structure_hash,
                 "matched_domain": self.matched_domain,
                 "matched_iou": self.matched_iou,
                 "absent_reason": self.absent_reason}
@@ -691,6 +710,7 @@ def bench_live(path: str | Path, *, method: str = "arbiter") -> LiveScore:
     path = Path(path)
     kind = path.name.split("-", 1)[0]
     with Session.open(path) as s:
+        prof = s.profile
         sep = (SelfWorldSeparator(s.profile) if method == "parallax"
                else LayerArbiter(s.profile))
         frames = 0
@@ -712,6 +732,12 @@ def bench_live(path: str | Path, *, method: str = "arbiter") -> LiveScore:
     # «признак был один», а не «признаки согласились».
     score = LiveScore(
         path=path, kind=kind, frames=frames, method=method,
+        capture_source=str(prof.structural.get("capture_source", "display")),
+        capture_source_from=("запись" if "capture_source" in prof.structural
+                             else "выведено: настройки в записи нет, а иного захвата "
+                                  "тогда не существовало"),
+        missing_settings=tuple(prof.missing_settings()),
+        structure_hash=prof.structure_hash,
         decided=float(summary["decided_fraction"]),
         screen_share=float(found.sum()) / float(found.size),
         disagreement=(None if "disagreement_fraction" not in summary
@@ -744,6 +770,60 @@ def bench_live(path: str | Path, *, method: str = "arbiter") -> LiveScore:
     return score
 
 
+def mixed_sources(live: list[LiveScore]) -> str:
+    """Мешаются ли в одном сравнении записи с разными источниками захвата. TASK-21, ч. 1.
+
+    Возвращает **текст отказа** или пустую строку. Текстом, а не флагом: отказ должен
+    сказать, какие именно источники смешались и почему это не сравнимо, — иначе оператор
+    увидит «нельзя» и обойдёт его как каприз.
+
+    Сравниваются `capture_source` и `structure_hash`, а не только первый: два вида — не
+    единственный способ получить несравнимые записи, а `structure_hash` покрывает и
+    остальные структурные переключатели (формат кадра, каналы звука, режим указателя).
+    Проверка одного `capture_source` пропустила бы, например, серый кадр против цветного.
+    """
+    if len(live) < 2:
+        return ""
+    kinds = sorted({s.capture_source for s in live})
+    hashes = sorted({s.structure_hash for s in live if s.structure_hash})
+    if len(kinds) > 1:
+        by = {k: [s.kind for s in live if s.capture_source == k] for k in kinds}
+        return (
+            "в одно число сводятся записи с разными источниками захвата: "
+            + "; ".join(f"«{k}» — {', '.join(v)}" for k, v in by.items())
+            + ". Захват окна берёт границы окна у системы и тем самым отвечает на другой "
+              "вопрос, чем захват экрана: край кадра там совпадает с краем окна. Сводить "
+              "их в одну медиану нельзя — считайте по каждому источнику отдельно "
+              "(harness bench-live ПУТЬ отдельно по каждому корпусу)")
+    if len(hashes) > 1:
+        # Разная **эпоха схемы** и разное **устройство опыта** — два диагноза, а не один.
+        # Хеш расходится в обоих случаях, но в первом причина — настройка, добавленная
+        # позже; сказать про «иную структуру» там значило бы назвать причиной то, чего
+        # оператор не делал. Найдено при TASK-21: первая живая запись оператора разошлась
+        # бы по хешу с любой записью, сделанной после следующего структурного добавления.
+        eras = {s.missing_settings for s in live}
+        if len(eras) > 1:
+            added = sorted(set().union(*eras) - set.intersection(*(set(e) for e in eras)))
+            return (
+                "в одно число сводятся записи разных эпох схемы: у части записей нет "
+                f"настроек, появившихся позже ({', '.join(added[:6])}"
+                + (", …" if len(added) > 6 else "")
+                + "). Хеш структуры из-за этого разный, но устройство опыта могло не "
+                  "меняться — сравнивать можно только после того, как решено, чем эти "
+                  "настройки были в старых записях. `Profile.filled_from_schema` "
+                  "дополняет профиль по умолчаниям, но годится для чтения, а не для "
+                  "сравнения: дополненный профиль заявляет настройки, которых в записи "
+                  "не было")
+        return (
+            f"в одно число сводятся записи с разными структурами: {len(hashes)} разных "
+            "structure_hash при одном источнике захвата и одной эпохе схемы. Значит "
+            "различается какой-то другой структурный переключатель — формат кадра, "
+            "каналы звука, режим указателя. Структурный переключатель форкает журнал, и "
+            "записи из разных ветвей несравнимы по построению (harness journal ПУТЬ "
+            "покажет, чем именно они различаются)")
+    return ""
+
+
 def compare_to_synthetic(live: list[LiveScore], *,
                          synthetic_median: float | None = None) -> dict[str, Any]:
     """Синтетика против живого. Падение — результат, а не провал.
@@ -763,6 +843,9 @@ def compare_to_synthetic(live: list[LiveScore], *,
     """
     ref = synthetic_reference()
     synthetic = ref["value"] if synthetic_median is None else float(synthetic_median)
+    mixed = mixed_sources(live)
+    if mixed:
+        raise LiveError(mixed)
     scored = [s for s in live if s.iou is not None]
     unscored = [s.kind for s in live if s.iou is None]
     if not scored:
@@ -789,6 +872,10 @@ def compare_to_synthetic(live: list[LiveScore], *,
         "comparable": len(scored),
         "unscored": unscored,
         "unit": "сессия",
+        # Источник захвата печатается **при числе**, а не рядом: медиана 0.5 на записи
+        # окна и та же медиана на записи экрана — разные утверждения (TASK-21, часть 1).
+        "capture_source": scored[0].capture_source,
+        "structure_hash": scored[0].structure_hash,
         "live_median_iou": round(median, 4),
         "live_range": [round(values[0], 4), round(values[-1], 4)],
         "reference": ref,

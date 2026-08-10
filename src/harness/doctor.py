@@ -484,6 +484,35 @@ def check_uinput(m: Machine) -> Check:
                  later="М5 (агент нажимает сам)", fix=enable_uinput(m))
 
 
+def check_sources(m: Machine) -> Check:
+    """Какие источники захвата доступны на этой машине. TASK-21, часть 1.
+
+    Не блокирует: захват экрана есть везде, где вообще есть захват. Но знать заранее, что
+    окно снять нельзя, лучше, чем узнать это в момент, когда запись уже нужна, — и лучше,
+    чем получить весь экран под видом окна.
+
+    Здесь же печатается сочетание источника и области ввода: «невидимая рука» — дефект
+    постановки, и обнаружить его до записи стоит дешевле, чем после.
+    """
+    from .capture.source import pairing, system_windows
+    from .core.profile import MILESTONE_0
+
+    kind = str(MILESTONE_0.structural["capture_source"])
+    scope = str(MILESTONE_0.parameters["input_scope"])
+    pair = pairing(kind, scope)
+    ws = system_windows()
+    windowed = ws.name != "нет"
+    said = (f"источник по умолчанию «{kind}», область ввода «{scope}» — "
+            f"{pair['kind']}. ")
+    said += ("окно снять можно: рамку даёт " + ws.name
+             if windowed else
+             "окно снять нельзя: " + getattr(ws, "why", "рамку спросить нечем"))
+    return Check("источники захвата", State.YES if pair["declared"] else State.NO, said,
+                 later="" if pair["declared"] else "сузьте input_scope до window",
+                 fix=("" if pair["declared"] else
+                      "harness record --source display, либо input_scope=window"))
+
+
 def run(*, path: Path | None = None, fps: float | None = None,
         probe: Callable[..., tuple[State, str, tuple[int, int] | None, bool]] | None = None
         ) -> Report:
@@ -532,6 +561,7 @@ def run(*, path: Path | None = None, fps: float | None = None,
             measured = None
     rep.checks.append(check_disk(m, path=where, fps=rate, size=shot[2],
                                  measured=measured))
+    rep.checks.append(check_sources(m))
     rep.checks.append(check_ffmpeg(m))
     rep.checks.append(check_audio(m))
     rep.checks.append(check_uinput(m))

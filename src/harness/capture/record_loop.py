@@ -25,7 +25,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable
 
-from .base import UNCHANGED
+from .base import GONE, UNCHANGED, CaptureBroken
 from .screen import AudioOverflow
 
 
@@ -38,6 +38,11 @@ STOP_REASONS: dict[str, str] = {
     "interrupted": "прервано оператором",
     "source_ended": "источник кадров кончился",
     "stopped": "остановлено из панели",
+    # Исчезновение и поломка — **разные** исходы, и это не оформление вывода. Первый
+    # пишется наблюдением, второй разрывом (TASK-21, часть 6); объединять их значило бы
+    # объявлять сбой механизма событием мира или наоборот.
+    "source_gone": "источник исчез: окно закрыто, свёрнуто или монитор отключён",
+    "capture_broken": "механизм захвата сломался на ходу",
 }
 
 #: Исходы, при которых запись остановил **человек**. Их два, потому что нажать можно в двух
@@ -72,6 +77,10 @@ class Turns:
     audio_blocks: int = 0
     interrupted: bool = False
     source_ended: bool = False
+    #: Источник исчез (окно закрыто, монитор отключён). Наблюдение, не разрыв.
+    source_gone: bool = False
+    #: Механизм захвата сломался на ходу. Разрыв, не наблюдение.
+    capture_broken: str = ""
     stop_reason: str = "turns"
     elapsed_s: float = 0.0
     #: Сколько времени цикл **ждал** между оборотами, чтобы не обогнать целевую частоту.
@@ -204,8 +213,28 @@ def run_turns(rec: Any, *, source: Any, frames: int | None, first: Any,
                 frame = first
             else:
                 c0 = clock()
-                frame = source.read()
+                try:
+                    frame = source.read()
+                except CaptureBroken as broken:
+                    # Разрыв: механизм сломался на ходу. Пишется разрывом и **не**
+                    # выдаётся за событие мира. Частичный корпус при этом остаётся годным:
+                    # выход через ту же дорогу, что у прочих исходов.
+                    t.capture_ns += int((clock() - c0) * 1e9)
+                    rec.record_gap("capture_broken",
+                                   {"after_frames": t.written, "reason": str(broken)[:200]})
+                    t.capture_broken = str(broken)[:200]
+                    t.stop_reason = "capture_broken"
+                    break
                 t.capture_ns += int((clock() - c0) * 1e9)
+            if frame is GONE:
+                # Источник исчез. **Наблюдение**, а не сбой: окно закрылось, монитор
+                # отключился, приложение свернулось. Для агента это происшествие в мире,
+                # и в журнал оно идёт записью об источниках, а не разрывом.
+                rec.record_source_gone(detail={"after_frames": t.written,
+                                              "after_turns": t.turns})
+                t.source_gone = True
+                t.stop_reason = "source_gone"
+                break
             if frame is UNCHANGED:
                 # Экран не менялся. **Не пропуск.** На записи «неподвижность» это
                 # основной исход: считать его потерей значило бы объявить сломанной
