@@ -14,22 +14,23 @@
 Сначала здесь было записано, что на рабочем столе параллакс обязан молчать: общего
 сдвига там нет. Замер по трём сидам показал другое: когда крупное окно едет
 согласованно, фазовая корреляция находит сдвиг по этому окну — и ответ выходит
-верным (точность 1.00, IoU 0.73–0.77), потому что едущее окно и есть содержимое, а
-остальное и есть экранный слой. Требование молчать наказывало бы за правильный
-ответ. Поэтому графа «ожидаемо» осталась пояснением, а не критерием.
+верным (точность 1.00, IoU 0.73–0.77 по прогонам одного домена, единица — прогон),
+потому что едущее окно и есть содержимое, а остальное и есть экранный слой.
+Требование молчать наказывало бы за правильный ответ. Поэтому графа «ожидаемо»
+осталась пояснением, а не критерием.
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, Callable
 
 import numpy as np
 
 from .behaviour.babbling import Babbler, run_babbling
 from .core.clocks import Clocks
 from .core.profile import Profile, from_schema
-from .corpus.domains import DOMAINS, make_domain
+from .corpus.domains import DOMAINS, Domain, make_domain
 from .model.places import PlaceGraph, fingerprint
 from .vision.predict import PredictionError
 from .vision.selfworld import (COUPLING, MERGED, NO_SIGNAL, PARALLAX, SCREEN,
@@ -347,7 +348,9 @@ class _TruthWatcher:
 
 def bench_domain(name: str, *, seed: int = 0, frames: int = 140,
                  babble_steps: int = 700, motion_px: int = 40,
-                 profile: Profile | None = None) -> DomainResult:
+                 profile: Profile | None = None,
+                 distort: Callable[[np.ndarray, int, Domain], np.ndarray] | None = None,
+                 ) -> DomainResult:
     """Прогнать один домен через все модули. Никаких доменных поправок в коде.
 
     `motion_px` — размах движения мыши в пикселях за шаг. Он влияет на результат
@@ -356,6 +359,16 @@ def bench_domain(name: str, *, seed: int = 0, frames: int = 140,
     ARCHITECTURE-AGENT.md; здесь взят размах, при котором сдвиг заметно больше
     самих элементов обрамления, потому что мелкое дрожание проверяло бы не метод,
     а порог `flow_min_global_shift`.
+
+    `distort` портит **картинку**, а не истину: кадр проходит через него перед тем, как
+    попасть в арбитра, а маски истины берутся у домена нетронутыми. Это ровно то, что
+    делает настоящий экран, — рисует то же самое хуже, — и ровно то, чем откалибровано
+    ожидание по живому материалу (`MEASUREMENT.md`, §18, `tools/measure_live_penalty.py`).
+
+    Хук здесь, а не копией этого цикла в измерительном скрипте, по одной причине: копия
+    разошлась бы с оригиналом, и тогда «падение от порчи» смешалось бы с падением от
+    расхождения двух реализаций подсчёта. Пути к истине домена у `distort` есть, у
+    проверяемого кода — нет; порча — свойство мира, а не подсказка методу.
     """
     profile = profile or from_schema(f"БЕНЧ-{name}", capture_width=320,
                                      capture_height=180, babble_repeats=2)
@@ -402,10 +415,13 @@ def bench_domain(name: str, *, seed: int = 0, frames: int = 140,
             if dx or dy:
                 act = Action.mouse(dx, dy, duration_ms=33)
         obs = domain.step(act, with_audio=False)
-        arbiter.feed(obs.frame)
-        shift_error.feed(obs.frame)
-        copy_error.feed(obs.frame)
-        graph.observe(fingerprint(obs.frame), i, seconds_per_seq=1.0 / 30.0)
+        # Порча картинки — одной строкой и в одном месте: всё, что ниже, видит только
+        # испорченный кадр, как на настоящем экране, а истина ниже берётся у домена.
+        frame = obs.frame if distort is None else distort(obs.frame, i, domain)
+        arbiter.feed(frame)
+        shift_error.feed(frame)
+        copy_error.feed(frame)
+        graph.observe(fingerprint(frame), i, seconds_per_seq=1.0 / 30.0)
         mask_now = domain.screen_mask()
         anim_now = domain.animated_mask()
         if always_screen is None:

@@ -168,7 +168,15 @@ def main(argv: list[str]) -> int:
     print(f"доля ложно-зелёных: {data['false_green_share']:.2%}")
     print(f"было до правок: {BEFORE['в подменённых окружениях']['упало']} из "
           f"{BEFORE['в подменённых окружениях']['упало'] + BEFORE['в подменённых окружениях']['прошло']}")
-    print(f"записано: {args.out.relative_to(ROOT)}")
+    # Путь печатается **после** попытки укоротить, а не вместо неё: при относительном
+    # `--out` (`docs/measurements/...`) `relative_to` роняло прогон уже после записи файла,
+    # то есть замер был сделан, а сообщение о нём — нет. Печать не имеет права ронять то,
+    # что уже посчитано.
+    try:
+        shown = args.out.resolve().relative_to(ROOT)
+    except ValueError:
+        shown = args.out
+    print(f"записано: {shown}")
     return 0
 
 

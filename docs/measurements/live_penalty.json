@@ -1,0 +1,360 @@
+{
+  "unit": "домен",
+  "n": 5,
+  "frames": 140,
+  "noise_seeds": 3,
+  "rows": [
+    {
+      "domain": "depth",
+      "penalty": "компрессия и дизеринг",
+      "clean_iou": 0.317,
+      "clean_signal": "merged",
+      "signal": "merged",
+      "iou": 0.248,
+      "noise_min": 0.247,
+      "noise_max": 0.249,
+      "noise_seeds": 3
+    },
+    {
+      "domain": "depth",
+      "penalty": "полупрозрачная панель",
+      "clean_iou": 0.317,
+      "clean_signal": "merged",
+      "signal": "merged",
+      "iou": 0.186,
+      "noise_min": 0.186,
+      "noise_max": 0.186,
+      "noise_seeds": 3
+    },
+    {
+      "domain": "depth",
+      "penalty": "частицы и эффекты",
+      "clean_iou": 0.317,
+      "clean_signal": "merged",
+      "signal": "merged",
+      "iou": 0.191,
+      "noise_min": 0.191,
+      "noise_max": 0.191,
+      "noise_seeds": 3
+    },
+    {
+      "domain": "depth",
+      "penalty": "курсор",
+      "clean_iou": 0.317,
+      "clean_signal": "merged",
+      "signal": "merged",
+      "iou": 0.337,
+      "noise_min": 0.337,
+      "noise_max": 0.337,
+      "noise_seeds": 3
+    },
+    {
+      "domain": "depth",
+      "penalty": "все четыре",
+      "clean_iou": 0.317,
+      "clean_signal": "merged",
+      "signal": "merged",
+      "iou": 0.528,
+      "noise_min": 0.526,
+      "noise_max": 0.531,
+      "noise_seeds": 3
+    },
+    {
+      "domain": "desktop",
+      "penalty": "компрессия и дизеринг",
+      "clean_iou": 0.736,
+      "clean_signal": "merged",
+      "signal": "merged",
+      "iou": 0.793,
+      "noise_min": 0.792,
+      "noise_max": 0.794,
+      "noise_seeds": 3
+    },
+    {
+      "domain": "desktop",
+      "penalty": "полупрозрачная панель",
+      "clean_iou": 0.736,
+      "clean_signal": "merged",
+      "signal": "merged",
+      "iou": 0.791,
+      "noise_min": 0.791,
+      "noise_max": 0.791,
+      "noise_seeds": 3
+    },
+    {
+      "domain": "desktop",
+      "penalty": "частицы и эффекты",
+      "clean_iou": 0.736,
+      "clean_signal": "merged",
+      "signal": "merged",
+      "iou": 0.538,
+      "noise_min": 0.536,
+      "noise_max": 0.544,
+      "noise_seeds": 3
+    },
+    {
+      "domain": "desktop",
+      "penalty": "курсор",
+      "clean_iou": 0.736,
+      "clean_signal": "merged",
+      "signal": "merged",
+      "iou": 0.736,
+      "noise_min": 0.736,
+      "noise_max": 0.736,
+      "noise_seeds": 3
+    },
+    {
+      "domain": "desktop",
+      "penalty": "все четыре",
+      "clean_iou": 0.736,
+      "clean_signal": "merged",
+      "signal": "merged",
+      "iou": 0.339,
+      "noise_min": 0.337,
+      "noise_max": 0.343,
+      "noise_seeds": 3
+    },
+    {
+      "domain": "document",
+      "penalty": "компрессия и дизеринг",
+      "clean_iou": 0.664,
+      "clean_signal": "merged",
+      "signal": "merged",
+      "iou": 0.584,
+      "noise_min": 0.583,
+      "noise_max": 0.585,
+      "noise_seeds": 3
+    },
+    {
+      "domain": "document",
+      "penalty": "полупрозрачная панель",
+      "clean_iou": 0.664,
+      "clean_signal": "merged",
+      "signal": "merged",
+      "iou": 0.421,
+      "noise_min": 0.421,
+      "noise_max": 0.421,
+      "noise_seeds": 3
+    },
+    {
+      "domain": "document",
+      "penalty": "частицы и эффекты",
+      "clean_iou": 0.664,
+      "clean_signal": "merged",
+      "signal": "merged",
+      "iou": 0.875,
+      "noise_min": 0.871,
+      "noise_max": 0.881,
+      "noise_seeds": 3
+    },
+    {
+      "domain": "document",
+      "penalty": "курсор",
+      "clean_iou": 0.664,
+      "clean_signal": "merged",
+      "signal": "merged",
+      "iou": 0.667,
+      "noise_min": 0.667,
+      "noise_max": 0.667,
+      "noise_seeds": 3
+    },
+    {
+      "domain": "document",
+      "penalty": "все четыре",
+      "clean_iou": 0.664,
+      "clean_signal": "merged",
+      "signal": "merged",
+      "iou": 0.386,
+      "noise_min": 0.382,
+      "noise_max": 0.387,
+      "noise_seeds": 3
+    },
+    {
+      "domain": "game",
+      "penalty": "компрессия и дизеринг",
+      "clean_iou": 0.82,
+      "clean_signal": "merged",
+      "signal": "merged",
+      "iou": 0.745,
+      "noise_min": 0.745,
+      "noise_max": 0.746,
+      "noise_seeds": 3
+    },
+    {
+      "domain": "game",
+      "penalty": "полупрозрачная панель",
+      "clean_iou": 0.82,
+      "clean_signal": "merged",
+      "signal": "merged",
+      "iou": 0.163,
+      "noise_min": 0.163,
+      "noise_max": 0.163,
+      "noise_seeds": 3
+    },
+    {
+      "domain": "game",
+      "penalty": "частицы и эффекты",
+      "clean_iou": 0.82,
+      "clean_signal": "merged",
+      "signal": "merged",
+      "iou": 0.056,
+      "noise_min": 0.055,
+      "noise_max": 0.056,
+      "noise_seeds": 3
+    },
+    {
+      "domain": "game",
+      "penalty": "курсор",
+      "clean_iou": 0.82,
+      "clean_signal": "merged",
+      "signal": "merged",
+      "iou": 0.82,
+      "noise_min": 0.82,
+      "noise_max": 0.82,
+      "noise_seeds": 3
+    },
+    {
+      "domain": "game",
+      "penalty": "все четыре",
+      "clean_iou": 0.82,
+      "clean_signal": "merged",
+      "signal": "merged",
+      "iou": 0.625,
+      "noise_min": 0.622,
+      "noise_max": 0.628,
+      "noise_seeds": 3
+    },
+    {
+      "domain": "video",
+      "penalty": "компрессия и дизеринг",
+      "clean_iou": 0.417,
+      "clean_signal": "stillness",
+      "signal": "stillness",
+      "iou": 0.417,
+      "noise_min": 0.417,
+      "noise_max": 0.417,
+      "noise_seeds": 3
+    },
+    {
+      "domain": "video",
+      "penalty": "полупрозрачная панель",
+      "clean_iou": 0.417,
+      "clean_signal": "stillness",
+      "signal": "stillness",
+      "iou": 0.406,
+      "noise_min": 0.406,
+      "noise_max": 0.406,
+      "noise_seeds": 3
+    },
+    {
+      "domain": "video",
+      "penalty": "частицы и эффекты",
+      "clean_iou": 0.417,
+      "clean_signal": "stillness",
+      "signal": "merged",
+      "iou": 0.548,
+      "noise_min": 0.547,
+      "noise_max": 0.548,
+      "noise_seeds": 3
+    },
+    {
+      "domain": "video",
+      "penalty": "курсор",
+      "clean_iou": 0.417,
+      "clean_signal": "stillness",
+      "signal": "stillness",
+      "iou": 0.409,
+      "noise_min": 0.409,
+      "noise_max": 0.409,
+      "noise_seeds": 3
+    },
+    {
+      "domain": "video",
+      "penalty": "все четыре",
+      "clean_iou": 0.417,
+      "clean_signal": "stillness",
+      "signal": "merged",
+      "iou": 0.563,
+      "noise_min": 0.562,
+      "noise_max": 0.571,
+      "noise_seeds": 3
+    }
+  ],
+  "note": "единица независимости — домен; сиды меняют только шум порчи, потому что маска истины от сида не зависит (MEASUREMENT.md, §2)",
+  "by_penalty": {
+    "компрессия и дизеринг": {
+      "median_iou": 0.584,
+      "median_clean": 0.664,
+      "drop": 0.08,
+      "median_ratio": 0.9085,
+      "ratio_min": 0.7823,
+      "ratio_max": 1.0774,
+      "n": 5,
+      "unit": "домен",
+      "min": 0.248,
+      "max": 0.793
+    },
+    "полупрозрачная панель": {
+      "median_iou": 0.406,
+      "median_clean": 0.664,
+      "drop": 0.258,
+      "median_ratio": 0.634,
+      "ratio_min": 0.1988,
+      "ratio_max": 1.0747,
+      "n": 5,
+      "unit": "домен",
+      "min": 0.163,
+      "max": 0.791
+    },
+    "частицы и эффекты": {
+      "median_iou": 0.538,
+      "median_clean": 0.664,
+      "drop": 0.126,
+      "median_ratio": 0.731,
+      "ratio_min": 0.0683,
+      "ratio_max": 1.3178,
+      "n": 5,
+      "unit": "домен",
+      "min": 0.056,
+      "max": 0.875
+    },
+    "курсор": {
+      "median_iou": 0.667,
+      "median_clean": 0.664,
+      "drop": -0.003,
+      "median_ratio": 1.0,
+      "ratio_min": 0.9808,
+      "ratio_max": 1.0631,
+      "n": 5,
+      "unit": "домен",
+      "min": 0.337,
+      "max": 0.82
+    },
+    "все четыре": {
+      "median_iou": 0.528,
+      "median_clean": 0.664,
+      "drop": 0.136,
+      "median_ratio": 0.7622,
+      "ratio_min": 0.4606,
+      "ratio_max": 1.6656,
+      "n": 5,
+      "unit": "домен",
+      "min": 0.339,
+      "max": 0.625
+    }
+  },
+  "expectation": {
+    "reference": 0.667,
+    "reference_unit": "домен",
+    "reference_n": 5,
+    "ratio": 0.7622,
+    "ratio_range": [
+      0.4606,
+      1.6656
+    ],
+    "value": 0.508,
+    "unit": "домен",
+    "n": 5,
+    "note": "ожидание = опорное число × доля, оставшаяся под всеми четырьмя порчами сразу. Это граница сверху: живой экран портит картинку и способами, которых в списке четырёх нет"
+  }
+}

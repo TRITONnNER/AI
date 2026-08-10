@@ -72,6 +72,11 @@ LIVE_SYNTH = (Path_.LIVE, Path_.SYNTHETIC)
 EVERY = (Path_.LIVE, Path_.SYNTHETIC, Path_.AGENT)
 
 MODULE_PATHS: tuple[tuple[str, tuple[Path_, ...]], ...] = (
+    # Приём живых записей и суд над ними. Стоит **до** `corpus/`, потому что совпадение
+    # берётся первое: под общим правилом «corpus — это синтетика» модуль о настоящем экране
+    # объявлял бы читателя не на том пути, и порог, который применяется при разборе живой
+    # записи, выглядел бы однобоким при работающем чтении.
+    ("corpus/live.py", (Path_.LIVE, Path_.REPORT)),
     # Только синтетика: миры и их генераторы.
     ("corpus/", (Path_.SYNTHETIC,)),
     ("benchmark.py", (Path_.SYNTHETIC,)),

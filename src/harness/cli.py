@@ -1172,7 +1172,7 @@ def cmd_bench_live(args: argparse.Namespace) -> int:
         print(f"в {root} нет ни одной записи харнесса", file=sys.stderr)
         return 2
 
-    from .corpus.live import METHOD_COMPARABLE, METHODS
+    from .corpus.live import METHODS, PARALLAX_REFERENCE, method_comparable
 
     methods = [args.method] if args.method != "both" else list(METHODS)
     out: dict[str, Any] = {}
@@ -1189,11 +1189,23 @@ def cmd_bench_live(args: argparse.Namespace) -> int:
             print()
         # Синтетическая медиана своя у каждого пути: сравнивать арбитра с числом,
         # снятым одиночным разделителем, значило бы сравнивать разное.
+        # `None` означает «взять из единственного источника», а не «нет числа»:
+        # `compare_to_synthetic` сам сходит за опорным. Подстановка литерала здесь
+        # вернула бы второе место, где это число написано.
         baseline = (args.synthetic_median if method == "arbiter"
-                    else args.synthetic_corpus_median)
+                    else (args.synthetic_corpus_median
+                          if args.synthetic_corpus_median is not None
+                          else PARALLAX_REFERENCE["value"]))
         cmp = compare_to_synthetic(scores, synthetic_median=baseline)
-        print(f"путь «{method}»: {METHOD_COMPARABLE[method]}")
+        print(f"путь «{method}»: {method_comparable(method)}")
         print(f"  {cmp['verdict']}")
+        # Исход предрегистрированной проверки — по каждой записи и словами. Он лежал
+        # только в `--json`, то есть оператор, читающий терминал, видел разницу с опорным
+        # числом и **не** видел, считается ли она опровержением.
+        if cmp.get("expectation_text"):
+            print(f"  {cmp['expectation_text']}")
+        for check in cmp.get("checks", ()):
+            print(f"  {check['kind']}: {check['outcome']} — {check['why']}")
         if cmp.get("unscored"):
             print(f"  без разметки, в сравнение не вошли: {cmp['unscored']}")
         print()
@@ -1201,6 +1213,22 @@ def cmd_bench_live(args: argparse.Namespace) -> int:
     if args.json:
         _print_json(out)
     return 0
+
+
+def _synthetic_help() -> str:
+    """Опорное число арбитра для строки помощи. Читается, а не пишется."""
+    from .corpus.live import synthetic_text
+
+    return synthetic_text()
+
+
+def _parallax_help() -> str:
+    """Опорное число одиночного разделителя — с единицей и `n`, как и всякое другое."""
+    from .corpus.live import PARALLAX_REFERENCE
+
+    r = PARALLAX_REFERENCE
+    return (f"IoU {r['value']:.4f} (единица усреднения — {r['unit']}, n={r['n']}; "
+            f"опорным для ожидания не является)")
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -1428,10 +1456,14 @@ def build_parser() -> argparse.ArgumentParser:
     bl.add_argument("--method", choices=("arbiter", "parallax", "both"),
                     default="both",
                     help="какой из двух существующих путей прогнать")
-    bl.add_argument("--synthetic-median", type=float, default=0.667,
-                    help="медиана IoU арбитра по пяти доменам, n=5 (MEASUREMENT.md)")
-    bl.add_argument("--synthetic-corpus-median", type=float, default=0.9696,
-                    help="медиана IoU одиночного разделителя на корпусе, n=1")
+    # Оба опорных числа — из `corpus.live`, а не литералами здесь. Литерал в разборе
+    # аргументов был бы третьим местом, где живёт «IoU на синтетике», а двух уже хватило,
+    # чтобы одно имя означало два разных утверждения (TASK-11, часть 1).
+    bl.add_argument("--synthetic-median", type=float, default=None,
+                    help=f"опорное число арбитра; по умолчанию {_synthetic_help()}")
+    bl.add_argument("--synthetic-corpus-median", type=float, default=None,
+                    help=f"опорное число одиночного разделителя; по умолчанию "
+                         f"{_parallax_help()}")
     bl.add_argument("--json", action="store_true")
     bl.set_defaults(fn=cmd_bench_live)
 
