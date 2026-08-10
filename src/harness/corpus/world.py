@@ -78,11 +78,15 @@ class WorldState:
     cam_y: float
     yaw: float = 0.0               # градусы, положительные — вправо
     light: bool = True
+    #: Полоска: 1.0 — полная, 0.0 — пустая. Убывает от необратимых действий, медленно
+    #: восстанавливается. Истина исследователя; агент видит только пиксели.
+    gauge: float = 1.0
     broken: set[int] = field(default_factory=set)   # индексы сломанных панелей
 
     def snapshot(self) -> dict[str, Any]:
         return {"cam_x": round(self.cam_x, 3), "cam_y": round(self.cam_y, 3),
                 "yaw": round(self.yaw, 3), "light": self.light,
+                "gauge": round(self.gauge, 4),
                 "broken": sorted(self.broken)}
 
 
@@ -120,6 +124,12 @@ class InteractiveWorld:
         # `mu` сравнивает число с самим собой (вырождение 13.1 в MEASUREMENT.md).
         # По умолчанию выключена намеренно: прежний мир остаётся контролем, на
         # котором замер обязан остаться вакуумным, иначе новый ничего не доказывает.
+        # Полоска с известной связью: свойство мира, объявленное структурно. Значения
+        # читаются здесь, а рисование и убывание — ниже; выключенный переключатель
+        # означает прежний мир без полоски, то есть контроль для обнаружителя.
+        self.gauge_on = bool(profile.structural["world_gauge"])
+        self.gauge_drop = float(p["world_gauge_drop"])
+        self.gauge_refill = float(p["world_gauge_refill"])
         self.variable_cost = bool(profile.structural["world_variable_cost"])
         self.cost_min = int(p["world_cost_min_ticks"])
         self.cost_max = max(self.cost_min, int(p["world_cost_max_ticks"]))
@@ -170,6 +180,12 @@ class InteractiveWorld:
         """
         before = self.state.snapshot()
         acted = action is not None and not action.masked
+        # Полоска восстанавливается **до** применения действия и каждый тик, в том числе
+        # когда действия нет: она свойство мира, а не отклик на нажатие. Иначе связь
+        # «убывает от класса событий» смешалась бы со связью «меняется, когда я что-то
+        # делаю», и обнаружитель нашёл бы вторую вместо первой.
+        if self.gauge_on:
+            self.state.gauge = min(1.0, self.state.gauge + self.gauge_refill)
         if acted:
             self._apply(action)
         # Стоимость прохода считается **после** применения действия: она зависит от
@@ -271,6 +287,12 @@ class InteractiveWorld:
             candidates = [i for i in range(len(self.scene.hud)) if i not in s.broken]
             if candidates:
                 s.broken.add(candidates[0])
+            # И то же действие убавляет полоску, если полоска в этом мире есть. Связь
+            # заведомо известна исследователю и **не** сообщается агенту: он видит только,
+            # что какая-то область экрана убывает, и обязан связать это с классом событий
+            # сам (TASK-24, направление B).
+            if self.gauge_on:
+                s.gauge = max(0.0, s.gauge - self.gauge_drop)
 
     # --- отрисовка ----------------------------------------------------------
 
@@ -291,6 +313,26 @@ class InteractiveWorld:
             if i in self.state.broken:
                 continue                       # сломанная панель просто исчезла
             self._draw_rect(frame, r, phase, i)
+        if self.gauge_on:
+            self._draw_gauge(frame)
+
+    def _draw_gauge(self, frame: np.ndarray) -> None:
+        """Полоска с заведомо известной связью. Рисуется **поверх** обрамления.
+
+        Место — правый нижний угол, где остальное обрамление ничего не рисует: полоска,
+        наложенная на анимированную панель, дала бы корреляцию с чужим дрожанием, и
+        обнаружитель ловил бы соседа, а не её.
+        """
+        h, w = frame.shape[:2]
+        left, top = w - 68, h - 14
+        right, bottom = w - 4, h - 6
+        if left <= 0 or top <= 0:
+            return
+        frame[top:bottom, left:right] = 20
+        frame[top:top + 1, left:right] = 210
+        frame[bottom - 1:bottom, left:right] = 210
+        fill = left + 1 + int((right - left - 2) * max(0.0, min(1.0, self.state.gauge)))
+        frame[top + 1:bottom - 1, left + 1:fill] = 235
 
     @staticmethod
     def _draw_rect(frame: np.ndarray, r: HudRect, phase: float, i: int) -> None:

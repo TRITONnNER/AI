@@ -40,12 +40,12 @@ def test_axes_without_consumer_are_reported_not_hidden() -> None:
     live = axes_with_consumer()
     dead = tuple(a for a in AXES if not CONSUMERS.get(a))
     assert len(live) + len(dead) == 7
-    # Сейчас мертва ровно одна: нарезка окон внимания есть, а контура внимания,
-    # который её вызывал бы, нет — это М5. Если станет больше, тест это покажет.
-    assert dead == ("attention_windows",), (
+    # С TASK-24 (направление C) мёртвых не осталось: у ширины внимания появился
+    # читатель — распределитель окон. Если станет больше нуля, тест это покажет.
+    assert dead == (), (
         f"осей без потребителя стало {len(dead)}: {dead}. Ось без читателя обещает "
         "поведение, которого нет")
-    assert len(live) == 6
+    assert len(live) == 7
 
 
 def test_neutral_mood_shifts_nothing() -> None:
@@ -151,13 +151,22 @@ def test_return_inertia_axis_changes_the_goal_budget() -> None:
         f"возбуждение обязано сокращать инерцию возврата: {hot} против {calm}")
 
 
-def test_attention_axis_has_no_consumer_and_says_so() -> None:
-    """Ось считается, но её никто не читает. Это докладывается, а не замалчивается."""
+def test_attention_axis_narrows_the_window_budget_of_its_consumer() -> None:
+    """Ось дошла до потребителя: возбуждение сужает бюджет окон внимания.
+
+    До TASK-24 здесь стояло обратное утверждение — «величина считается, читателя нет», — и
+    оно было верным: нарезка окон существовала, а спрашивать окна было некому. Теперь
+    читатель есть, и проверяется сдвиг числа у него самого (инвариант 25), а не наличие поля.
+    """
+    from harness.perception.attention import Attention
+
     hot = _mood(Motivation(MILESTONE_0), 0.0, 1.0)
     assert hot.attention_windows < hot.base["attention_windows"], (
         "величина считается верно — возбуждение сужает внимание")
-    assert CONSUMERS["attention_windows"] is None, (
-        "и при этом честно объявлена мёртвой: контур внимания — часть М5")
+    assert CONSUMERS["attention_windows"], "и у неё объявлен читатель"
+
+    att = Attention.from_profile(from_schema("окна", attention_windows=4))
+    assert att.modulate(hot) < att.base_windows
 
 
 def test_switching_emotion_off_freezes_all_seven() -> None:

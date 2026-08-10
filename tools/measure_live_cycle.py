@@ -72,9 +72,22 @@ def one(hz_reflex: float, hz_planner: float, seed: int) -> dict[str, Any]:
         "reached": got.episodes.get("by_outcome", {}).get("достигнута", 0),
         "confab_share": conf.get("share_by_explanation"),
         "confab_rate_by_episode": conf.get("rate"),
+        # TASK-24, A: доля объяснённых действий и доля перехвата внутри ожидания. Первая
+        # показывает, что объяснение накрывает уже **не всё**; вторая — то, что метрика
+        # теперь мерит: как часто рефлекс перебивал команду, исполнения которой
+        # планировщик ждал.
+        "explained_share": got.as_dict()["explained_share"],
+        "usurped_share": got.as_dict()["usurped_share"],
+        "expectations": got.expectations,
         "confab_episodes": conf.get("n"),
         "confab_absent": conf.get("absent_reason", ""),
     }
+
+
+def _median_of(rows: list[dict[str, Any]], key: str) -> float | None:
+    """Медиана поля, если оно посчитано хоть где-то. `None` — не посчитано нигде."""
+    got = [r[key] for r in rows if r.get(key) is not None]
+    return None if not got else round(statistics.median(got), 4)
 
 
 def main() -> int:
@@ -107,6 +120,8 @@ def main() -> int:
             "confab_max": None if not shares else round(max(shares), 4),
             "reflex_share_median": round(statistics.median(reflex), 4),
             "preempted_median": statistics.median([r["preempted"] for r in mine]),
+            "explained_median": _median_of(mine, "explained_share"),
+            "usurped_median": _median_of(mine, "usurped_share"),
         }
 
     # **Вырождение, найденное этим же замером.** Доля расхождений совпала с долей действий,
@@ -116,6 +131,10 @@ def main() -> int:
     # «начато не планировщиком». Метрика равна уже известной величине, то есть не несёт
     # своей информации (инвариант 27).
     gap = max(abs((r["confab_share"] or 0.0) - r["reflex_share"]) for r in rows)
+    # Порог вырождения — 1 п.п., и он объявлен здесь, а не подобран: две величины,
+    # различающиеся меньше чем на процентный пункт на **всех** точках, для любого
+    # практического вывода одно и то же число. Проверяется максимум разницы, а не среднее:
+    # среднее спрятало бы совпадение на части точек.
     degenerate = gap < 0.01
 
     data = {
@@ -147,13 +166,17 @@ def main() -> int:
 
     print()
     print(f"{'отношение':>10} {'конфабуляция':>14} {'разброс':>15} "
-          f"{'рефлекс вёл':>12} {'перебиваний':>12}")
+          f"{'рефлекс вёл':>12} {'разница':>9} {'объяснено':>10}")
     for key, v in by_ratio.items():
         share = "—" if v["confab_median"] is None else f"{v['confab_median']:.1%}"
         rng = ("—" if v["confab_min"] is None
                else f"{v['confab_min']:.1%}…{v['confab_max']:.1%}")
+        diff = ("—" if v["confab_median"] is None
+                else f"{abs(v['confab_median'] - v['reflex_share_median']) * 100:.1f} п.п.")
+        expl = ("—" if v["explained_median"] is None
+                else f"{v['explained_median']:.1%}")
         print(f"{key:>10} {share:>14} {rng:>15} "
-              f"{v['reflex_share_median']:>11.1%} {v['preempted_median']:>12.0f}")
+              f"{v['reflex_share_median']:>11.1%} {diff:>9} {expl:>10}")
     print()
     if degenerate:
         print()

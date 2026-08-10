@@ -1,0 +1,285 @@
+{
+  "part_one": {
+    "rows": [
+      {
+        "episodes": 80,
+        "seed": 1,
+        "found": 0,
+        "true_found": 0,
+        "missed": 2,
+        "false": 0,
+        "false_list": [],
+        "drives": 0,
+        "drive_names": [],
+        "hypotheses": 0
+      },
+      {
+        "episodes": 80,
+        "seed": 2,
+        "found": 0,
+        "true_found": 0,
+        "missed": 2,
+        "false": 0,
+        "false_list": [],
+        "drives": 0,
+        "drive_names": [],
+        "hypotheses": 0
+      },
+      {
+        "episodes": 80,
+        "seed": 3,
+        "found": 0,
+        "true_found": 0,
+        "missed": 2,
+        "false": 0,
+        "false_list": [],
+        "drives": 0,
+        "drive_names": [],
+        "hypotheses": 0
+      },
+      {
+        "episodes": 200,
+        "seed": 1,
+        "found": 2,
+        "true_found": 2,
+        "missed": 0,
+        "false": 0,
+        "false_list": [],
+        "drives": 1,
+        "drive_names": [
+          "дефицит:AREA_0_0"
+        ],
+        "hypotheses": 2
+      },
+      {
+        "episodes": 200,
+        "seed": 2,
+        "found": 2,
+        "true_found": 2,
+        "missed": 0,
+        "false": 0,
+        "false_list": [],
+        "drives": 1,
+        "drive_names": [
+          "дефицит:AREA_0_0"
+        ],
+        "hypotheses": 2
+      },
+      {
+        "episodes": 200,
+        "seed": 3,
+        "found": 2,
+        "true_found": 2,
+        "missed": 0,
+        "false": 0,
+        "false_list": [],
+        "drives": 1,
+        "drive_names": [
+          "дефицит:AREA_0_0"
+        ],
+        "hypotheses": 2
+      },
+      {
+        "episodes": 400,
+        "seed": 1,
+        "found": 2,
+        "true_found": 2,
+        "missed": 0,
+        "false": 0,
+        "false_list": [],
+        "drives": 1,
+        "drive_names": [
+          "дефицит:AREA_0_0"
+        ],
+        "hypotheses": 2
+      },
+      {
+        "episodes": 400,
+        "seed": 2,
+        "found": 2,
+        "true_found": 2,
+        "missed": 0,
+        "false": 0,
+        "false_list": [],
+        "drives": 1,
+        "drive_names": [
+          "дефицит:AREA_0_0"
+        ],
+        "hypotheses": 2
+      },
+      {
+        "episodes": 400,
+        "seed": 3,
+        "found": 2,
+        "true_found": 2,
+        "missed": 0,
+        "false": 0,
+        "false_list": [],
+        "drives": 1,
+        "drive_names": [
+          "дефицит:AREA_0_0"
+        ],
+        "hypotheses": 2
+      },
+      {
+        "episodes": 800,
+        "seed": 1,
+        "found": 2,
+        "true_found": 2,
+        "missed": 0,
+        "false": 0,
+        "false_list": [],
+        "drives": 1,
+        "drive_names": [
+          "дефицит:AREA_0_0"
+        ],
+        "hypotheses": 2
+      },
+      {
+        "episodes": 800,
+        "seed": 2,
+        "found": 5,
+        "true_found": 2,
+        "missed": 0,
+        "false": 3,
+        "false_list": [
+          "AREA_0_0×OUT_IDLE",
+          "AREA_0_1×OUT_IDLE",
+          "AREA_0_4×OUT_IDLE"
+        ],
+        "drives": 3,
+        "drive_names": [
+          "дефицит:AREA_0_0",
+          "дефицит:AREA_0_0",
+          "дефицит:AREA_0_4"
+        ],
+        "hypotheses": 5
+      },
+      {
+        "episodes": 800,
+        "seed": 3,
+        "found": 2,
+        "true_found": 2,
+        "missed": 0,
+        "false": 0,
+        "false_list": [],
+        "drives": 1,
+        "drive_names": [
+          "дефицит:AREA_0_0"
+        ],
+        "hypotheses": 2
+      }
+    ],
+    "by_size": {
+      "80": {
+        "n": 3,
+        "unit": "прогон",
+        "true_found_median": 0,
+        "missed_median": 2,
+        "false_median": 0,
+        "drives_median": 0
+      },
+      "200": {
+        "n": 3,
+        "unit": "прогон",
+        "true_found_median": 2,
+        "missed_median": 0,
+        "false_median": 0,
+        "drives_median": 1
+      },
+      "400": {
+        "n": 3,
+        "unit": "прогон",
+        "true_found_median": 2,
+        "missed_median": 0,
+        "false_median": 0,
+        "drives_median": 1
+      },
+      "800": {
+        "n": 3,
+        "unit": "прогон",
+        "true_found_median": 2,
+        "missed_median": 0,
+        "false_median": 0,
+        "drives_median": 1
+      }
+    },
+    "episodes_to_find_all": 200,
+    "truth": {
+      "AREA_0_0": [
+        "OUT_DROP",
+        "убывает"
+      ],
+      "AREA_0_1": [
+        "OUT_RISE",
+        "растёт"
+      ]
+    },
+    "unit_for_links": "связь (область × класс)",
+    "unit_for_speed": "прогон"
+  },
+  "part_two": {
+    "rows": [
+      {
+        "world": "полоска есть",
+        "gauge": true,
+        "by_screen_mask": true,
+        "areas_watched": 36,
+        "links": 6,
+        "on_real_class": 6,
+        "on_silent_class": 0,
+        "on_idle_class": 0,
+        "false_share": 0.0,
+        "best_effect": 10.581005243249432
+      },
+      {
+        "world": "полоска есть",
+        "gauge": true,
+        "by_screen_mask": false,
+        "areas_watched": 36,
+        "links": 5,
+        "on_real_class": 5,
+        "on_silent_class": 0,
+        "on_idle_class": 0,
+        "false_share": 0.0,
+        "best_effect": 10.581005243249432
+      },
+      {
+        "world": "полоски нет",
+        "gauge": false,
+        "by_screen_mask": true,
+        "areas_watched": 32,
+        "links": 3,
+        "on_real_class": 3,
+        "on_silent_class": 0,
+        "on_idle_class": 0,
+        "false_share": 0.0,
+        "best_effect": 5.489251977696922
+      },
+      {
+        "world": "полоски нет",
+        "gauge": false,
+        "by_screen_mask": false,
+        "areas_watched": 32,
+        "links": 2,
+        "on_real_class": 2,
+        "on_silent_class": 0,
+        "on_idle_class": 0,
+        "false_share": 0.0,
+        "best_effect": 5.489251977696922
+      }
+    ],
+    "control": "молчащий выход: связь на нём ложная по построению. Мир без полоски контролем не является — необратимое действие ломает панель и меняет область экрана само",
+    "note": "первая редакция замера находила ноль связей из-за смещения на единицу в окне корреляции и почти опубликовала это как препятствие восприятия. Утверждение о препятствии требует той же проверки, что утверждение об успехе",
+    "unit": "прогон"
+  },
+  "thresholds": {
+    "link_min_effect": 1.0,
+    "link_min_events": 5
+  },
+  "world": {
+    "drop": 0.3,
+    "refill": 0.008,
+    "period": 40
+  }
+}

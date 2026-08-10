@@ -161,30 +161,63 @@ def test_every_delivered_action_carries_its_initiator(tmp_path: Path) -> None:
             f"действие от контура «{contour}» записано слоем {e.actor_layer}")
 
 
-def test_confabulation_is_computed_and_its_degeneracy_is_declared(tmp_path: Path) -> None:
-    """Метрика конфабуляции считается — и объявлена вырожденной в этой расстановке.
+def test_confabulation_no_longer_equals_the_reflex_share(tmp_path: Path) -> None:
+    """Метрика перестала совпадать с долей действий рефлекса. TASK-24, направление A.
 
-    Замер по трём отношениям частот дал долю расхождений, совпадающую с долей действий
-    рефлекса до десятых процента. Это не успех: объяснение планировщика приписывается всем
-    действиям подряд, поэтому «объяснено не тем слоем» тождественно «начато не
-    планировщиком». Метрика равна уже известной величине (инвариант 27), и тест закрепляет
-    именно это — чтобы следующая правка цикла обязана была сдвинуть **разницу**, а не долю.
+    До правки объяснение планировщика стояло до следующего объяснения и накрывало все
+    действия подряд: «объяснено не тем слоем» было тождественно «начато не планировщиком»,
+    и метрика совпадала с долей рефлекса до 0.12 п.п. Теперь объяснение прикрепляется
+    только под живым ожиданием — там, где планировщик выдал команду и ждёт исполнения, —
+    и расхождение возникает между его убеждением и фактом.
+
+    Проверяется **разница**, а не значение: значение зависит от частот, а требование
+    задачи было именно про несовпадение двух величин.
     """
     from harness.behaviour.arena import reach_place
     from harness.livecycle import run
 
     prof = from_schema("М5", capture_width=64, capture_height=48)
     got = run(tmp_path / "s", scenario=reach_place(prof), profile=prof,
-              seconds=0.6, seed=4, hz_scale=40.0)
+              seconds=0.8, seed=4, hz_scale=40.0)
     conf = got.confabulation
     assert conf.get("share_by_explanation") is not None, (
         f"метрика не посчиталась: {conf.get('absent_reason')}")
     reflex = got.by_layer.get("reflex", 0) / max(1, got.delivered)
     gap = abs(conf["share_by_explanation"] - reflex)
-    assert gap < 0.02, (
-        f"доля расхождений {conf['share_by_explanation']:.3f} разошлась с долей рефлекса "
-        f"{reflex:.3f} на {gap:.3f}. Если это правка ссылки на объяснение — обновите "
-        "вырождение в MEASUREMENT.md, разделе 13, и это утверждение вместе с ним")
+    assert gap > 0.05, (
+        f"доля расхождений {conf['share_by_explanation']:.3f} снова совпала с долей "
+        f"рефлекса {reflex:.3f} (разница {gap:.3f}). Значит постановка опять вырождена, и "
+        "это надо сказать в MEASUREMENT.md, а не подгонять порог")
+    # И то, из-за чего разница появилась: объяснение накрывает **не все** действия.
+    assert 0 < got.under_expectation < got.delivered
+    assert got.expectations > 0 and got.expectations_expired > 0
+
+
+def test_explanation_is_attached_only_under_a_live_expectation(tmp_path: Path) -> None:
+    """Действие вне ожидания планировщика остаётся **без** объяснения.
+
+    Это и есть переставленная ссылка: планировщик заявляет о себе там, где выдал команду и
+    ждёт её исполнения, а не там, где просто говорил последним.
+    """
+    from harness.behaviour.arena import reach_place
+    from harness.core.journal import Kind
+    from harness.livecycle import run
+    from harness.session import Session
+
+    prof = from_schema("М5", capture_width=64, capture_height=48)
+    got = run(tmp_path / "s", scenario=reach_place(prof), profile=prof,
+              seconds=0.8, seed=5, hz_scale=40.0)
+    with Session.open(tmp_path / "s") as s:
+        actions = [e for e in s.journal if e.kind is Kind.ACTION]
+    with_reason = [e for e in actions if e.state.stated_reason_id]
+    without = [e for e in actions if not e.state.stated_reason_id]
+    assert with_reason and without, (
+        "либо все действия объяснены, либо ни одно: ссылка стоит не по ожиданию")
+    # Под ожиданием бывают действия **обоих** слоёв — иначе расхождение было бы
+    # невозможно по построению, и метрика опять мерила бы тождество.
+    layers = {str(e.actor_layer) for e in with_reason}
+    assert len(layers) >= 2, f"под ожиданием только один слой: {layers}"
+    assert len(with_reason) == got.under_expectation
 
 
 # --- TASK-22: прогон по живому материалу --------------------------------------

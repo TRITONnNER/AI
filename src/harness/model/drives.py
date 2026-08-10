@@ -177,9 +177,7 @@ AXES = ("attention_windows", "horizon_s", "caution_threshold", "explore_rate",
 #: числа в поведении потребителя (инвариант 25), а ось без потребителя докладывается
 #: как незакрытая — числом «осей с потребителем: N из 7», а не молчанием.
 CONSUMERS: Mapping[str, str | None] = {
-    # Нарезка окон внимания существует (`vision.layers.windows`), но её никто не
-    # вызывает: внимание как контур — часть М5. Ось объявлена, потребителя нет.
-    "attention_windows": None,
+    "attention_windows": "perception.attention.Attention.from_profile (бюджет окон)",
     "horizon_s": "behaviour.planner.Planner.plan (глубина поиска)",
     "caution_threshold": "behaviour.babbling.Babbler.next_probe",
     "explore_rate": "behaviour.babbling.Babbler.next_probe (темп)",

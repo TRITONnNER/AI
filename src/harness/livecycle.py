@@ -74,6 +74,33 @@ class Proposal:
     why: str = ""
 
 
+@dataclass(frozen=True, slots=True)
+class Expectation:
+    """Планировщик выдал команду и ждёт её исполнения. TASK-24, направление A.
+
+    Зачем это отдельная вещь. В первой постановке объяснение планировщика стояло **до
+    следующего объяснения** и прикреплялось ко всем действиям подряд. Тогда «объяснено не
+    тем слоем» оказалось тождественно «начато не планировщиком» — метрика совпала с долей
+    рефлекса до 0.12 п.п. и не несла ничего сверх `actor_layer` (`MEASUREMENT.md`, 13.5).
+
+    Теперь объяснение прикрепляется только там, где планировщик **считает себя причиной**:
+    он выдал команду с длительностью удержания и ждёт, что она отработает. Расхождение
+    возникает между его убеждением и фактом — рефлекс перебил и сделал своё, — а не между
+    двумя записями одного и того же факта.
+
+    Срок ожидания — длительность самой команды, а не выбранное число: планировщик ждёт
+    ровно того, что заказал. Взять срок «до следующего плана» значило бы вернуть прежнюю
+    постановку под другим именем.
+    """
+
+    reason_id: str
+    action: Action
+    until_s: float
+
+    def expired(self, now_s: float) -> bool:
+        return now_s >= self.until_s
+
+
 @dataclass(slots=True)
 class Cycle:
     """Итог прогона: числа по каждому из четырёх условий вехи М5."""
@@ -87,6 +114,13 @@ class Cycle:
     confabulation: dict[str, Any] = field(default_factory=dict)
     preempted: int = 0
     seconds: float = 0.0
+    #: Ожидания планировщика: сколько поставлено, сколько истекло, сколько действий
+    #: случилось под живым ожиданием и как они поделились между «сам сделал» и «перебили».
+    expectations: int = 0
+    expectations_expired: int = 0
+    under_expectation: int = 0
+    expectation_kept: int = 0
+    expectation_usurped: int = 0
 
     @property
     def world_never_paused(self) -> bool:
@@ -108,6 +142,16 @@ class Cycle:
             "preempted": self.preempted,
             "contours": self.contours, "episodes": self.episodes,
             "confabulation": self.confabulation,
+            "expectations": self.expectations,
+            "expectations_expired": self.expectations_expired,
+            "under_expectation": self.under_expectation,
+            "expectation_kept": self.expectation_kept,
+            "expectation_usurped": self.expectation_usurped,
+            "usurped_share": (None if not self.under_expectation
+                              else round(self.expectation_usurped
+                                         / self.under_expectation, 4)),
+            "explained_share": (None if not self.delivered
+                                else round(self.under_expectation / self.delivered, 4)),
             "seconds": round(self.seconds, 3),
             "unit": "оборот цикла",
             "unit_for_episodes": "эпизод",
@@ -227,7 +271,10 @@ def run(path: Path, *, scenario: Scenario, profile: Any, seconds: float = 10.0,
                                    reflex=babbler_contour(arena, rng),
                                    planner=slow_planner(arena))
         reason_seq = 0
-        reason_id = ""          # объяснение планировщика, стоящее «сейчас»
+        # Ожидание планировщика: он выдал команду и ждёт её исполнения. Пока ожидание
+        # живо, планировщик считает себя причиной происходящего — и **только** тогда его
+        # объяснение прикрепляется к действию (TASK-24, направление A).
+        expect: Expectation | None = None
         while clock() - started < seconds:
             out.loops += 1
             ran = sched.step()
@@ -250,22 +297,44 @@ def run(path: Path, *, scenario: Scenario, profile: Any, seconds: float = 10.0,
                 out.delivered += 1
                 key = str(choice.layer)
                 out.by_layer[key] = out.by_layer.get(key, 0) + 1
-                # Реплика планировщика произносится, когда планировщик закончил план, и
-                # **стоит** до следующей: всё, что происходит под этим объяснением, на него
-                # и ссылается. Это и есть постановка задачи о конфабуляции: планировщик
-                # объяснил своё намерение, а действовал за это время рефлекс, о причинах
-                # которого планировщик не знает ничего (частота 0.5 против 20 Гц).
+                now_s = contour_now()
+                if expect is not None and expect.expired(now_s):
+                    # Ожидание истекло: планировщик больше не считает, что исполняется
+                    # его команда. Дальше он ничего о происходящем не заявляет — и это
+                    # главное отличие от прежней постановки, где объяснение стояло до
+                    # следующего плана и накрывало собой всё подряд.
+                    out.expectations_expired += 1
+                    expect = None
                 if choice.contour == "planner":
+                    # Планировщик выдал команду и **ждёт её исполнения**. Реплика
+                    # произносится здесь, ожидание ставится на длительность удержания:
+                    # это и есть «планировщик считает себя причиной происходящего».
                     reason_seq += 1
                     reason_id = f"reason-{reason_seq}"
                     journal_reason(rec.journal, rec.clocks.stamp(), reason_id,
                                    claims_layer=ActorLayer.PLANNER,
-                                   detail={"text_id": "SYM_PLAN"})
+                                   detail={"text_id": "SYM_PLAN",
+                                           "expects_ms": action.duration_ms,
+                                           "expects_output": str(action.key)})
+                    expect = Expectation(reason_id=reason_id, action=action,
+                                         until_s=now_s + action.duration_ms / 1000.0)
+                    out.expectations += 1
+                # Ссылка ставится **только** пока ожидание живо. Действие вне ожидания
+                # остаётся без объяснения: планировщик о нём ничего не говорил, и
+                # приписывать ему объяснение значило бы измерять не его самоотчёт.
+                state = None
+                if expect is not None:
+                    state = StateSnapshot(stated_reason_id=expect.reason_id)
+                    out.under_expectation += 1
+                    if choice.layer is ActorLayer.PLANNER:
+                        out.expectation_kept += 1
+                    else:
+                        out.expectation_usurped += 1
                 rec.journal.append(EntryKind.ACTION, rec.clocks.stamp(), Actor.AGENT,
-                                   choice.layer, action=action,
-                                   state=StateSnapshot(stated_reason_id=reason_id),
+                                   choice.layer, action=action, state=state,
                                    event={"code": "delivered",
-                                          "contour": choice.contour})
+                                          "contour": choice.contour,
+                                          "under_expectation": expect is not None})
             if arena.finished():
                 arena.respawn(rec.clocks.stamp())
             naptime(0.0)

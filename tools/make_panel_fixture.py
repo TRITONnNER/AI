@@ -528,6 +528,87 @@ def experiments() -> dict[str, Any]:
                             f"{len(summary)}",
                      "unit": "прогон", "n": 8, "task": "TASK-06"})
 
+    # --- TASK-24: четыре направления, по строке на утверждение ------------------
+    #
+    # Строки заводятся вместе с замерами нарочно. Файл, который панель читает и не
+    # показывает ни одной строкой, выглядит на экране так же, как файл, которого нет, — и
+    # «панель читает все замеры» становится правдой про чтение и ложью про показ.
+
+    lc = files.get("live_cycle", {})
+    if lc and lc.get("by_ratio"):
+        worst = max(abs(v["confab_median"] - v["reflex_share_median"])
+                    for v in lc["by_ratio"].values())
+        runs.append({"name": "конфабуляция против доли рефлекса",
+                     "value": f"разрыв до {worst * 100:.1f} п.п.",
+                     "was": "0.12 п.п. — метрика была переименованием доли рефлекса",
+                     "unit": "прогон", "n": len(lc.get("rows", [])),
+                     "task": "TASK-24 A"})
+
+    dr = files.get("drives", {})
+    if dr and dr.get("part_one"):
+        one = dr["part_one"]
+        rows_ = one.get("rows", [])
+        worst_false = max((r["false"] for r in rows_), default=0)
+        runs.append({"name": "связь области с классом событий",
+                     "value": f"обе найдены с {one['episodes_to_find_all']} эпизодов",
+                     "was": "корреляционной машинерии не было (М6)",
+                     "unit": "связь", "n": len(rows_),
+                     "task": "TASK-24 B"})
+        runs.append({"name": "ложные связи на молчащем классе",
+                     "value": f"0 по пикселям, худший прогон механики {worst_false}",
+                     "was": "не измерялось", "unit": "связь",
+                     "n": len(rows_), "task": "TASK-24 B, инвариант 31"})
+
+    at = files.get("attention", {})
+    if at and at.get("verdicts"):
+        v1 = at["verdicts"].get("окон 1", {})
+        v4 = at["verdicts"].get("окон 4", {})
+        fired = sum(x["fired"] for x in at["false_positives"].values())
+        checks = sum(x["checks"] for x in at["false_positives"].values())
+        runs.append({"name": "арбитраж внимания против раздачи по порядку",
+                     "value": (f"{v1.get('median_ratio', 0):.2f}× при одном окне, "
+                               f"{v4.get('median_ratio', 0):.2f}× при четырёх"),
+                     "was": "окна никто не распределял: ось была мёртвой",
+                     "unit": "прогон", "n": len(at.get("rows", [])),
+                     "task": "TASK-24 C"})
+        runs.append({"name": "ложные срабатывания вывода о внимании",
+                     "value": f"{fired} из {checks} проверок",
+                     "was": "40–90 % у первого правила вывода",
+                     "unit": "прогон", "n": checks,
+                     "task": "TASK-24 C, инвариант 31"})
+
+    hr = files.get("hour", {})
+    if hr and hr.get("series"):
+        rate = hr["series"]["loops_per_s"]
+        runs.append({"name": "час непрерывной работы: частота цикла",
+                     "value": f"падение {rate[0] / rate[-1]:.1f}× ({rate[0]:.0f} → "
+                              f"{rate[-1]:.0f} об/с)",
+                     "was": "ожидалось «не растёт»; час не проверялся вовсе",
+                     "unit": "отрезок", "n": hr.get("n", 0),
+                     "task": "TASK-24 D"})
+        runs.append({"name": "час непрерывной работы: память",
+                     "value": f"{hr['series']['rss_mb'][0]:.0f} → "
+                              f"{hr['series']['rss_mb'][-1]:.0f} МиБ, полка",
+                     "was": "ожидалась полка — совпало", "unit": "отрезок",
+                     "n": hr.get("n", 0), "task": "TASK-24 D"})
+
+    hc = files.get("hour_classifier", {})
+    if hc:
+        runs.append({"name": "ложные срабатывания классификатора роста",
+                     "value": f"{hc['false_share']:.0%} (все на классе «не растёт»)",
+                     "was": "не измерялось", "unit": "серия",
+                     "n": len(hc.get("rows", [])), "task": "TASK-24 D, инвариант 31"})
+
+    sd = files.get("slowdown", {})
+    if sd and sd.get("rows"):
+        by = {r["case"]: r for r in sd["rows"]}
+        as_is = by.get("как есть", {}).get("drop") or 0.0
+        without = by.get("без графа мест", {}).get("drop") or 0.0
+        runs.append({"name": "причина замедления цикла",
+                     "value": f"без графа мест {without:.2f}× против {as_is:.2f}×",
+                     "was": "причина не была установлена", "unit": "прогон",
+                     "n": len(sd["rows"]), "task": "TASK-24 D"})
+
     return {"runs": runs, "files": sorted(files), "source": "docs/measurements/"}
 
 
