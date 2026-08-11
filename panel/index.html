@@ -166,6 +166,7 @@ td.n,th.n{font-family:var(--mono);font-variant-numeric:tabular-nums;text-align:r
   <div id="stopwrap"><button id="stop">СТОП</button></div>
 </div>
 
+<div id="moment-note" style="display:none;padding:6px 10px;border-left:3px solid #b42318;margin:6px 0;font-size:13px"></div>
 <div id="tabs"></div>
 
 <main>
@@ -873,6 +874,15 @@ function reloadFixture() {
 }
 
 async function initRecording() {
+  /* Сервер записи вставляет в разметку свою метку. Нет метки — панель подана как файл, и
+     спрашивать `/api/plan` незачем: запрос всё равно вернёт 404, а 404 в консоли значит
+     «что-то сломалось», хотя ничего не сломалось. Проверка панели в браузере считает
+     ошибки консоли, и этот 404 держал её красной — то есть один ложный признак поломки
+     скрывал бы настоящие. Найдено при добавлении ссылки на момент (TASK-29). */
+  if (!document.querySelector('meta[name="harness-token"]')) {
+    noServer("панель открыта не сервером записи.");
+    return;
+  }
   const got = await api("/api/plan");
   if (!got.ok || !got.data.server) {
     noServer("панель открыта не сервером записи.");
@@ -899,7 +909,7 @@ function buildTabs() {
   });
 }
 
-function show(i) {
+function show(i, opts) {
   cur = i;
   SCREENS.forEach(([id], k) => $(id).classList.toggle("sel", k === i));
   [...$("tabs").children].forEach((b, k) => b.classList.toggle("sel", k === i));
@@ -907,6 +917,68 @@ function show(i) {
   if (i === 0) drawLive(DATA);
   if (i === 1) drawState(DATA);
   if (i === 4) drawJournal(DATA);
+  if (!opts || !opts.silent) writeMoment();
+}
+
+/* --- ссылка на момент ---------------------------------------------------------
+ *
+ * Адрес, открывающий панель на нужном экране и нужном обороте. Это замена пересылке
+ * скриншотов: скриншот показывает, что человек видел, но не даёт открыть то же самое и
+ * посмотреть рядом. Момент живёт в адресной строке (`#экран=журнал&оборот=1234`), потому
+ * что адрес — единственное, что переживает пересылку в мессенджере без потерь.
+ *
+ * Имена в адресе русские нарочно: их читает и пишет человек, а не машина. Номер экрана в
+ * адресе был бы короче и хуже — при добавлении экрана все прежние ссылки поехали бы.
+ *
+ * Оборот запоминается, даже если экран его пока не использует: ссылка не должна ломаться
+ * от того, что скруббер ещё не написан. Что момент **сохранён**, видно по адресу, а не по
+ * обещанию, — и в этом смысл держать его в hash, а не в памяти страницы.
+ */
+let MOMENT = { turn: null };
+
+/* Имя экрана в адресе — его же идентификатор в разметке без приставки `s-`. Латиница
+   здесь не вкусовая: браузер приводит нелатинский hash к процентной записи сам, и
+   «#экран=журнал» в буфере обмена оказывается «#%D1%8D%D0%BA%D1%80%D0%B0%D0%BD=...» —
+   проверено в браузере. Ссылку пересылают человеку, значит она обязана остаться
+   читаемой после пересылки. Номер экрана был бы ещё короче и хуже: добавили экран —
+   поехали все прежние ссылки. */
+function screenSlug(i) {
+  return String(SCREENS[i][0]).replace(/^s-/, "");
+}
+
+function writeMoment() {
+  const parts = ["screen=" + screenSlug(cur)];
+  if (MOMENT.turn !== null) parts.push("turn=" + String(MOMENT.turn));
+  const next = "#" + parts.join("&");
+  if (location.hash !== next) history.replaceState(null, "", next);
+}
+
+function readMoment() {
+  const hash = location.hash.replace(/^#/, "");
+  if (!hash) return null;
+  const got = {};
+  for (const kv of hash.split("&")) {
+    const [k, v] = kv.split("=");
+    if (k) got[decodeURIComponent(k)] = decodeURIComponent(v || "");
+  }
+  const out = { screen: 0, turn: null, known: false };
+  if (got["screen"]) {
+    const i = SCREENS.findIndex((s, k) => screenSlug(k) === got["screen"]);
+    /* Неизвестный экран — не молчаливый ноль: ссылка на экран, которого больше нет,
+       обязана быть видна, иначе оператор смотрит не туда, куда его позвали. */
+    if (i >= 0) { out.screen = i; out.known = true; }
+    else out.unknownScreen = got["screen"];
+  }
+  if (got["turn"] && /^\d+$/.test(got["turn"])) out.turn = Number(got["turn"]);
+  return out;
+}
+
+/* Вызывается тем, кто выбирает момент (скруббер, клик по записи журнала). Пока таких
+   мест нет, и функция объявлена ровно затем, чтобы адрес умел момент нести до того, как
+   появится тот, кто его выбирает. */
+function setTurn(turn) {
+  MOMENT.turn = turn === null ? null : Number(turn);
+  writeMoment();
 }
 
 document.addEventListener("keydown", (ev) => {
@@ -932,7 +1004,26 @@ $("stop").onclick = () => {
   $("alarm").classList.add("on");
 };
 
-window.addEventListener("resize", () => show(cur));
+window.addEventListener("resize", () => show(cur, { silent: true }));
+/* Смена адреса без перезагрузки — обычный случай, а не редкость: оператор вставляет
+   присланную ссылку в уже открытую панель, и документ остаётся тем же. Поэтому применение
+   момента живёт в одной функции, а не двумя копиями: вторая копия молчала про исчезнувший
+   экран, и это поймала проверка в браузере. */
+window.addEventListener("hashchange", () => applyMoment({ silent: true }));
+
+function applyMoment(opts) {
+  const m = readMoment();
+  const note = $("moment-note");
+  note.style.display = "none";
+  if (!m) { show(0, opts); return; }
+  if (m.turn !== null) MOMENT.turn = m.turn;
+  show(m.screen, opts);
+  if (m.unknownScreen) {
+    note.textContent =
+      "в ссылке экран «" + m.unknownScreen + "», которого в панели нет — открыт первый";
+    note.style.display = "block";
+  }
+}
 
 /* ЕДИНСТВЕННОЕ место чтения фикстуры. Открытие панели и пересборка после записи зовут
    его же; метка времени в запросе нужна затем, что после пересборки браузер иначе отдаёт
@@ -950,7 +1041,8 @@ loadFixture().then((d) => {
   drawBar(d);
   drawGoals(d); drawMemory(d); drawBody(d); drawExperiments(d);
   initRecording().catch((e) => noServer("панель открыта файлом: " + e.message));
-  show(0);
+  /* Открытие по ссылке на момент: экран и оборот из адреса, а не всегда первый экран. */
+  applyMoment();
 }).catch((e) => {
   document.querySelector("main").style.display = "none";
   $("err").style.display = "block";

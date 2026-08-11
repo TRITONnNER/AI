@@ -114,6 +114,35 @@ if (served) {
   say(buttons === 0, `кнопок записи без сервера: ${buttons} (должно быть 0)`);
 }
 
+/* 8. Ссылка на момент: адрес, открывающий панель на нужном экране и обороте. TASK-29, B.
+   Проверяется в браузере, потому что проверять тут нечего кроме поведения: адрес пишет
+   history.replaceState, а читает — открытие страницы, и оба видны только в браузере.
+   Заодно ловится процентная запись: нелатинский hash браузер приводит к
+   «%D1%8D%D0%BA...», и ссылка перестаёт быть читаемой человеком — а весь её смысл в том,
+   что её пересылают вместо скриншота. */
+await page.keyboard.press("5");
+await page.waitForSelector("#s-journal.sel");
+await page.evaluate(() => setTurn(1234));
+await page.waitForTimeout(150);
+const moment = await page.evaluate(() => location.hash);
+say(moment === "#screen=journal&turn=1234", `адрес момента: ${moment}`);
+say(!/%[0-9A-F]{2}/i.test(moment), "адрес читается человеком, без процентной записи");
+const back = await browser.newPage({ viewport: { width: 1600, height: 950 } });
+await back.goto(URL + moment, { waitUntil: "networkidle" });
+await back.waitForTimeout(400);
+const opened = await back.evaluate(() => [
+  [...document.querySelectorAll("#tabs button")].findIndex((b) => b.classList.contains("sel")),
+  MOMENT.turn,
+]);
+say(opened[0] === 4 && opened[1] === 1234,
+    `открытие по ссылке вернуло экран ${opened[0]} и оборот ${opened[1]}`);
+await back.goto(URL + "#screen=net-takogo", { waitUntil: "networkidle" });
+await back.waitForTimeout(300);
+const unknown = (await back.textContent("#moment-note")) || "";
+say(unknown.includes("net-takogo"),
+    `ссылка на исчезнувший экран названа вслух: «${unknown.slice(0, 48)}…»`);
+await back.close();
+
 say(errors.length === 0, `ошибок в консоли: ${errors.length}` +
     (errors.length ? " — " + errors.join("; ") : ""));
 
