@@ -226,11 +226,15 @@ class FarLayer(PerceptionLayer):
         coarsen = max(1, int(profile.parameters["periphery_coarsening"]))
         self.grid = max(2, grid // coarsen)
         self.levels = int(profile.structural["place_levels"])
+        # Размытие берётся оттуда же, откуда сетка: ориентир дальнего слоя и отпечаток
+        # места считаются одной функцией, и разойтись они не должны — иначе «тот же вид»
+        # у графа мест и у ориентиров означало бы разное.
+        self.blur_px = int(profile.structural["place_blur_px"])
 
     def look(self, frame: np.ndarray, at_frame: int) -> dict[str, Any]:
         from ..model.places import view
 
-        v = view(frame, grid=self.grid, levels=self.levels)
+        v = view(frame, grid=self.grid, levels=self.levels, blur_px=self.blur_px)
         return {"level": round(v.level, 2), "contrast": round(v.contrast, 2),
                 "landmark": list(v.cells)}
 

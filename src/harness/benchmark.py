@@ -421,7 +421,9 @@ def bench_domain(name: str, *, seed: int = 0, frames: int = 140,
         arbiter.feed(frame)
         shift_error.feed(frame)
         copy_error.feed(frame)
-        graph.observe(fingerprint(frame), i, seconds_per_seq=1.0 / 30.0)
+        graph.observe(fingerprint(frame, grid=graph.grid, levels=graph.levels,
+                                  blur_px=graph.blur_px),
+                      i, seconds_per_seq=1.0 / 30.0)
         mask_now = domain.screen_mask()
         anim_now = domain.animated_mask()
         if always_screen is None:

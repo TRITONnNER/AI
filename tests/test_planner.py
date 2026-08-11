@@ -9,6 +9,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Any
 
 import numpy as np
 import pytest
@@ -566,7 +567,44 @@ def test_planner_reaches_a_place_in_the_interactive_world() -> None:
     # что каждое случившееся деление обосновано разошедшимися уровнями. Что деление
     # вообще срабатывает, проверяется отдельно: `test_places_refine.py` и
     # `test_light_toggle_forces_the_map_to_split`.
-    assert all(r["feature"] == "level" for r in refinements), refinements
+    # Признак деления — из объявленного набора, а не обязательно «уровень». Дерево
+    # признаков делит и по отдельной ячейке сетки, и после смены функции отпечатка на
+    # этом сиде сработало именно оно (`cell:13`). Требовать «только level» значило бы
+    # запрещать половину механизма, который проверяется в `test_places_refine.py`.
+    for r in refinements:
+        assert r["feature"] in ("level", "contrast") \
+            or r["feature"].startswith("cell:"), r
+        assert r["place"] and r["mode"], r
+
+
+def _explore_places(profile: Any, *, seed: int, steps: int,
+                    with_return: bool) -> int:
+    """Сколько мест открывает разведка. Нужна затем, что сравнивать надо с прогоном."""
+    inverse: dict[str, str] = {}
+    if with_return:
+        bw = InteractiveWorld(profile, seed=seed, n_outputs=16)
+        b = Babbler(profile, bw.outputs, rng_seed=seed)
+        run_babbling(bw, b, steps=1200, clocks=Clocks())
+        inverse = dict(b.inverse_found)
+    world = InteractiveWorld(profile, seed=seed, n_outputs=16)
+    graph = PlaceGraph.from_profile(profile)
+    state: dict[str, Any] = {"seq": 0, "last": None}
+    graph.see(world.step(None, with_audio=False).frame, 0, seconds_per_seq=1 / 30.0,
+              mode="start")
+    model = ForwardModel.from_graph(graph)
+    for i in range(steps):
+        if i % 25 == 0:
+            graph.refine()
+            model = ForwardModel.from_graph(graph)
+        out, ms = choose_probe(model, graph.current, world.outputs, hold_ms=200,
+                               min_n=2, inverse=inverse or None,
+                               last_output=state["last"])
+        obs = world.step(Action.key(out, ms), with_audio=False)
+        state["seq"] = int(state["seq"]) + 1
+        state["last"] = out
+        graph.see(obs.frame, int(state["seq"]), seconds_per_seq=1 / 30.0,
+                  mode=action_key(out, ms))
+    return len(graph)
 
 
 def test_exploration_without_going_back_wanders_off() -> None:
@@ -577,16 +615,26 @@ def test_exploration_without_going_back_wanders_off() -> None:
     модель почти ничего не знала в любом случае. Петли записываются — число
     изменилось, и держать в тесте старое было бы враньём.
 
-    Что теперь измерено (сиды 5, 7, 13, по 1200 шагов):
+    Перезамерено дважды. Числа при точном равенстве по четырём уровням (как было до
+    TASK-29) и при полосе ±1 по восьми уровням (как стало) —
+    `tools/measure_fingerprint.py`, часть 3, сиды 5, 7, 13, по 1200 шагов:
 
-    | возврат | мест | подтверждённых исходов | из них ведущих куда-то |
-    |---|---|---|---|
-    | нет  | 80 / 200 / 171 | 16 / 105 / 69 | 8 / 72 / 33 |
-    | есть | 60 / 46 / 59   | 82 / 93 / 60  | 70 / 88 / 26 |
+    | функция | возврат | мест | подтверждённых исходов | ведущих куда-то |
+    |---|---|---|---|---|
+    | точное равенство | нет  | 80 / 200 / 171 | 16 / 105 / 69 | 8 / 72 / 33 |
+    | точное равенство | есть | 60 / 46 / 59   | 82 / 93 / 60  | 70 / 88 / 26 |
+    | полоса ±1        | нет  | 97 / 150 / 138 | 63 / 136 / 72 | 21 / 82 / 23 |
+    | полоса ±1        | есть | 20 / 24 / 53   | 30 / 64 / 85  | 14 / 38 / 48 |
 
-    Вывод тот же, причина видна лучше: без возврата разведка расширяется — мест
-    втрое-вчетверо больше, — и знание размазывается по местам, куда она больше не
-    вернётся. Планировать по такой модели нечем, хотя формально «переходы есть».
+    **Вывод сохранился, но его основание изменилось, и это надо сказать прямо.** Прежде
+    польза возврата была видна по числу подтверждённых переходов, ведущих куда-то: 70
+    против 8 на сиде 5. Под новой функцией отпечатка это различение исчезло — 14 против
+    21, то есть в обратную сторону. Осталось второе основание, и оно сильнее: **без
+    возврата граф расширяется в три-пять раз** (97 мест против 20 на сиде 5), и знание
+    размазывается по местам, куда разведка больше не вернётся.
+
+    Поэтому проверяется теперь размер графа, а не число ведущих куда-то переходов:
+    второе перестало отделять одну расстановку от другой.
     """
     profile = _profile()
     world = InteractiveWorld(profile, seed=5, n_outputs=16)
@@ -616,10 +664,14 @@ def test_exploration_without_going_back_wanders_off() -> None:
     assert len(graph) >= 70, (
         f"без возврата разведка открыла всего {len(graph)} мест — она перестала "
         "расширяться, и замер надо переделать")
-    assert leaving <= 20, (
-        f"без возврата подтвердилось {leaving} ведущих куда-то переходов — больше, "
-        "чем на замере (8). Тогда возврат обратной парой не нужен, и это надо "
+    # Сравнение — с прогоном рядом, а не с числом из докстринга: число в докстринге
+    # стареет молча, и ровно это случилось с прежней редакцией теста.
+    with_return = _explore_places(profile, seed=5, steps=1200, with_return=True)
+    assert len(graph) >= 2 * with_return, (
+        f"без возврата {len(graph)} мест, с возвратом {with_return} — разница меньше "
+        "чем вдвое. Тогда возврат обратной парой не сужает знание, и это надо "
         "перезамерить, а не подгонять порог")
+    assert leaving > 0, "без возврата не подтвердилось ни одного перехода вовсе"
 
 
 def test_light_toggle_forces_the_map_to_split() -> None:
@@ -744,9 +796,17 @@ def test_random_exploration_does_not_produce_a_plannable_model() -> None:
                     for o in model.transitions[key] if o.n >= 2)
     total = sum(len(v) for v in model.transitions.values())
     assert total > 100
-    assert confirmed / total < 0.25, (
+    # Перезамерено в TASK-29 после смены функции отпечатка (полоса ±1 по восьми уровням
+    # вместо точного равенства по четырём). Было 176/1284 = 14 %, стало 225/857 = 26 %:
+    # мест меньше, возвратов больше, поэтому случайное хождение подтверждает больше.
+    # Порог поднят до перезамеренного значения, а не ослаблен «на всякий случай»: вывод,
+    # ради которого тест писался, держится на том, что подтверждается **меньшинство**.
+    assert confirmed / total < 0.35, (
         f"случайная разведка неожиданно подтвердила {confirmed}/{total} переходов — "
         "тогда подтверждающая разведка не нужна, и это надо перезамерить")
+    assert confirmed / total > 0.15, (
+        f"подтверждено {confirmed}/{total} — заметно меньше перезамеренных 26 %. "
+        "Значит изменилось что-то ещё, и это тоже надо перезамерить")
 
 
 def test_place_grid_forks_the_journal() -> None:

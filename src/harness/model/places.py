@@ -59,6 +59,32 @@ import numpy as np
 GRID = 8                  # сторона сетки отпечатка
 LEVELS = 4                # на сколько уровней квантуется ячейка
 LEVELS_KEPT = 32          # сколько последних уровней вида помнит ребро
+#: Размытие перед снятием отпечатка и допуск по уровню при сравнении. Ноль и ноль — та
+#: функция, что была до TASK-29; в схеме по умолчанию другие значения, и почему —
+#: в `MEASUREMENT.md`, 31.2: разрешение прежней функции (4 px) было мельче шага мира
+#: (6 px), и каждое действие уводило вид в новое место.
+BLUR_PX = 0
+LEVEL_TOLERANCE = 0
+
+
+def _box_blur(f: np.ndarray, k: int) -> np.ndarray:
+    """Усреднение по окну `k` пикселей, до нарезки на ячейки.
+
+    Считается через кумулятивные суммы: стоит O(площадь) независимо от `k`.
+
+    По умолчанию выключено, и это результат замера, а не забывчивость: задачу, ради
+    которой размытие писалось (устойчивость к высоким частотам), замер снял — шум
+    отпечаток не путает и без него, 0 ложных тревог из 39 пар.
+    """
+    if k <= 1:
+        return f
+    pad = np.pad(f, k // 2, mode="edge")
+    cs = pad.cumsum(axis=0).cumsum(axis=1)
+    cs = np.pad(cs, ((1, 0), (1, 0)), mode="constant")
+    h, w = f.shape
+    out = (cs[k:k + h, k:k + w] - cs[0:h, k:k + w]
+           - cs[k:k + h, 0:w] + cs[0:h, 0:w])
+    return out / float(k * k)
 
 
 @dataclass(frozen=True, slots=True)
@@ -77,27 +103,31 @@ class View:
 
 
 def view(frame: np.ndarray, *, exclude: np.ndarray | None = None,
-         grid: int = GRID, levels: int = LEVELS) -> View:
+         grid: int = GRID, levels: int = LEVELS, blur_px: int = BLUR_PX) -> View:
     """Снять вид: отпечаток и отброшенные нормировкой величины."""
-    cells, level, contrast = _cells(frame, exclude=exclude, grid=grid, levels=levels)
+    cells, level, contrast = _cells(frame, exclude=exclude, grid=grid, levels=levels,
+                                    blur_px=blur_px)
     return View(cells, level, contrast)
 
 
 def fingerprint(frame: np.ndarray, *, exclude: np.ndarray | None = None,
-                grid: int = GRID, levels: int = LEVELS) -> tuple[int, ...]:
+                grid: int = GRID, levels: int = LEVELS,
+                blur_px: int = BLUR_PX) -> tuple[int, ...]:
     """Отпечаток вида: кортеж уровней по сетке.
 
     `exclude` — маска пикселей, которые в отпечаток не входят (экранный слой).
     Ячейка, полностью попавшая в маску, получает уровень −1: «не знаю». Это
     отдельное значение, а не ноль, иначе «тут интерфейс» стало бы «тут темно».
     """
-    return _cells(frame, exclude=exclude, grid=grid, levels=levels)[0]
+    return _cells(frame, exclude=exclude, grid=grid, levels=levels,
+                  blur_px=blur_px)[0]
 
 
 def _cells(frame: np.ndarray, *, exclude: np.ndarray | None,
-           grid: int, levels: int) -> tuple[tuple[int, ...], float, float]:
+           grid: int, levels: int, blur_px: int = BLUR_PX
+           ) -> tuple[tuple[int, ...], float, float]:
     gray = frame if frame.ndim == 2 else frame[:, :, :3].mean(axis=2)
-    f = gray.astype(np.float64)
+    f = _box_blur(gray.astype(np.float64), int(blur_px))
     if exclude is not None:
         if exclude.shape != f.shape:
             raise ValueError(f"маска {exclude.shape} не по кадру {f.shape}")
@@ -136,14 +166,28 @@ def _cells(frame: np.ndarray, *, exclude: np.ndarray | None,
     return (tuple(int(v) if ok[k] else -1 for k, v in enumerate(q)), mean, spread)
 
 
-def similarity(a: tuple[int, ...], b: tuple[int, ...]) -> float:
-    """Доля совпавших ячеек. Ячейки «не знаю» не участвуют ни за, ни против."""
+def similarity(a: tuple[int, ...], b: tuple[int, ...], *,
+               tolerance: int = LEVEL_TOLERANCE) -> float:
+    """Доля сошедшихся ячеек. Ячейки «не знаю» не участвуют ни за, ни против.
+
+    `tolerance` — на сколько уровней ячейкам разрешено разойтись, чтобы считаться
+    сошедшимися. Ноль — точное равенство, как было до TASK-29.
+
+    Зачем допуск: уровень есть результат **квантования** непрерывной величины, и ячейка
+    у границы корзины перескакивает уровень от любого шевеления. Точное равенство поэтому
+    требует не «тот же вид», а «то же положение относительно границ квантования». Полоса
+    в один уровень из восьми вдвое уже корзины из четырёх и при этом не ломается на
+    границе — замер выбирал по объявленному заранее правилу (`MEASUREMENT.md`, 31.2).
+    """
     if len(a) != len(b):
         raise ValueError("отпечатки разной длины: сетки не совпадают")
     pairs = [(x, y) for x, y in zip(a, b) if x >= 0 and y >= 0]
     if not pairs:
         return 0.0
-    return sum(1 for x, y in pairs if x == y) / len(pairs)
+    tol = int(tolerance)
+    if tol <= 0:
+        return sum(1 for x, y in pairs if x == y) / len(pairs)
+    return sum(1 for x, y in pairs if abs(x - y) <= tol) / len(pairs)
 
 
 def place_id(fp: tuple[int, ...], band: int = 0) -> str:
@@ -176,10 +220,18 @@ class Place:
     band: int = 0
     base: str | None = None
 
-    def best_similarity(self, fp: tuple[int, ...]) -> float:
-        return max(similarity(fp, self.fingerprint),
-                   *(similarity(fp, v) for v in self.variants)) if self.variants \
-            else similarity(fp, self.fingerprint)
+    def best_similarity(self, fp: tuple[int, ...], *,
+                        tolerance: int = LEVEL_TOLERANCE) -> float:
+        """Похожесть на лучший из своих ракурсов. Допуск приходит от графа аргументом.
+
+        Допуск — свойство сравнения, а не карточки места: хранить его в узле значило бы
+        запомнить настройку в данных, и два графа с разными допусками на одних и тех же
+        местах отвечали бы одинаково.
+        """
+        got = similarity(fp, self.fingerprint, tolerance=tolerance)
+        for v in self.variants:
+            got = max(got, similarity(fp, v, tolerance=tolerance))
+        return got
 
     def as_dict(self) -> dict[str, Any]:
         return {"id": self.id, "visits": self.visits, "first_seq": self.first_seq,
@@ -253,11 +305,17 @@ class PlaceGraph:
                  refine_margin: float = 6.0, refine_min_n: int = 2,
                  refine_cell_min_n: int = 4, refine_max_tests: int = 3,
                  record_loops: bool = True,
-                 grid: int = GRID, levels: int = LEVELS) -> None:
+                 grid: int = GRID, levels: int = LEVELS,
+                 blur_px: int = BLUR_PX,
+                 level_tolerance: int = LEVEL_TOLERANCE) -> None:
         if not 0.0 < variant_similarity < same_place_similarity <= 1.0:
             raise ValueError("порог варианта должен быть ниже порога того же места")
         self.grid = int(grid)
         self.levels = int(levels)
+        # Размытие и допуск — части **функции отпечатка**, а не пороги узнавания, и в
+        # схеме объявлены структурными: меняют смысл каждого места разом.
+        self.blur_px = int(blur_px)
+        self.level_tolerance = int(level_tolerance)
         self.same = same_place_similarity
         self.variant = variant_similarity
         self.places: dict[str, Place] = {}
@@ -292,7 +350,9 @@ class PlaceGraph:
                    refine_max_tests=int(p["place_refine_max_tests"]),
                    record_loops=bool(profile.structural["place_record_loops"]),
                    grid=int(profile.structural["place_grid"]),
-                   levels=int(profile.structural["place_levels"]))
+                   levels=int(profile.structural["place_levels"]),
+                   blur_px=int(profile.structural["place_blur_px"]),
+                   level_tolerance=int(profile.structural["place_level_tolerance"]))
 
     def see(self, frame: Any, seq: int, *, seconds_per_seq: float = 1.0,
             mode: str = "unknown", exclude: Any = None) -> str:
@@ -301,7 +361,8 @@ class PlaceGraph:
         Нужно затем, чтобы сетка не разъезжалась: отпечаток, снятый с одной сеткой,
         и граф, построенный на другой, дают места, которых нет.
         """
-        v = view(frame, exclude=exclude, grid=self.grid, levels=self.levels)
+        v = view(frame, exclude=exclude, grid=self.grid, levels=self.levels,
+                 blur_px=self.blur_px)
         return self.observe(v.cells, seq, seconds_per_seq=seconds_per_seq, mode=mode,
                             level=v.level, contrast=v.contrast)
 
@@ -316,7 +377,7 @@ class PlaceGraph:
         """
         best, score = None, 0.0
         for p in self.places.values():
-            s = p.best_similarity(fp)
+            s = p.best_similarity(fp, tolerance=self.level_tolerance)
             if s > score:
                 best, score = (p.base or p.id), s
         return best, score
@@ -373,7 +434,8 @@ class PlaceGraph:
                           band=band, base=base)
             self.places[pid] = place
         elif fp != place.fingerprint and len(place.variants) < 16 \
-                and similarity(fp, place.fingerprint) >= self.variant:
+                and similarity(fp, place.fingerprint,
+                               tolerance=self.level_tolerance) >= self.variant:
             place.variants.append(fp)
         return place
 

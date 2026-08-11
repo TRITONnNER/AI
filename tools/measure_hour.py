@@ -70,7 +70,11 @@ EXPECTED: dict[str, dict[str, str]] = {
                               "расти. Полка здесь означала бы, что респавн перестал работать"},
     "places": {"class": "полка",
                "why": "мир конечен, виды повторяются: новых мест становится всё меньше. "
-                      "Линейный рост означал бы, что отпечаток различает шум, а не вид"},
+                      "**Сверять эту величину по времени нельзя** (13.7): кривая гнётся "
+                      "от того, что цикл замедлился, а не от того, что мир кончился. "
+                      "Правильная ось — наблюдения, и по ней насыщение считает "
+                      "tools/measure_fingerprint.py; здесь величина оставлена для полноты "
+                      "прогона, а её вердикт помечен ненадёжным (axis_wrong)"},
     "wall_us_per_loop": {"class": "не растёт",
                          "why": "настенных микросекунд на один оборот. t_self считает "
                                 "обороты, wall_clock идёт сам; их отношение обязано "
@@ -281,7 +285,11 @@ def main(argv: list[str] | None = None) -> int:
         got, verdict = classify(name, fit, ys=ys)
         rows[name] = {"class_expected": EXPECTED[name]["class"], "class_got": got,
                       "verdict": verdict, "why_expected": EXPECTED[name]["why"],
-                      "first": ys[0], "last": ys[-1], **fit}
+                      "first": ys[0], "last": ys[-1],
+                      # Величины, копящиеся по наблюдениям, а не по времени: их вердикт
+                      # по оси времени — ложное подтверждение (инвариант 32, 13.7).
+                      "axis_wrong": name in ("places",),
+                      **fit}
 
     data = {
         "seconds": a.seconds, "segment_s": a.segment, "points": len(times),
