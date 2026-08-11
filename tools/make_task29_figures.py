@@ -2,6 +2,8 @@
 
 36. **A, отпечаток.** Граф мест рос от способа кормления и от разрешения функции, а не от
     шума: кривая насыщения по наблюдениям плюс разрешение против шага мира.
+37. **D2, смерть контура.** Планировщик пропал — агент продолжает на рефлексах, и падение
+    видно объективной величиной, а не самоотчётом.
 
 Запуск: `python3 tools/make_task29_figures.py [каталог]`. Числа — из
 `docs/measurements/fingerprint.json`.
@@ -145,6 +147,65 @@ def fig_fingerprint(out: Path, data: dict[str, Any]) -> Path:
                  "Граф мест рос от способа кормления и разрешения функции, а не от шума.")
 
 
+def fig_contour_death(out: Path, data: dict[str, Any]) -> Path:
+    """Утверждение: агент продолжает без планировщика, и падение видно числом.
+
+    Две панели: доля действий планировщика до и после смерти контура (падает в ноль) и
+    число действий после смерти (не ноль — значит агент не остановился). Обе величины
+    нужны вместе: первая без второй читалась бы как «агент замолчал».
+    """
+    keys = [k for k in data["by_kill"]]
+    rows = [data["by_kill"][k] for k in keys]
+    fig, (ax1, ax2) = _fig(620, ncols=2)
+
+    xs = list(range(len(rows)))
+    ax1.plot(xs, [r["before"] for r in rows], marker="s", markersize=9, color=OLD,
+             linewidth=2.0, label="до смерти контура")
+    ax1.plot(xs, [r["after"] for r in rows], marker="o", markersize=9, color=NEW,
+             linewidth=2.0, label="после")
+    for x, r in zip(xs, rows):
+        ax1.annotate(f"{r['noticed']} из {r['n']}", (x, max(r["before"], 0.02)),
+                     textcoords="offset points", xytext=(0, 12), ha="center",
+                     fontsize=LABEL_PT - 4, color=NEUTRAL)
+    ax1.set_xticks(xs)
+    ax1.set_xticklabels(keys)
+    ax1.set_ylim(0, 0.42)
+    ax1.legend(fontsize=LABEL_PT - 4, frameon=False, loc="upper right")
+    ax1.set_ylabel("доля действий, за которые планировщик\nсчитает себя причиной",
+                   fontsize=LABEL_PT - 3)
+    ax1.set_xlabel("на каком обороте снят верхний контур\nподпись — в скольких прогонах "
+                   "падение объявлено замеченным;\nна первом обороте падать нечему, и "
+                   "проверка молчит",
+                   fontsize=LABEL_PT - 3)
+
+    ax2.bar(xs, [r["delivered_after"] for r in rows], color=NEW, width=0.5)
+    for x, r in zip(xs, rows):
+        ax2.annotate(f"{r['delivered_after']:.0f}", (x, r["delivered_after"]),
+                     textcoords="offset points", xytext=(0, 6), ha="center",
+                     fontsize=LABEL_PT - 4, color=NEUTRAL)
+    ax2.set_xticks(xs)
+    ax2.set_xticklabels(keys)
+    ax2.set_ylabel("действий после смерти контура", fontsize=LABEL_PT - 2)
+    ax2.set_xlabel("на каком обороте снят верхний контур\nне ноль — значит агент "
+                   "продолжил на рефлексах,\nа не остановился вместе с планировщиком",
+                   fontsize=LABEL_PT - 3)
+
+    e = data["errors"]
+    fig.text(0.01, 0.086,
+             f"обе ошибки проверки «заметил»: ложных тревог "
+             f"{e['false_alarm']['fired']} из {e['false_alarm']['n']}, ложных "
+             f"подтверждений {e['false_confirm']['fired']} из {e['false_confirm']['n']} "
+             f"(контроль — живой контур весь прогон)",
+             fontsize=LABEL_PT - 2, color=NEUTRAL)
+    _stamp(fig, n=f"{len(data['rows'])} прогонов ({len(keys)} точки смерти × "
+                 f"{len(data['seeds'])} сида) плюс {len(data['alive'])} контрольных",
+           unit=data["unit"],
+           compares="доля действий планировщика до смерти контура против после, "
+                    "на одном и том же мире")
+    return _save(fig, out / "37-smert-kontura.png",
+                 "Планировщик пропал — агент продолжает, и падение видно числом.")
+
+
 def main(argv: list[str]) -> int:
     base = Path(argv[1]) if len(argv) > 1 else ROOT / "docs" / "figures"
     src = ROOT / "docs" / "measurements" / "fingerprint.json"
@@ -153,6 +214,13 @@ def main(argv: list[str]) -> int:
               "python3 tools/measure_fingerprint.py", file=sys.stderr)
         return 2
     made = [fig_fingerprint(base, json.loads(src.read_text(encoding="utf-8")))]
+    death = ROOT / "docs" / "measurements" / "contour_death.json"
+    if death.exists():
+        made.append(fig_contour_death(base,
+                                      json.loads(death.read_text(encoding="utf-8"))))
+    else:
+        print("пропущено: contour_death.json — сначала "
+              "python3 tools/measure_contour_death.py", file=sys.stderr)
     other = ROOT / "figures"
     if base.resolve() != other.resolve():
         other.mkdir(parents=True, exist_ok=True)
