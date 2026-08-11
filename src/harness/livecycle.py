@@ -121,6 +121,18 @@ class Cycle:
     under_expectation: int = 0
     expectation_kept: int = 0
     expectation_usurped: int = 0
+    #: Смерть верхнего контура (TASK-29, D2). `planner_died_at` — оборот, на котором
+    #: планировщик перестал отвечать; дальше агент продолжает на рефлексах. Числа «до» и
+    #: «после» считаются раздельно, потому что утверждение «стал глупее» — про разницу, а
+    #: не про итог, и без раздельного счёта его нечем предъявить.
+    planner_died_at: int | None = None
+    delivered_before_death: int = 0
+    delivered_after_death: int = 0
+    planner_share_before: float | None = None
+    planner_share_after: float | None = None
+    #: Заметил ли агент. Не по самоотчёту (инвариант 10), а по объективной величине:
+    #: доля действий, за которые планировщик считает себя причиной, обязана упасть до нуля.
+    noticed_by_expectations: bool = False
 
     @property
     def world_never_paused(self) -> bool:
@@ -147,6 +159,12 @@ class Cycle:
             "under_expectation": self.under_expectation,
             "expectation_kept": self.expectation_kept,
             "expectation_usurped": self.expectation_usurped,
+            "planner_died_at": self.planner_died_at,
+            "delivered_before_death": self.delivered_before_death,
+            "delivered_after_death": self.delivered_after_death,
+            "planner_share_before": self.planner_share_before,
+            "planner_share_after": self.planner_share_after,
+            "noticed_by_expectations": self.noticed_by_expectations,
             "usurped_share": (None if not self.under_expectation
                               else round(self.expectation_usurped
                                          / self.under_expectation, 4)),
@@ -234,6 +252,7 @@ def slow_planner(arena: Arena, *, steps: int = 400) -> Callable[[], Any]:
 
 def run(path: Path, *, scenario: Scenario, profile: Any, seconds: float = 10.0,
         seed: int = 0, hz_scale: float = 1.0,
+        kill_planner_at: int | None = None,
         now: Callable[[], float] | None = None,
         sleep: Callable[[float], None] | None = None) -> Cycle:
     """Прогнать живой цикл и записать всё в журнал. Возвращает числа, а не мнение.
@@ -245,6 +264,14 @@ def run(path: Path, *, scenario: Scenario, profile: Any, seconds: float = 10.0,
 
     `now`/`sleep` подменяются в тестах: цикл, который нельзя прогнать без ожидания
     настоящего времени, невозможно проверить офлайн.
+
+    `kill_planner_at` — оборот, на котором **верхний контур перестаёт отвечать** (TASK-29,
+    D2). Это не аварийный режим и не обработка исключения: планировщик может быть
+    недоступен по совершенно обычным причинам — сервис не отвечает, кончился бюджет
+    запросов, машина занята. Агент обязан продолжать на рефлексах, а не останавливаться, и
+    обязан **заметить**, что стал глупее, — причём заметить объективной величиной, а не
+    самоотчётом (инвариант 10): доля действий, за которые планировщик считает себя
+    причиной, падает до нуля, и это видно в журнале без единого слова агента.
     """
     import time
 
@@ -271,12 +298,23 @@ def run(path: Path, *, scenario: Scenario, profile: Any, seconds: float = 10.0,
                                    reflex=babbler_contour(arena, rng),
                                    planner=slow_planner(arena))
         reason_seq = 0
+        # Действия планировщика до смерти контура и после. Список, а не два числа в
+        # замыкании: числа считаются внутри цикла, а докладываются после него.
+        _planner_acts = [0, 0]
         # Ожидание планировщика: он выдал команду и ждёт её исполнения. Пока ожидание
         # живо, планировщик считает себя причиной происходящего — и **только** тогда его
         # объяснение прикрепляется к действию (TASK-24, направление A).
         expect: Expectation | None = None
         while clock() - started < seconds:
             out.loops += 1
+            if kill_planner_at is not None and out.loops == kill_planner_at:
+                # Контур снимается целиком, а не «отвечает пусто»: недоступный сервис не
+                # присылает пустой ответ, он не присылает ничего. Пустой ответ был бы
+                # другим механизмом — и более мягким, чем бывает в жизни.
+                sched.contours = [c for c in sched.contours
+                                  if getattr(c, "name", "") != "planner"]
+                out.planner_died_at = out.loops
+                expect = None
             ran = sched.step()
             out.preempted += sum(1 for r in ran if r.preempted)
 
@@ -297,6 +335,14 @@ def run(path: Path, *, scenario: Scenario, profile: Any, seconds: float = 10.0,
                 out.delivered += 1
                 key = str(choice.layer)
                 out.by_layer[key] = out.by_layer.get(key, 0) + 1
+                if out.planner_died_at is None:
+                    out.delivered_before_death += 1
+                    if choice.contour == "planner":
+                        _planner_acts[0] += 1
+                else:
+                    out.delivered_after_death += 1
+                    if choice.contour == "planner":
+                        _planner_acts[1] += 1
                 now_s = contour_now()
                 if expect is not None and expect.expired(now_s):
                     # Ожидание истекло: планировщик больше не считает, что исполняется
@@ -340,6 +386,17 @@ def run(path: Path, *, scenario: Scenario, profile: Any, seconds: float = 10.0,
             naptime(0.0)
 
         out.seconds = clock() - started
+        if out.planner_died_at is not None:
+            # Доли считаются раздельно: «стал глупее» — утверждение о разнице.
+            if out.delivered_before_death:
+                out.planner_share_before = _planner_acts[0] / out.delivered_before_death
+            if out.delivered_after_death:
+                out.planner_share_after = _planner_acts[1] / out.delivered_after_death
+            # Замечено или нет — по объективной величине, а не по словам агента: после
+            # смерти контура ни одно действие не может числиться за планировщиком.
+            out.noticed_by_expectations = (
+                out.delivered_after_death > 0 and _planner_acts[1] == 0
+                and bool(_planner_acts[0]))
         arena.close(arena.finished() or "прервано", rec.clocks.stamp())
         out.episodes = arena.summary()
         out.contours = [c.as_dict() for c in sched.contours]

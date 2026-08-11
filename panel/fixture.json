@@ -3031,6 +3031,7 @@
    "balance_curve_8seeds",
    "beliefs",
    "capture_area",
+   "contour_death",
    "drives",
    "env_dependence",
    "fingerprint",
@@ -5178,7 +5179,7 @@
   "source": "core.settings.SCHEMA"
  },
  "about": {
-  "session": "/tmp/panel-session-sjh9k_l5/session",
+  "session": "/tmp/panel-session-hhmfb9m6/session",
   "origins": {
    "живая запись оператора": "снято на машине оператора",
    "синтетический прогон": "посчитано по журналу этого прогона",

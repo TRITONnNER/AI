@@ -1,0 +1,1623 @@
+{
+  "rows": [
+    {
+      "loops": 2902,
+      "world_ticks": 2902,
+      "world_never_paused": true,
+      "delivered": 579,
+      "by_layer": {
+        "reflex": 579
+      },
+      "layers_complete": true,
+      "preempted": 0,
+      "contours": [
+        {
+          "name": "reflex",
+          "hz": 20.0,
+          "level": 0,
+          "runs": 579,
+          "slices": 579,
+          "preempted": 0,
+          "overruns": 0,
+          "busy": false,
+          "has_answer": false
+        }
+      ],
+      "episodes": {
+        "episodes": 15,
+        "unit": "эпизод",
+        "by_outcome": {
+          "достигнута": 0,
+          "бюджет": 14,
+          "мир сломан": 0,
+          "прервано": 1
+        },
+        "reached_share": 0.0,
+        "mean_ticks": 193.47,
+        "ticks_total": 2902,
+        "tries": 579,
+        "changed": 191,
+        "useful_share": 0.3299,
+        "unit_for_useful": "проба",
+        "scenario": "дойти",
+        "why": "есть ли у агента связь между удержанием выхода и смещением мира"
+      },
+      "confabulation": {
+        "actions": 610,
+        "explained": 0,
+        "matched": 0,
+        "mismatched": 0,
+        "dangling": 0,
+        "reasons": 0,
+        "unused_reasons": 0,
+        "rate": null,
+        "unit": "эпизод",
+        "n": 0,
+        "enough": false,
+        "share_by_explanation": null,
+        "coverage": {
+          "episodes": 30,
+          "episodes_explained": 0,
+          "min_episodes": 8,
+          "explained_share": 0.0,
+          "unused_reasons": 0,
+          "dangling": 0,
+          "episode_marker": "записи goal, найдено 30"
+        },
+        "by_pair": {},
+        "examples": [],
+        "absent_reason": "ни одно действие не сослалось на реплику планировщика: объяснений в этом прогоне не было, а не было расхождений",
+        "line": "конфабуляция: не измерена — ни одно действие не сослалось на реплику планировщика: объяснений в этом прогоне не было, а не было расхождений. Действий с инициатором 610, реплик 0"
+      },
+      "expectations": 0,
+      "expectations_expired": 0,
+      "under_expectation": 0,
+      "expectation_kept": 0,
+      "expectation_usurped": 0,
+      "planner_died_at": 1,
+      "delivered_before_death": 0,
+      "delivered_after_death": 579,
+      "planner_share_before": null,
+      "planner_share_after": 0.0,
+      "noticed_by_expectations": false,
+      "usurped_share": null,
+      "explained_share": 0.0,
+      "seconds": 0.8,
+      "unit": "оборот цикла",
+      "unit_for_episodes": "эпизод",
+      "kill_at": 1,
+      "seed": 4
+    },
+    {
+      "loops": 2800,
+      "world_ticks": 2800,
+      "world_never_paused": true,
+      "delivered": 579,
+      "by_layer": {
+        "reflex": 579
+      },
+      "layers_complete": true,
+      "preempted": 0,
+      "contours": [
+        {
+          "name": "reflex",
+          "hz": 20.0,
+          "level": 0,
+          "runs": 579,
+          "slices": 579,
+          "preempted": 0,
+          "overruns": 0,
+          "busy": false,
+          "has_answer": false
+        }
+      ],
+      "episodes": {
+        "episodes": 15,
+        "unit": "эпизод",
+        "by_outcome": {
+          "достигнута": 0,
+          "бюджет": 14,
+          "мир сломан": 0,
+          "прервано": 1
+        },
+        "reached_share": 0.0,
+        "mean_ticks": 186.67,
+        "ticks_total": 2800,
+        "tries": 579,
+        "changed": 217,
+        "useful_share": 0.3748,
+        "unit_for_useful": "проба",
+        "scenario": "дойти",
+        "why": "есть ли у агента связь между удержанием выхода и смещением мира"
+      },
+      "confabulation": {
+        "actions": 610,
+        "explained": 0,
+        "matched": 0,
+        "mismatched": 0,
+        "dangling": 0,
+        "reasons": 0,
+        "unused_reasons": 0,
+        "rate": null,
+        "unit": "эпизод",
+        "n": 0,
+        "enough": false,
+        "share_by_explanation": null,
+        "coverage": {
+          "episodes": 30,
+          "episodes_explained": 0,
+          "min_episodes": 8,
+          "explained_share": 0.0,
+          "unused_reasons": 0,
+          "dangling": 0,
+          "episode_marker": "записи goal, найдено 30"
+        },
+        "by_pair": {},
+        "examples": [],
+        "absent_reason": "ни одно действие не сослалось на реплику планировщика: объяснений в этом прогоне не было, а не было расхождений",
+        "line": "конфабуляция: не измерена — ни одно действие не сослалось на реплику планировщика: объяснений в этом прогоне не было, а не было расхождений. Действий с инициатором 610, реплик 0"
+      },
+      "expectations": 0,
+      "expectations_expired": 0,
+      "under_expectation": 0,
+      "expectation_kept": 0,
+      "expectation_usurped": 0,
+      "planner_died_at": 1,
+      "delivered_before_death": 0,
+      "delivered_after_death": 579,
+      "planner_share_before": null,
+      "planner_share_after": 0.0,
+      "noticed_by_expectations": false,
+      "usurped_share": null,
+      "explained_share": 0.0,
+      "seconds": 0.8,
+      "unit": "оборот цикла",
+      "unit_for_episodes": "эпизод",
+      "kill_at": 1,
+      "seed": 5
+    },
+    {
+      "loops": 2791,
+      "world_ticks": 2791,
+      "world_never_paused": true,
+      "delivered": 581,
+      "by_layer": {
+        "reflex": 581
+      },
+      "layers_complete": true,
+      "preempted": 0,
+      "contours": [
+        {
+          "name": "reflex",
+          "hz": 20.0,
+          "level": 0,
+          "runs": 581,
+          "slices": 581,
+          "preempted": 0,
+          "overruns": 0,
+          "busy": false,
+          "has_answer": false
+        }
+      ],
+      "episodes": {
+        "episodes": 14,
+        "unit": "эпизод",
+        "by_outcome": {
+          "достигнута": 0,
+          "бюджет": 13,
+          "мир сломан": 0,
+          "прервано": 1
+        },
+        "reached_share": 0.0,
+        "mean_ticks": 199.36,
+        "ticks_total": 2791,
+        "tries": 581,
+        "changed": 213,
+        "useful_share": 0.3666,
+        "unit_for_useful": "проба",
+        "scenario": "дойти",
+        "why": "есть ли у агента связь между удержанием выхода и смещением мира"
+      },
+      "confabulation": {
+        "actions": 610,
+        "explained": 0,
+        "matched": 0,
+        "mismatched": 0,
+        "dangling": 0,
+        "reasons": 0,
+        "unused_reasons": 0,
+        "rate": null,
+        "unit": "эпизод",
+        "n": 0,
+        "enough": false,
+        "share_by_explanation": null,
+        "coverage": {
+          "episodes": 28,
+          "episodes_explained": 0,
+          "min_episodes": 8,
+          "explained_share": 0.0,
+          "unused_reasons": 0,
+          "dangling": 0,
+          "episode_marker": "записи goal, найдено 28"
+        },
+        "by_pair": {},
+        "examples": [],
+        "absent_reason": "ни одно действие не сослалось на реплику планировщика: объяснений в этом прогоне не было, а не было расхождений",
+        "line": "конфабуляция: не измерена — ни одно действие не сослалось на реплику планировщика: объяснений в этом прогоне не было, а не было расхождений. Действий с инициатором 610, реплик 0"
+      },
+      "expectations": 0,
+      "expectations_expired": 0,
+      "under_expectation": 0,
+      "expectation_kept": 0,
+      "expectation_usurped": 0,
+      "planner_died_at": 1,
+      "delivered_before_death": 0,
+      "delivered_after_death": 581,
+      "planner_share_before": null,
+      "planner_share_after": 0.0,
+      "noticed_by_expectations": false,
+      "usurped_share": null,
+      "explained_share": 0.0,
+      "seconds": 0.8,
+      "unit": "оборот цикла",
+      "unit_for_episodes": "эпизод",
+      "kill_at": 1,
+      "seed": 6
+    },
+    {
+      "loops": 2615,
+      "world_ticks": 2615,
+      "world_never_paused": true,
+      "delivered": 584,
+      "by_layer": {
+        "reflex": 572,
+        "planner": 12
+      },
+      "layers_complete": true,
+      "preempted": 22,
+      "contours": [
+        {
+          "name": "reflex",
+          "hz": 20.0,
+          "level": 0,
+          "runs": 572,
+          "slices": 572,
+          "preempted": 0,
+          "overruns": 0,
+          "busy": false,
+          "has_answer": false
+        }
+      ],
+      "episodes": {
+        "episodes": 14,
+        "unit": "эпизод",
+        "by_outcome": {
+          "достигнута": 0,
+          "бюджет": 13,
+          "мир сломан": 0,
+          "прервано": 1
+        },
+        "reached_share": 0.0,
+        "mean_ticks": 186.79,
+        "ticks_total": 2615,
+        "tries": 584,
+        "changed": 214,
+        "useful_share": 0.3664,
+        "unit_for_useful": "проба",
+        "scenario": "дойти",
+        "why": "есть ли у агента связь между удержанием выхода и смещением мира"
+      },
+      "confabulation": {
+        "actions": 613,
+        "explained": 25,
+        "matched": 12,
+        "mismatched": 13,
+        "dangling": 0,
+        "reasons": 12,
+        "unused_reasons": 0,
+        "rate": null,
+        "unit": "эпизод",
+        "n": 1,
+        "enough": false,
+        "share_by_explanation": 0.52,
+        "coverage": {
+          "episodes": 28,
+          "episodes_explained": 1,
+          "min_episodes": 8,
+          "explained_share": 0.0408,
+          "unused_reasons": 0,
+          "dangling": 0,
+          "episode_marker": "записи goal, найдено 28"
+        },
+        "by_pair": {
+          "planner→reflex": 13
+        },
+        "examples": [
+          {
+            "seq": 5,
+            "reason_id": "reason-1",
+            "claimed": "planner",
+            "actual": "reflex"
+          },
+          {
+            "seq": 8,
+            "reason_id": "reason-2",
+            "claimed": "planner",
+            "actual": "reflex"
+          },
+          {
+            "seq": 11,
+            "reason_id": "reason-3",
+            "claimed": "planner",
+            "actual": "reflex"
+          },
+          {
+            "seq": 14,
+            "reason_id": "reason-4",
+            "claimed": "planner",
+            "actual": "reflex"
+          },
+          {
+            "seq": 17,
+            "reason_id": "reason-5",
+            "claimed": "planner",
+            "actual": "reflex"
+          },
+          {
+            "seq": 20,
+            "reason_id": "reason-6",
+            "claimed": "planner",
+            "actual": "reflex"
+          },
+          {
+            "seq": 23,
+            "reason_id": "reason-7",
+            "claimed": "planner",
+            "actual": "reflex"
+          },
+          {
+            "seq": 26,
+            "reason_id": "reason-8",
+            "claimed": "planner",
+            "actual": "reflex"
+          }
+        ],
+        "absent_reason": null,
+        "line": "конфабуляция: числа нет — независимых эпизодов 1 при пороге 8. Покрытие: объяснено 25 действий из 613, реплик без ссылок 0, разметка эпизодов — записи goal, найдено 28. По объяснениям вышло бы 52%, но 25 объяснений на 1 эпизодах независимыми наблюдениями не являются"
+      },
+      "expectations": 12,
+      "expectations_expired": 1,
+      "under_expectation": 25,
+      "expectation_kept": 12,
+      "expectation_usurped": 13,
+      "planner_died_at": 200,
+      "delivered_before_death": 60,
+      "delivered_after_death": 524,
+      "planner_share_before": 0.2,
+      "planner_share_after": 0.0,
+      "noticed_by_expectations": true,
+      "usurped_share": 0.52,
+      "explained_share": 0.0428,
+      "seconds": 0.8,
+      "unit": "оборот цикла",
+      "unit_for_episodes": "эпизод",
+      "kill_at": 200,
+      "seed": 4
+    },
+    {
+      "loops": 2759,
+      "world_ticks": 2759,
+      "world_never_paused": true,
+      "delivered": 594,
+      "by_layer": {
+        "reflex": 580,
+        "planner": 14
+      },
+      "layers_complete": true,
+      "preempted": 21,
+      "contours": [
+        {
+          "name": "reflex",
+          "hz": 20.0,
+          "level": 0,
+          "runs": 580,
+          "slices": 580,
+          "preempted": 0,
+          "overruns": 0,
+          "busy": false,
+          "has_answer": false
+        }
+      ],
+      "episodes": {
+        "episodes": 14,
+        "unit": "эпизод",
+        "by_outcome": {
+          "достигнута": 0,
+          "бюджет": 13,
+          "мир сломан": 0,
+          "прервано": 1
+        },
+        "reached_share": 0.0,
+        "mean_ticks": 197.07,
+        "ticks_total": 2759,
+        "tries": 594,
+        "changed": 218,
+        "useful_share": 0.367,
+        "unit_for_useful": "проба",
+        "scenario": "дойти",
+        "why": "есть ли у агента связь между удержанием выхода и смещением мира"
+      },
+      "confabulation": {
+        "actions": 623,
+        "explained": 25,
+        "matched": 14,
+        "mismatched": 11,
+        "dangling": 0,
+        "reasons": 14,
+        "unused_reasons": 0,
+        "rate": null,
+        "unit": "эпизод",
+        "n": 1,
+        "enough": false,
+        "share_by_explanation": 0.44,
+        "coverage": {
+          "episodes": 28,
+          "episodes_explained": 1,
+          "min_episodes": 8,
+          "explained_share": 0.0401,
+          "unused_reasons": 0,
+          "dangling": 0,
+          "episode_marker": "записи goal, найдено 28"
+        },
+        "by_pair": {
+          "planner→reflex": 11
+        },
+        "examples": [
+          {
+            "seq": 5,
+            "reason_id": "reason-1",
+            "claimed": "planner",
+            "actual": "reflex"
+          },
+          {
+            "seq": 10,
+            "reason_id": "reason-3",
+            "claimed": "planner",
+            "actual": "reflex"
+          },
+          {
+            "seq": 15,
+            "reason_id": "reason-5",
+            "claimed": "planner",
+            "actual": "reflex"
+          },
+          {
+            "seq": 20,
+            "reason_id": "reason-7",
+            "claimed": "planner",
+            "actual": "reflex"
+          },
+          {
+            "seq": 25,
+            "reason_id": "reason-9",
+            "claimed": "planner",
+            "actual": "reflex"
+          },
+          {
+            "seq": 30,
+            "reason_id": "reason-11",
+            "claimed": "planner",
+            "actual": "reflex"
+          },
+          {
+            "seq": 33,
+            "reason_id": "reason-12",
+            "claimed": "planner",
+            "actual": "reflex"
+          },
+          {
+            "seq": 36,
+            "reason_id": "reason-13",
+            "claimed": "planner",
+            "actual": "reflex"
+          }
+        ],
+        "absent_reason": null,
+        "line": "конфабуляция: числа нет — независимых эпизодов 1 при пороге 8. Покрытие: объяснено 25 действий из 623, реплик без ссылок 0, разметка эпизодов — записи goal, найдено 28. По объяснениям вышло бы 44%, но 25 объяснений на 1 эпизодах независимыми наблюдениями не являются"
+      },
+      "expectations": 14,
+      "expectations_expired": 1,
+      "under_expectation": 25,
+      "expectation_kept": 14,
+      "expectation_usurped": 11,
+      "planner_died_at": 200,
+      "delivered_before_death": 57,
+      "delivered_after_death": 537,
+      "planner_share_before": 0.24561403508771928,
+      "planner_share_after": 0.0,
+      "noticed_by_expectations": true,
+      "usurped_share": 0.44,
+      "explained_share": 0.0421,
+      "seconds": 0.8,
+      "unit": "оборот цикла",
+      "unit_for_episodes": "эпизод",
+      "kill_at": 200,
+      "seed": 5
+    },
+    {
+      "loops": 2667,
+      "world_ticks": 2667,
+      "world_never_paused": true,
+      "delivered": 592,
+      "by_layer": {
+        "reflex": 574,
+        "planner": 18
+      },
+      "layers_complete": true,
+      "preempted": 31,
+      "contours": [
+        {
+          "name": "reflex",
+          "hz": 20.0,
+          "level": 0,
+          "runs": 574,
+          "slices": 574,
+          "preempted": 0,
+          "overruns": 0,
+          "busy": false,
+          "has_answer": false
+        }
+      ],
+      "episodes": {
+        "episodes": 14,
+        "unit": "эпизод",
+        "by_outcome": {
+          "достигнута": 0,
+          "бюджет": 13,
+          "мир сломан": 0,
+          "прервано": 1
+        },
+        "reached_share": 0.0,
+        "mean_ticks": 190.5,
+        "ticks_total": 2667,
+        "tries": 592,
+        "changed": 212,
+        "useful_share": 0.3581,
+        "unit_for_useful": "проба",
+        "scenario": "дойти",
+        "why": "есть ли у агента связь между удержанием выхода и смещением мира"
+      },
+      "confabulation": {
+        "actions": 621,
+        "explained": 34,
+        "matched": 18,
+        "mismatched": 16,
+        "dangling": 0,
+        "reasons": 18,
+        "unused_reasons": 0,
+        "rate": null,
+        "unit": "эпизод",
+        "n": 1,
+        "enough": false,
+        "share_by_explanation": 0.4706,
+        "coverage": {
+          "episodes": 28,
+          "episodes_explained": 1,
+          "min_episodes": 8,
+          "explained_share": 0.0548,
+          "unused_reasons": 0,
+          "dangling": 0,
+          "episode_marker": "записи goal, найдено 28"
+        },
+        "by_pair": {
+          "planner→reflex": 16
+        },
+        "examples": [
+          {
+            "seq": 5,
+            "reason_id": "reason-1",
+            "claimed": "planner",
+            "actual": "reflex"
+          },
+          {
+            "seq": 8,
+            "reason_id": "reason-2",
+            "claimed": "planner",
+            "actual": "reflex"
+          },
+          {
+            "seq": 11,
+            "reason_id": "reason-3",
+            "claimed": "planner",
+            "actual": "reflex"
+          },
+          {
+            "seq": 14,
+            "reason_id": "reason-4",
+            "claimed": "planner",
+            "actual": "reflex"
+          },
+          {
+            "seq": 17,
+            "reason_id": "reason-5",
+            "claimed": "planner",
+            "actual": "reflex"
+          },
+          {
+            "seq": 22,
+            "reason_id": "reason-7",
+            "claimed": "planner",
+            "actual": "reflex"
+          },
+          {
+            "seq": 27,
+            "reason_id": "reason-9",
+            "claimed": "planner",
+            "actual": "reflex"
+          },
+          {
+            "seq": 32,
+            "reason_id": "reason-11",
+            "claimed": "planner",
+            "actual": "reflex"
+          }
+        ],
+        "absent_reason": null,
+        "line": "конфабуляция: числа нет — независимых эпизодов 1 при пороге 8. Покрытие: объяснено 34 действий из 621, реплик без ссылок 0, разметка эпизодов — записи goal, найдено 28. По объяснениям вышло бы 47%, но 34 объяснений на 1 эпизодах независимыми наблюдениями не являются"
+      },
+      "expectations": 18,
+      "expectations_expired": 1,
+      "under_expectation": 34,
+      "expectation_kept": 18,
+      "expectation_usurped": 16,
+      "planner_died_at": 200,
+      "delivered_before_death": 69,
+      "delivered_after_death": 523,
+      "planner_share_before": 0.2608695652173913,
+      "planner_share_after": 0.0,
+      "noticed_by_expectations": true,
+      "usurped_share": 0.4706,
+      "explained_share": 0.0574,
+      "seconds": 0.8,
+      "unit": "оборот цикла",
+      "unit_for_episodes": "эпизод",
+      "kill_at": 200,
+      "seed": 6
+    },
+    {
+      "loops": 2614,
+      "world_ticks": 2614,
+      "world_never_paused": true,
+      "delivered": 631,
+      "by_layer": {
+        "reflex": 566,
+        "planner": 65
+      },
+      "layers_complete": true,
+      "preempted": 100,
+      "contours": [
+        {
+          "name": "reflex",
+          "hz": 20.0,
+          "level": 0,
+          "runs": 566,
+          "slices": 566,
+          "preempted": 0,
+          "overruns": 0,
+          "busy": false,
+          "has_answer": false
+        }
+      ],
+      "episodes": {
+        "episodes": 14,
+        "unit": "эпизод",
+        "by_outcome": {
+          "достигнута": 0,
+          "бюджет": 13,
+          "мир сломан": 0,
+          "прервано": 1
+        },
+        "reached_share": 0.0,
+        "mean_ticks": 186.71,
+        "ticks_total": 2614,
+        "tries": 631,
+        "changed": 212,
+        "useful_share": 0.336,
+        "unit_for_useful": "проба",
+        "scenario": "дойти",
+        "why": "есть ли у агента связь между удержанием выхода и смещением мира"
+      },
+      "confabulation": {
+        "actions": 660,
+        "explained": 119,
+        "matched": 65,
+        "mismatched": 54,
+        "dangling": 0,
+        "reasons": 65,
+        "unused_reasons": 0,
+        "rate": null,
+        "unit": "эпизод",
+        "n": 5,
+        "enough": false,
+        "share_by_explanation": 0.4538,
+        "coverage": {
+          "episodes": 28,
+          "episodes_explained": 5,
+          "min_episodes": 8,
+          "explained_share": 0.1803,
+          "unused_reasons": 0,
+          "dangling": 0,
+          "episode_marker": "записи goal, найдено 28"
+        },
+        "by_pair": {
+          "planner→reflex": 54
+        },
+        "examples": [
+          {
+            "seq": 7,
+            "reason_id": "reason-2",
+            "claimed": "planner",
+            "actual": "reflex"
+          },
+          {
+            "seq": 12,
+            "reason_id": "reason-4",
+            "claimed": "planner",
+            "actual": "reflex"
+          },
+          {
+            "seq": 17,
+            "reason_id": "reason-6",
+            "claimed": "planner",
+            "actual": "reflex"
+          },
+          {
+            "seq": 22,
+            "reason_id": "reason-8",
+            "claimed": "planner",
+            "actual": "reflex"
+          },
+          {
+            "seq": 27,
+            "reason_id": "reason-10",
+            "claimed": "planner",
+            "actual": "reflex"
+          },
+          {
+            "seq": 30,
+            "reason_id": "reason-11",
+            "claimed": "planner",
+            "actual": "reflex"
+          },
+          {
+            "seq": 31,
+            "reason_id": "reason-11",
+            "claimed": "planner",
+            "actual": "reflex"
+          },
+          {
+            "seq": 32,
+            "reason_id": "reason-11",
+            "claimed": "planner",
+            "actual": "reflex"
+          }
+        ],
+        "absent_reason": null,
+        "line": "конфабуляция: числа нет — независимых эпизодов 5 при пороге 8. Покрытие: объяснено 119 действий из 660, реплик без ссылок 0, разметка эпизодов — записи goal, найдено 28. По объяснениям вышло бы 45%, но 119 объяснений на 5 эпизодах независимыми наблюдениями не являются"
+      },
+      "expectations": 65,
+      "expectations_expired": 5,
+      "under_expectation": 119,
+      "expectation_kept": 65,
+      "expectation_usurped": 54,
+      "planner_died_at": 1000,
+      "delivered_before_death": 288,
+      "delivered_after_death": 343,
+      "planner_share_before": 0.22569444444444445,
+      "planner_share_after": 0.0,
+      "noticed_by_expectations": true,
+      "usurped_share": 0.4538,
+      "explained_share": 0.1886,
+      "seconds": 0.8,
+      "unit": "оборот цикла",
+      "unit_for_episodes": "эпизод",
+      "kill_at": 1000,
+      "seed": 4
+    },
+    {
+      "loops": 2393,
+      "world_ticks": 2393,
+      "world_never_paused": true,
+      "delivered": 645,
+      "by_layer": {
+        "reflex": 568,
+        "planner": 77
+      },
+      "layers_complete": true,
+      "preempted": 125,
+      "contours": [
+        {
+          "name": "reflex",
+          "hz": 20.0,
+          "level": 0,
+          "runs": 568,
+          "slices": 568,
+          "preempted": 0,
+          "overruns": 0,
+          "busy": false,
+          "has_answer": false
+        }
+      ],
+      "episodes": {
+        "episodes": 12,
+        "unit": "эпизод",
+        "by_outcome": {
+          "достигнута": 0,
+          "бюджет": 11,
+          "мир сломан": 0,
+          "прервано": 1
+        },
+        "reached_share": 0.0,
+        "mean_ticks": 199.42,
+        "ticks_total": 2393,
+        "tries": 645,
+        "changed": 234,
+        "useful_share": 0.3628,
+        "unit_for_useful": "проба",
+        "scenario": "дойти",
+        "why": "есть ли у агента связь между удержанием выхода и смещением мира"
+      },
+      "confabulation": {
+        "actions": 670,
+        "explained": 148,
+        "matched": 77,
+        "mismatched": 71,
+        "dangling": 0,
+        "reasons": 77,
+        "unused_reasons": 0,
+        "rate": null,
+        "unit": "эпизод",
+        "n": 5,
+        "enough": false,
+        "share_by_explanation": 0.4797,
+        "coverage": {
+          "episodes": 24,
+          "episodes_explained": 5,
+          "min_episodes": 8,
+          "explained_share": 0.2209,
+          "unused_reasons": 0,
+          "dangling": 0,
+          "episode_marker": "записи goal, найдено 24"
+        },
+        "by_pair": {
+          "planner→reflex": 71
+        },
+        "examples": [
+          {
+            "seq": 5,
+            "reason_id": "reason-1",
+            "claimed": "planner",
+            "actual": "reflex"
+          },
+          {
+            "seq": 10,
+            "reason_id": "reason-3",
+            "claimed": "planner",
+            "actual": "reflex"
+          },
+          {
+            "seq": 15,
+            "reason_id": "reason-5",
+            "claimed": "planner",
+            "actual": "reflex"
+          },
+          {
+            "seq": 18,
+            "reason_id": "reason-6",
+            "claimed": "planner",
+            "actual": "reflex"
+          },
+          {
+            "seq": 23,
+            "reason_id": "reason-8",
+            "claimed": "planner",
+            "actual": "reflex"
+          },
+          {
+            "seq": 28,
+            "reason_id": "reason-10",
+            "claimed": "planner",
+            "actual": "reflex"
+          },
+          {
+            "seq": 33,
+            "reason_id": "reason-12",
+            "claimed": "planner",
+            "actual": "reflex"
+          },
+          {
+            "seq": 36,
+            "reason_id": "reason-13",
+            "claimed": "planner",
+            "actual": "reflex"
+          }
+        ],
+        "absent_reason": null,
+        "line": "конфабуляция: числа нет — независимых эпизодов 5 при пороге 8. Покрытие: объяснено 148 действий из 670, реплик без ссылок 0, разметка эпизодов — записи goal, найдено 24. По объяснениям вышло бы 48%, но 148 объяснений на 5 эпизодах независимыми наблюдениями не являются"
+      },
+      "expectations": 77,
+      "expectations_expired": 8,
+      "under_expectation": 148,
+      "expectation_kept": 77,
+      "expectation_usurped": 71,
+      "planner_died_at": 1000,
+      "delivered_before_death": 334,
+      "delivered_after_death": 311,
+      "planner_share_before": 0.23053892215568864,
+      "planner_share_after": 0.0,
+      "noticed_by_expectations": true,
+      "usurped_share": 0.4797,
+      "explained_share": 0.2295,
+      "seconds": 0.8,
+      "unit": "оборот цикла",
+      "unit_for_episodes": "эпизод",
+      "kill_at": 1000,
+      "seed": 5
+    },
+    {
+      "loops": 2701,
+      "world_ticks": 2701,
+      "world_never_paused": true,
+      "delivered": 633,
+      "by_layer": {
+        "reflex": 567,
+        "planner": 66
+      },
+      "layers_complete": true,
+      "preempted": 95,
+      "contours": [
+        {
+          "name": "reflex",
+          "hz": 20.0,
+          "level": 0,
+          "runs": 567,
+          "slices": 567,
+          "preempted": 0,
+          "overruns": 0,
+          "busy": false,
+          "has_answer": false
+        }
+      ],
+      "episodes": {
+        "episodes": 14,
+        "unit": "эпизод",
+        "by_outcome": {
+          "достигнута": 0,
+          "бюджет": 13,
+          "мир сломан": 0,
+          "прервано": 1
+        },
+        "reached_share": 0.0,
+        "mean_ticks": 192.93,
+        "ticks_total": 2701,
+        "tries": 633,
+        "changed": 240,
+        "useful_share": 0.3791,
+        "unit_for_useful": "проба",
+        "scenario": "дойти",
+        "why": "есть ли у агента связь между удержанием выхода и смещением мира"
+      },
+      "confabulation": {
+        "actions": 662,
+        "explained": 115,
+        "matched": 66,
+        "mismatched": 49,
+        "dangling": 0,
+        "reasons": 66,
+        "unused_reasons": 0,
+        "rate": null,
+        "unit": "эпизод",
+        "n": 5,
+        "enough": false,
+        "share_by_explanation": 0.4261,
+        "coverage": {
+          "episodes": 28,
+          "episodes_explained": 5,
+          "min_episodes": 8,
+          "explained_share": 0.1737,
+          "unused_reasons": 0,
+          "dangling": 0,
+          "episode_marker": "записи goal, найдено 28"
+        },
+        "by_pair": {
+          "planner→reflex": 49
+        },
+        "examples": [
+          {
+            "seq": 5,
+            "reason_id": "reason-1",
+            "claimed": "planner",
+            "actual": "reflex"
+          },
+          {
+            "seq": 8,
+            "reason_id": "reason-2",
+            "claimed": "planner",
+            "actual": "reflex"
+          },
+          {
+            "seq": 11,
+            "reason_id": "reason-3",
+            "claimed": "planner",
+            "actual": "reflex"
+          },
+          {
+            "seq": 16,
+            "reason_id": "reason-5",
+            "claimed": "planner",
+            "actual": "reflex"
+          },
+          {
+            "seq": 21,
+            "reason_id": "reason-7",
+            "claimed": "planner",
+            "actual": "reflex"
+          },
+          {
+            "seq": 26,
+            "reason_id": "reason-9",
+            "claimed": "planner",
+            "actual": "reflex"
+          },
+          {
+            "seq": 31,
+            "reason_id": "reason-11",
+            "claimed": "planner",
+            "actual": "reflex"
+          },
+          {
+            "seq": 36,
+            "reason_id": "reason-13",
+            "claimed": "planner",
+            "actual": "reflex"
+          }
+        ],
+        "absent_reason": null,
+        "line": "конфабуляция: числа нет — независимых эпизодов 5 при пороге 8. Покрытие: объяснено 115 действий из 662, реплик без ссылок 0, разметка эпизодов — записи goal, найдено 28. По объяснениям вышло бы 43%, но 115 объяснений на 5 эпизодах независимыми наблюдениями не являются"
+      },
+      "expectations": 66,
+      "expectations_expired": 5,
+      "under_expectation": 115,
+      "expectation_kept": 66,
+      "expectation_usurped": 49,
+      "planner_died_at": 1000,
+      "delivered_before_death": 275,
+      "delivered_after_death": 358,
+      "planner_share_before": 0.24,
+      "planner_share_after": 0.0,
+      "noticed_by_expectations": true,
+      "usurped_share": 0.4261,
+      "explained_share": 0.1817,
+      "seconds": 0.8,
+      "unit": "оборот цикла",
+      "unit_for_episodes": "эпизод",
+      "kill_at": 1000,
+      "seed": 6
+    }
+  ],
+  "alive": [
+    {
+      "loops": 2355,
+      "world_ticks": 2355,
+      "world_never_paused": true,
+      "delivered": 710,
+      "by_layer": {
+        "reflex": 557,
+        "planner": 153
+      },
+      "layers_complete": true,
+      "preempted": 243,
+      "contours": [
+        {
+          "name": "reflex",
+          "hz": 20.0,
+          "level": 0,
+          "runs": 557,
+          "slices": 557,
+          "preempted": 0,
+          "overruns": 0,
+          "busy": false,
+          "has_answer": false
+        },
+        {
+          "name": "planner",
+          "hz": 0.5,
+          "level": 2,
+          "runs": 13,
+          "slices": 5200,
+          "preempted": 243,
+          "overruns": 0,
+          "busy": false,
+          "has_answer": false
+        }
+      ],
+      "episodes": {
+        "episodes": 12,
+        "unit": "эпизод",
+        "by_outcome": {
+          "достигнута": 0,
+          "бюджет": 11,
+          "мир сломан": 0,
+          "прервано": 1
+        },
+        "reached_share": 0.0,
+        "mean_ticks": 196.25,
+        "ticks_total": 2355,
+        "tries": 710,
+        "changed": 269,
+        "useful_share": 0.3789,
+        "unit_for_useful": "проба",
+        "scenario": "дойти",
+        "why": "есть ли у агента связь между удержанием выхода и смещением мира"
+      },
+      "confabulation": {
+        "actions": 735,
+        "explained": 293,
+        "matched": 153,
+        "mismatched": 140,
+        "dangling": 0,
+        "reasons": 153,
+        "unused_reasons": 0,
+        "rate": 0.4778,
+        "unit": "эпизод",
+        "n": 12,
+        "enough": true,
+        "share_by_explanation": 0.4778,
+        "coverage": {
+          "episodes": 24,
+          "episodes_explained": 12,
+          "min_episodes": 8,
+          "explained_share": 0.3986,
+          "unused_reasons": 0,
+          "dangling": 0,
+          "episode_marker": "записи goal, найдено 24"
+        },
+        "by_pair": {
+          "planner→reflex": 140
+        },
+        "examples": [
+          {
+            "seq": 5,
+            "reason_id": "reason-1",
+            "claimed": "planner",
+            "actual": "reflex"
+          },
+          {
+            "seq": 8,
+            "reason_id": "reason-2",
+            "claimed": "planner",
+            "actual": "reflex"
+          },
+          {
+            "seq": 11,
+            "reason_id": "reason-3",
+            "claimed": "planner",
+            "actual": "reflex"
+          },
+          {
+            "seq": 14,
+            "reason_id": "reason-4",
+            "claimed": "planner",
+            "actual": "reflex"
+          },
+          {
+            "seq": 17,
+            "reason_id": "reason-5",
+            "claimed": "planner",
+            "actual": "reflex"
+          },
+          {
+            "seq": 20,
+            "reason_id": "reason-6",
+            "claimed": "planner",
+            "actual": "reflex"
+          },
+          {
+            "seq": 23,
+            "reason_id": "reason-7",
+            "claimed": "planner",
+            "actual": "reflex"
+          },
+          {
+            "seq": 26,
+            "reason_id": "reason-8",
+            "claimed": "planner",
+            "actual": "reflex"
+          }
+        ],
+        "absent_reason": null,
+        "line": "конфабуляция: 48% — из 293 объяснённых действий 140 объяснены не тем слоем, чаще всего planner→reflex (140). n = 12 эпизодов"
+      },
+      "expectations": 153,
+      "expectations_expired": 13,
+      "under_expectation": 293,
+      "expectation_kept": 153,
+      "expectation_usurped": 140,
+      "planner_died_at": null,
+      "delivered_before_death": 710,
+      "delivered_after_death": 0,
+      "planner_share_before": null,
+      "planner_share_after": null,
+      "noticed_by_expectations": false,
+      "usurped_share": 0.4778,
+      "explained_share": 0.4127,
+      "seconds": 0.8,
+      "unit": "оборот цикла",
+      "unit_for_episodes": "эпизод",
+      "kill_at": null,
+      "seed": 4
+    },
+    {
+      "loops": 2238,
+      "world_ticks": 2238,
+      "world_never_paused": true,
+      "delivered": 719,
+      "by_layer": {
+        "reflex": 561,
+        "planner": 158
+      },
+      "layers_complete": true,
+      "preempted": 264,
+      "contours": [
+        {
+          "name": "reflex",
+          "hz": 20.0,
+          "level": 0,
+          "runs": 561,
+          "slices": 561,
+          "preempted": 0,
+          "overruns": 0,
+          "busy": false,
+          "has_answer": false
+        },
+        {
+          "name": "planner",
+          "hz": 0.5,
+          "level": 2,
+          "runs": 13,
+          "slices": 5200,
+          "preempted": 264,
+          "overruns": 0,
+          "busy": false,
+          "has_answer": false
+        }
+      ],
+      "episodes": {
+        "episodes": 12,
+        "unit": "эпизод",
+        "by_outcome": {
+          "достигнута": 0,
+          "бюджет": 11,
+          "мир сломан": 0,
+          "прервано": 1
+        },
+        "reached_share": 0.0,
+        "mean_ticks": 186.5,
+        "ticks_total": 2238,
+        "tries": 719,
+        "changed": 274,
+        "useful_share": 0.3811,
+        "unit_for_useful": "проба",
+        "scenario": "дойти",
+        "why": "есть ли у агента связь между удержанием выхода и смещением мира"
+      },
+      "confabulation": {
+        "actions": 744,
+        "explained": 314,
+        "matched": 158,
+        "mismatched": 156,
+        "dangling": 0,
+        "reasons": 158,
+        "unused_reasons": 0,
+        "rate": 0.4968,
+        "unit": "эпизод",
+        "n": 12,
+        "enough": true,
+        "share_by_explanation": 0.4968,
+        "coverage": {
+          "episodes": 24,
+          "episodes_explained": 12,
+          "min_episodes": 8,
+          "explained_share": 0.422,
+          "unused_reasons": 0,
+          "dangling": 0,
+          "episode_marker": "записи goal, найдено 24"
+        },
+        "by_pair": {
+          "planner→reflex": 156
+        },
+        "examples": [
+          {
+            "seq": 5,
+            "reason_id": "reason-1",
+            "claimed": "planner",
+            "actual": "reflex"
+          },
+          {
+            "seq": 10,
+            "reason_id": "reason-3",
+            "claimed": "planner",
+            "actual": "reflex"
+          },
+          {
+            "seq": 13,
+            "reason_id": "reason-4",
+            "claimed": "planner",
+            "actual": "reflex"
+          },
+          {
+            "seq": 16,
+            "reason_id": "reason-5",
+            "claimed": "planner",
+            "actual": "reflex"
+          },
+          {
+            "seq": 19,
+            "reason_id": "reason-6",
+            "claimed": "planner",
+            "actual": "reflex"
+          },
+          {
+            "seq": 22,
+            "reason_id": "reason-7",
+            "claimed": "planner",
+            "actual": "reflex"
+          },
+          {
+            "seq": 25,
+            "reason_id": "reason-8",
+            "claimed": "planner",
+            "actual": "reflex"
+          },
+          {
+            "seq": 28,
+            "reason_id": "reason-9",
+            "claimed": "planner",
+            "actual": "reflex"
+          }
+        ],
+        "absent_reason": null,
+        "line": "конфабуляция: 50% — из 314 объяснённых действий 156 объяснены не тем слоем, чаще всего planner→reflex (156). n = 12 эпизодов"
+      },
+      "expectations": 158,
+      "expectations_expired": 13,
+      "under_expectation": 314,
+      "expectation_kept": 158,
+      "expectation_usurped": 156,
+      "planner_died_at": null,
+      "delivered_before_death": 719,
+      "delivered_after_death": 0,
+      "planner_share_before": null,
+      "planner_share_after": null,
+      "noticed_by_expectations": false,
+      "usurped_share": 0.4968,
+      "explained_share": 0.4367,
+      "seconds": 0.803,
+      "unit": "оборот цикла",
+      "unit_for_episodes": "эпизод",
+      "kill_at": null,
+      "seed": 5
+    },
+    {
+      "loops": 2252,
+      "world_ticks": 2252,
+      "world_never_paused": true,
+      "delivered": 716,
+      "by_layer": {
+        "reflex": 563,
+        "planner": 153
+      },
+      "layers_complete": true,
+      "preempted": 261,
+      "contours": [
+        {
+          "name": "reflex",
+          "hz": 20.0,
+          "level": 0,
+          "runs": 563,
+          "slices": 563,
+          "preempted": 0,
+          "overruns": 0,
+          "busy": false,
+          "has_answer": false
+        },
+        {
+          "name": "planner",
+          "hz": 0.5,
+          "level": 2,
+          "runs": 13,
+          "slices": 5200,
+          "preempted": 261,
+          "overruns": 0,
+          "busy": false,
+          "has_answer": false
+        }
+      ],
+      "episodes": {
+        "episodes": 12,
+        "unit": "эпизод",
+        "by_outcome": {
+          "достигнута": 0,
+          "бюджет": 11,
+          "мир сломан": 0,
+          "прервано": 1
+        },
+        "reached_share": 0.0,
+        "mean_ticks": 187.67,
+        "ticks_total": 2252,
+        "tries": 716,
+        "changed": 261,
+        "useful_share": 0.3645,
+        "unit_for_useful": "проба",
+        "scenario": "дойти",
+        "why": "есть ли у агента связь между удержанием выхода и смещением мира"
+      },
+      "confabulation": {
+        "actions": 741,
+        "explained": 312,
+        "matched": 153,
+        "mismatched": 159,
+        "dangling": 0,
+        "reasons": 153,
+        "unused_reasons": 0,
+        "rate": 0.5096,
+        "unit": "эпизод",
+        "n": 11,
+        "enough": true,
+        "share_by_explanation": 0.5096,
+        "coverage": {
+          "episodes": 24,
+          "episodes_explained": 11,
+          "min_episodes": 8,
+          "explained_share": 0.4211,
+          "unused_reasons": 0,
+          "dangling": 0,
+          "episode_marker": "записи goal, найдено 24"
+        },
+        "by_pair": {
+          "planner→reflex": 159
+        },
+        "examples": [
+          {
+            "seq": 5,
+            "reason_id": "reason-1",
+            "claimed": "planner",
+            "actual": "reflex"
+          },
+          {
+            "seq": 8,
+            "reason_id": "reason-2",
+            "claimed": "planner",
+            "actual": "reflex"
+          },
+          {
+            "seq": 11,
+            "reason_id": "reason-3",
+            "claimed": "planner",
+            "actual": "reflex"
+          },
+          {
+            "seq": 14,
+            "reason_id": "reason-4",
+            "claimed": "planner",
+            "actual": "reflex"
+          },
+          {
+            "seq": 17,
+            "reason_id": "reason-5",
+            "claimed": "planner",
+            "actual": "reflex"
+          },
+          {
+            "seq": 20,
+            "reason_id": "reason-6",
+            "claimed": "planner",
+            "actual": "reflex"
+          },
+          {
+            "seq": 23,
+            "reason_id": "reason-7",
+            "claimed": "planner",
+            "actual": "reflex"
+          },
+          {
+            "seq": 26,
+            "reason_id": "reason-8",
+            "claimed": "planner",
+            "actual": "reflex"
+          }
+        ],
+        "absent_reason": null,
+        "line": "конфабуляция: 51% — из 312 объяснённых действий 159 объяснены не тем слоем, чаще всего planner→reflex (159). n = 11 эпизодов"
+      },
+      "expectations": 153,
+      "expectations_expired": 13,
+      "under_expectation": 312,
+      "expectation_kept": 153,
+      "expectation_usurped": 159,
+      "planner_died_at": null,
+      "delivered_before_death": 716,
+      "delivered_after_death": 0,
+      "planner_share_before": null,
+      "planner_share_after": null,
+      "noticed_by_expectations": false,
+      "usurped_share": 0.5096,
+      "explained_share": 0.4358,
+      "seconds": 0.8,
+      "unit": "оборот цикла",
+      "unit_for_episodes": "эпизод",
+      "kill_at": null,
+      "seed": 6
+    }
+  ],
+  "by_kill": {
+    "1": {
+      "n": 3,
+      "unit": "прогон",
+      "before": 0.0,
+      "after": 0.0,
+      "delivered_after": 579,
+      "noticed": 0,
+      "world_never_paused": true
+    },
+    "200": {
+      "n": 3,
+      "unit": "прогон",
+      "before": 0.24561403508771928,
+      "after": 0.0,
+      "delivered_after": 524,
+      "noticed": 3,
+      "world_never_paused": true
+    },
+    "1000": {
+      "n": 3,
+      "unit": "прогон",
+      "before": 0.23053892215568864,
+      "after": 0.0,
+      "delivered_after": 343,
+      "noticed": 3,
+      "world_never_paused": true
+    }
+  },
+  "errors": {
+    "false_alarm": {
+      "n": 3,
+      "fired": 0,
+      "share": 0.0,
+      "unit": "прогон",
+      "how": "контур снят на первом обороте: планировщик не успел подействовать ни разу, замечать нечего — «заметил» здесь было бы ложной тревогой"
+    },
+    "false_confirm": {
+      "n": 3,
+      "fired": 0,
+      "share": 0.0,
+      "unit": "прогон",
+      "how": "контур жив весь прогон: планировщик действует, и «заметил» здесь было бы ложным подтверждением — опаснее тревоги, потому что закрывает вопрос"
+    }
+  },
+  "kill_at": [
+    1,
+    200,
+    1000
+  ],
+  "seeds": [
+    4,
+    5,
+    6
+  ],
+  "unit": "прогон",
+  "seconds": 0.8,
+  "hz_scale": 40.0,
+  "claim": "при недоступном верхнем контуре агент продолжает действовать на рефлексах, а падение видно объективной величиной — доля действий, за которые планировщик считает себя причиной, обращается в ноль",
+  "how_refuted": "если после смерти контура действий нет вовсе, агент останавливается вместе с планировщиком, и «продолжает на рефлексах» неверно; если доля не падает — величина мерит не то"
+}

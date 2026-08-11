@@ -334,3 +334,69 @@ def test_a_moving_screen_gives_no_identity_answer_instead_of_a_wrong_one() -> No
     assert got["n_sources"] == 2, "живой источник взялся там, где встреч не существует"
     assert any("нечем проверить" in r for r in got["rows"])
     assert got["quiet_len"] < 8
+
+
+# --- TASK-29, D2: смерть верхнего контура --------------------------------------
+
+
+def test_agent_keeps_acting_when_the_planner_dies(tmp_path: Path) -> None:
+    """Планировщик недоступен — агент продолжает на рефлексах, а мир не встаёт.
+
+    Контур снимается целиком, а не «отвечает пусто»: недоступный сервис не присылает
+    пустой ответ, он не присылает ничего. Пустой ответ был бы другим, более мягким
+    механизмом, чем бывает в жизни.
+    """
+    from harness.behaviour.arena import reach_place
+    from harness.livecycle import run
+
+    prof = from_schema("М5", capture_width=64, capture_height=48)
+    got = run(tmp_path / "s", scenario=reach_place(prof), profile=prof,
+              seconds=0.8, seed=4, hz_scale=40.0, kill_planner_at=200)
+    assert got.planner_died_at == 200
+    assert got.delivered_after_death > 0, (
+        "после смерти верхнего контура агент не сделал ничего — значит он остановился "
+        "вместе с планировщиком, а не продолжил на рефлексах")
+    assert got.world_never_paused, "смерть контура не отменяет инвариант 3"
+
+
+def test_the_drop_is_visible_without_a_single_word_from_the_agent(tmp_path: Path) -> None:
+    """«Стал глупее» — объективная величина, а не самоотчёт (инвариант 10).
+
+    Доля действий, за которые планировщик считает себя причиной, обращается в ноль. Это
+    видно по журналу и по счётчикам, и ни одно слово агента в проверку не входит.
+    """
+    from harness.behaviour.arena import reach_place
+    from harness.livecycle import run
+
+    prof = from_schema("М5", capture_width=64, capture_height=48)
+    got = run(tmp_path / "s", scenario=reach_place(prof), profile=prof,
+              seconds=0.8, seed=4, hz_scale=40.0, kill_planner_at=200)
+    assert got.planner_share_before and got.planner_share_before > 0.1, (
+        f"до смерти контура планировщик вёл {got.planner_share_before} действий — "
+        "падать нечему, и замер вырожден")
+    assert got.planner_share_after == 0.0
+    assert got.noticed_by_expectations
+
+
+def test_noticing_has_both_error_rates(tmp_path: Path) -> None:
+    """Инвариант 32: и ложная тревога, и ложное подтверждение, обе с объявленным способом.
+
+    **Ложная тревога:** контур снят на первом обороте — планировщик не успел подействовать
+    ни разу, замечать нечего. **Ложное подтверждение:** контур жив весь прогон — «заметил»
+    обязан молчать, и это опаснее тревоги, потому что закрывает вопрос.
+    """
+    from harness.behaviour.arena import reach_place
+    from harness.livecycle import run
+
+    prof = from_schema("М5", capture_width=64, capture_height=48)
+    early = run(tmp_path / "early", scenario=reach_place(prof), profile=prof,
+                seconds=0.8, seed=4, hz_scale=40.0, kill_planner_at=1)
+    assert not early.noticed_by_expectations, (
+        "ложная тревога: планировщик не действовал ни разу, а падение «замечено»")
+    assert early.delivered_after_death > 0, "и при этом агент всё равно действовал"
+
+    alive = run(tmp_path / "alive", scenario=reach_place(prof), profile=prof,
+                seconds=0.8, seed=4, hz_scale=40.0)
+    assert alive.planner_died_at is None
+    assert not alive.noticed_by_expectations, (
+        "ложное подтверждение: контур жив, а падение «замечено»")
