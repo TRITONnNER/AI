@@ -7,8 +7,11 @@
     которые не измерялись: без опорного уровня признак теперь молчит, и видно, на чём
     стоит ответ по каждому домену.
 
+42. **C, канал оценки.** Калибровка ожила и дошла до предела, объявленного до прогона,
+    а сторож инварианта 10 остался нулём.
+
 Запуск: `python3 tools/make_task33_figures.py [каталог]`. Числа — из
-`docs/measurements/{reversibility,regime}.json`.
+`docs/measurements/{reversibility,regime,judge}.json`.
 """
 
 from __future__ import annotations
@@ -133,7 +136,7 @@ def fig_error_cost(out: Path, data: dict[str, Any]) -> Path:
     ax2.legend(fontsize=LABEL_PT - 4, frameon=False, loc="lower right")
 
     _stamp(fig, n=f"{len(data['rows'])} прогонов, {total} попыток отката",
-           unit="прогон (справа — попытка отката внутри прогона)",
+           unit="прогон; доли справа считаны по попыткам внутри прогона",
            compares="счётчик нажатий необратимого при пороге против снятого; "
                     "предсказание метки против исхода попытки")
     return _save(fig, out / "40-cena-oshibki.png",
@@ -215,12 +218,83 @@ def fig_baseline(out: Path, data: dict[str, Any]) -> Path:
                  "Прежние «ноль ошибок» стояли на клетках, которые не измерялись.")
 
 
+def fig_judge(out: Path, data: dict[str, Any]) -> Path:
+    """Утверждение: калибровка дошла до предела, объявленного до прогона."""
+    cases = data["cases"]
+    names = [n for n in cases if "доверие" not in n] + [n for n in cases
+                                                        if "доверие" in n]
+    fig, (ax1, ax2) = _fig(660, ncols=2)
+
+    xs = list(range(len(names)))
+    got = [cases[n]["miss_mean"] for n in names]
+    lim = [cases[n]["best_possible"] for n in names]
+    ax1.bar([x - 0.18 for x in xs], lim, width=0.34, color=OFF,
+            label="предел, объявленный до прогона: 2p(1−p)")
+    ax1.bar([x + 0.18 for x in xs], got, width=0.34, color=GATE,
+            label="измеренный средний промах")
+    for x, (g, li) in enumerate(zip(got, lim)):
+        ax1.annotate(f"{g:.3f}", (x + 0.18, g), textcoords="offset points",
+                     xytext=(0, 5), ha="center", fontsize=LABEL_PT - 5, color=NEUTRAL)
+    ax1.set_xticks(xs)
+    ax1.set_xticklabels([n.replace(", ", ",\n") for n in names],
+                        fontsize=LABEL_PT - 4)
+    ax1.set_ylim(0, 0.62)
+    ax1.set_ylabel("средний промах предсказанной оценки", fontsize=LABEL_PT - 2)
+    ax1.axhline(0.5, color=NEUTRAL, linewidth=1, linestyle=":")
+    ax1.annotate("0.5 — ответ наугад", (len(names) - 0.5, 0.51),
+                 ha="right", fontsize=LABEL_PT - 5, color=NEUTRAL)
+    ax1.set_xlabel(
+        "модель без признаков не может пройти ниже 2p(1−p):\n"
+        "предел — не недоработка, а опорная линия для модели с признаками\n"
+        "доверие 0.25 двигает ожидание вчетверо медленнее, и промах хуже",
+        fontsize=LABEL_PT - 3, loc="left")
+    ax1.legend(fontsize=LABEL_PT - 4, frameon=False, loc="upper left")
+
+    # Панель 2: обе ошибки предсказания и сторож инварианта 10.
+    ys = list(range(len(names)))
+    alarms = [(cases[n]["false_alarm_share"] or 0.0) * 100 for n in names]
+    calms = [(cases[n]["false_confirm_share"] or 0.0) * 100 for n in names]
+    ax2.barh([y + 0.18 for y in ys], alarms, height=0.32, color=GATE,
+             label="ложные тревоги: ждал успех, отказали")
+    ax2.barh([y - 0.18 for y in ys], calms, height=0.32, color=OFF,
+             label="ложные подтв.: ждал неудачу, одобрили")
+    for y, n in zip(ys, names):
+        c = cases[n]
+        ax2.annotate(f"{alarms[y]:.0f} % ({c['false_alarms']})", (alarms[y], y + 0.18),
+                     textcoords="offset points", xytext=(6, -4),
+                     fontsize=LABEL_PT - 5, color=NEUTRAL)
+        ax2.annotate(f"{calms[y]:.0f} % ({c['false_confirms']})", (calms[y], y - 0.18),
+                     textcoords="offset points", xytext=(6, -4),
+                     fontsize=LABEL_PT - 5, color=NEUTRAL)
+    ax2.set_yticks(ys)
+    ax2.set_yticklabels([n.replace(", ", ",\n") for n in names],
+                        fontsize=LABEL_PT - 4)
+    ax2.set_xlim(0, 145)
+    v = data["verdict"]
+    ax2.set_xlabel(
+        "доля оценок, % (в скобках — сколько)\n"
+        f"закрыто целей без оценки судьи: {v['closed_without_judgement']} из "
+        f"{v['pending_seen']}\n— сторож инварианта 10\n"
+        "покрытие 99 %: у первой оценки предсказания нет",
+        fontsize=LABEL_PT - 3, loc="left")
+    ax2.legend(fontsize=LABEL_PT - 5, frameon=False, loc="upper right")
+
+    total = sum(cases[n]["judged"] for n in names)
+    _stamp(fig, n=f"{len(data['rows'])} прогонов, {total} оценок с промахом",
+           unit=data["unit"],
+           compares="измеренный промах против предела, объявленного до прогона; "
+                    "предсказание против ответа судьи")
+    return _save(fig, out / "42-kanal-ocenki.png",
+                 "Калибровка ожила и дошла до предела, объявленного до прогона.")
+
+
 def main(argv: list[str]) -> int:
     base = Path(argv[1]) if len(argv) > 1 else ROOT / "docs" / "figures"
     m = ROOT / "docs" / "measurements"
     made = []
     plan = ((fig_error_cost, "reversibility.json", "tools/measure_reversibility.py"),
-            (fig_baseline, "regime.json", "tools/measure_regime.py"))
+            (fig_baseline, "regime.json", "tools/measure_regime.py"),
+            (fig_judge, "judge.json", "tools/measure_judge.py"))
     missing = []
     for draw, name, how in plan:
         src = m / name

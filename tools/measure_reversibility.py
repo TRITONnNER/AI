@@ -287,7 +287,12 @@ def one(*, seed: int, rollback: bool, gate: bool, loud: bool = False) -> dict[st
     calms = [c for c in calls if not c[0]]
     predicted: dict[str, Any] = {
         "attempts": len(calls),
-        "unit": "попытка отката",
+        # Единица — **прогон**, а не попытка отката: попытки внутри прогона зависимы по
+        # построению (состояние переносится), и «попытка» объявлена в `model/units.py`
+        # никогда не независимой. Доли считаются внутри прогона, а сравниваются медианами
+        # по прогонам.
+        "unit": "прогон",
+        "counted": "попытки отката внутри прогона",
         "coverage": (sum(1 for c in calls if c[2]) / len(calls)) if calls else None,
         "false_alarms": sum(1 for c in alarms if c[1]),
         "false_alarm_share": (sum(1 for c in alarms if c[1]) / len(alarms)

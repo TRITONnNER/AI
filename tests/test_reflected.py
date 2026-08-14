@@ -83,12 +83,23 @@ def test_a_verdict_from_another_judge_is_refused() -> None:
         g.settle(Judgement("SYM_JUDGE_1", "SYM_ASPECT_B", 0.9), r)
 
 
-def test_settling_without_a_prediction_is_refused() -> None:
-    """Промах — разница предсказанного и полученного; без первого его нет."""
+def test_settling_without_a_prediction_teaches_mu_and_no_miss() -> None:
+    """Промах — разница предсказанного и полученного; без первого его нет.
+
+    **Но цель всё равно закрывается**, и это исправление TASK-33 C. Прежняя редакция
+    отвергала такую оценку целиком, и получался тупик: предсказание берётся из `mu`, `mu`
+    растёт из оценок, а оценки не принимались без предсказания. Замер канала отметок дал
+    ноль оценок из 2400 — механизм не мог начаться. Закрывает цель **ответ судьи**, а не
+    согласие агента с ним; промах при этом не записывается, потому что его не существует.
+    """
     r = ReflectedSelf()
     g = _goal()
-    with pytest.raises(JudgedError, match="предсказания не было"):
-        g.settle(Judgement("SYM_JUDGE_1", "SYM_ASPECT_A", 0.9), r)
+    g.settle(Judgement("SYM_JUDGE_1", "SYM_ASPECT_A", 0.9), r)
+    assert g.passed is True
+    kept = r.expect("SYM_JUDGE_1", "SYM_ASPECT_A")
+    assert kept.n == 1 and kept.misses == []
+    assert r.calibration()["judged"] == 0, "промахов нет — значит калибровки ещё нет"
+    assert r.calibration()["without_prediction"] == 1
 
 
 # --- незнание не выдаётся за знание ------------------------------------------

@@ -609,6 +609,62 @@ def experiments() -> dict[str, Any]:
                      "was": "причина не была установлена", "unit": "прогон",
                      "n": len(sd["rows"]), "task": "TASK-24 D"})
 
+    rv = files.get("reversibility", {})
+    if rv and rv.get("verdict"):
+        v = rv["verdict"]
+        by = v.get("counts_by_seed", {})
+        diverged = sum(1 for x in by.values() if x["порог"] != x["снят"])
+        runs.append({"name": "цена ошибки в порядке проб разведки",
+                     "value": (f"счётчики разошлись на {diverged} сидах из {len(by)}: "
+                               + ", ".join(f"{x['порог']}/{x['снят']}"
+                                           for x in by.values())),
+                     "was": "совпадали до единицы на пяти сидах из пяти",
+                     "unit": "прогон", "n": len(rv.get("rows", [])),
+                     "task": "TASK-33 A"})
+        pr = v.get("predicted", {}).get("без отката", {})
+        if pr:
+            runs.append({"name": "метка «дорого» как предсказание отката",
+                         "value": (f"{pr['false_alarm_share']:.0%} ложных срабатываний, "
+                                   f"{pr['false_confirmation_share']:.0%} ложных "
+                                   f"подтверждений"),
+                         "was": "98 % и 100 %: метка была перевёрнутой",
+                         "unit": "прогон", "n": pr.get("n", 0),
+                         "task": "TASK-33 A, инварианты 31 и 32"})
+
+    rg = files.get("regime", {})
+    if rg and rg.get("baseline_check"):
+        bc = rg["baseline_check"]
+        stab = rg.get("reversible_stability", {})
+        thin = sorted(d for d, x in stab.items() if x["determined"] < x["runs"])
+        runs.append({"name": "признак без опорного уровня молчит",
+                     "value": (f"{bc['answered_without_baseline']} из "
+                               f"{bc['cells_blind']} клеток ответило без фона"),
+                     "was": "фона не было вовсе: сравнивали с нулём",
+                     "unit": "признак × прогон", "n": bc["cells_blind"],
+                     "task": "TASK-33 B"})
+        if thin:
+            runs.append({"name": "на чём стояли прежние «ноль ошибок»",
+                         "value": ("ответ по обратимости неполон на доменах: "
+                                   + ", ".join(thin)),
+                         "was": "0 ошибок из 5 — за счёт неизмеренных клеток",
+                         "unit": "домен", "n": len(stab),
+                         "task": "TASK-33 B, инвариант 31"})
+
+    jd = files.get("judge", {})
+    if jd and jd.get("cases"):
+        st = jd["cases"].get("уверенный", {})
+        runs.append({"name": "калибровка модели себя в чужих глазах",
+                     "value": (f"промах {st.get('miss_mean', 0):.3f} при пределе "
+                               f"{st.get('best_possible', 0):.3f}"),
+                     "was": "оценок ноль: судьи не было ни у одного домена",
+                     "unit": "оценка", "n": st.get("judged", 0), "task": "TASK-33 C"})
+        runs.append({"name": "целей, закрытых без оценки судьи",
+                     "value": f"{jd['verdict']['closed_without_judgement']} из "
+                              f"{jd['verdict']['pending_seen']}",
+                     "was": "проверять было нечем", "unit": "оценка",
+                     "n": jd["verdict"]["pending_seen"],
+                     "task": "TASK-33 C, инвариант 10"})
+
     return {"runs": runs, "files": sorted(files), "source": "docs/measurements/"}
 
 

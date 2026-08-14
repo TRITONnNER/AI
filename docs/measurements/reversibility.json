@@ -40,7 +40,8 @@
       },
       "predicted": {
         "attempts": 517,
-        "unit": "попытка отката",
+        "unit": "прогон",
+        "counted": "попытки отката внутри прогона",
         "coverage": 0.9806576402321083,
         "false_alarms": 8,
         "false_alarm_share": 0.1702127659574468,
@@ -105,7 +106,8 @@
       },
       "predicted": {
         "attempts": 514,
-        "unit": "попытка отката",
+        "unit": "прогон",
+        "counted": "попытки отката внутри прогона",
         "coverage": 0.980544747081712,
         "false_alarms": 8,
         "false_alarm_share": 0.1702127659574468,
@@ -169,7 +171,8 @@
       },
       "predicted": {
         "attempts": 732,
-        "unit": "попытка отката",
+        "unit": "прогон",
+        "counted": "попытки отката внутри прогона",
         "coverage": 0.9863387978142076,
         "false_alarms": 0,
         "false_alarm_share": null,
@@ -234,7 +237,8 @@
       },
       "predicted": {
         "attempts": 506,
-        "unit": "попытка отката",
+        "unit": "прогон",
+        "counted": "попытки отката внутри прогона",
         "coverage": 0.9782608695652174,
         "false_alarms": 8,
         "false_alarm_share": 0.16666666666666666,
@@ -299,7 +303,8 @@
       },
       "predicted": {
         "attempts": 723,
-        "unit": "попытка отката",
+        "unit": "прогон",
+        "counted": "попытки отката внутри прогона",
         "coverage": 0.9847856154910097,
         "false_alarms": 0,
         "false_alarm_share": null,
@@ -363,7 +368,8 @@
       },
       "predicted": {
         "attempts": 717,
-        "unit": "попытка отката",
+        "unit": "прогон",
+        "counted": "попытки отката внутри прогона",
         "coverage": 0.9860529986052998,
         "false_alarms": 1,
         "false_alarm_share": 0.058823529411764705,
@@ -427,7 +433,8 @@
       },
       "predicted": {
         "attempts": 749,
-        "unit": "попытка отката",
+        "unit": "прогон",
+        "counted": "попытки отката внутри прогона",
         "coverage": 0.9853137516688919,
         "false_alarms": 7,
         "false_alarm_share": 0.3684210526315789,
@@ -491,7 +498,8 @@
       },
       "predicted": {
         "attempts": 748,
-        "unit": "попытка отката",
+        "unit": "прогон",
+        "counted": "попытки отката внутри прогона",
         "coverage": 0.9852941176470589,
         "false_alarms": 0,
         "false_alarm_share": null,
@@ -555,7 +563,8 @@
       },
       "predicted": {
         "attempts": 706,
-        "unit": "попытка отката",
+        "unit": "прогон",
+        "counted": "попытки отката внутри прогона",
         "coverage": 0.9844192634560907,
         "false_alarms": 1,
         "false_alarm_share": 0.05555555555555555,
@@ -620,7 +629,8 @@
       },
       "predicted": {
         "attempts": 704,
-        "unit": "попытка отката",
+        "unit": "прогон",
+        "counted": "попытки отката внутри прогона",
         "coverage": 0.984375,
         "false_alarms": 0,
         "false_alarm_share": null,
@@ -684,7 +694,8 @@
       },
       "predicted": {
         "attempts": 709,
-        "unit": "попытка отката",
+        "unit": "прогон",
+        "counted": "попытки отката внутри прогона",
         "coverage": 0.9844851904090268,
         "false_alarms": 1,
         "false_alarm_share": 0.05555555555555555,
@@ -748,7 +759,8 @@
       },
       "predicted": {
         "attempts": 698,
-        "unit": "попытка отката",
+        "unit": "прогон",
+        "counted": "попытки отката внутри прогона",
         "coverage": 0.9828080229226361,
         "false_alarms": 1,
         "false_alarm_share": 0.05263157894736842,
@@ -812,7 +824,8 @@
       },
       "predicted": {
         "attempts": 695,
-        "unit": "попытка отката",
+        "unit": "прогон",
+        "counted": "попытки отката внутри прогона",
         "coverage": 0.9827338129496402,
         "false_alarms": 0,
         "false_alarm_share": null,
@@ -876,7 +889,8 @@
       },
       "predicted": {
         "attempts": 698,
-        "unit": "попытка отката",
+        "unit": "прогон",
+        "counted": "попытки отката внутри прогона",
         "coverage": 0.9828080229226361,
         "false_alarms": 1,
         "false_alarm_share": 0.05263157894736842,
@@ -941,7 +955,8 @@
       },
       "predicted": {
         "attempts": 695,
-        "unit": "попытка отката",
+        "unit": "прогон",
+        "counted": "попытки отката внутри прогона",
         "coverage": 0.9827338129496402,
         "false_alarms": 0,
         "false_alarm_share": null,
@@ -1006,7 +1021,8 @@
       },
       "predicted": {
         "attempts": 526,
-        "unit": "попытка отката",
+        "unit": "прогон",
+        "counted": "попытки отката внутри прогона",
         "coverage": 0.9809885931558935,
         "false_alarms": 8,
         "false_alarm_share": 0.17391304347826086,
@@ -1071,7 +1087,8 @@
       },
       "predicted": {
         "attempts": 435,
-        "unit": "попытка отката",
+        "unit": "прогон",
+        "counted": "попытки отката внутри прогона",
         "coverage": 0.9747126436781609,
         "false_alarms": 9,
         "false_alarm_share": 0.1875,
@@ -1135,7 +1152,8 @@
       },
       "predicted": {
         "attempts": 724,
-        "unit": "попытка отката",
+        "unit": "прогон",
+        "counted": "попытки отката внутри прогона",
         "coverage": 0.9848066298342542,
         "false_alarms": 0,
         "false_alarm_share": null,
@@ -1200,7 +1218,8 @@
       },
       "predicted": {
         "attempts": 515,
-        "unit": "попытка отката",
+        "unit": "прогон",
+        "counted": "попытки отката внутри прогона",
         "coverage": 0.9786407766990292,
         "false_alarms": 8,
         "false_alarm_share": 0.1702127659574468,
@@ -1265,7 +1284,8 @@
       },
       "predicted": {
         "attempts": 723,
-        "unit": "попытка отката",
+        "unit": "прогон",
+        "counted": "попытки отката внутри прогона",
         "coverage": 0.9847856154910097,
         "false_alarms": 0,
         "false_alarm_share": null,
@@ -1329,7 +1349,8 @@
       },
       "predicted": {
         "attempts": 725,
-        "unit": "попытка отката",
+        "unit": "прогон",
+        "counted": "попытки отката внутри прогона",
         "coverage": 0.9875862068965517,
         "false_alarms": 1,
         "false_alarm_share": 0.0625,
@@ -1394,7 +1415,8 @@
       },
       "predicted": {
         "attempts": 458,
-        "unit": "попытка отката",
+        "unit": "прогон",
+        "counted": "попытки отката внутри прогона",
         "coverage": 0.9781659388646288,
         "false_alarms": 6,
         "false_alarm_share": 0.11764705882352941,
@@ -1459,7 +1481,8 @@
       },
       "predicted": {
         "attempts": 365,
-        "unit": "попытка отката",
+        "unit": "прогон",
+        "counted": "попытки отката внутри прогона",
         "coverage": 0.9726027397260274,
         "false_alarms": 0,
         "false_alarm_share": null,
@@ -1523,7 +1546,8 @@
       },
       "predicted": {
         "attempts": 714,
-        "unit": "попытка отката",
+        "unit": "прогон",
+        "counted": "попытки отката внутри прогона",
         "coverage": 0.9859943977591037,
         "false_alarms": 1,
         "false_alarm_share": 0.058823529411764705,
@@ -1588,7 +1612,8 @@
       },
       "predicted": {
         "attempts": 713,
-        "unit": "попытка отката",
+        "unit": "прогон",
+        "counted": "попытки отката внутри прогона",
         "coverage": 0.9859747545582047,
         "false_alarms": 0,
         "false_alarm_share": null,

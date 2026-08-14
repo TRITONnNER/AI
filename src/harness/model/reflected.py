@@ -17,6 +17,11 @@
   больше;
 - `settled` — судья ответил. Только это закрывает цель, и только это идёт в статистику.
 
+Оценка **без** предсказания закрывает цель наравне: закрывает её ответ судьи, а не согласие
+агента с ним. Промах при этом не записывается — его не существует. Обратное правило
+(«нет предсказания — нет и оценки») было первой редакцией и оказалось тупиком: предсказание
+берётся из `mu`, `mu` растёт из оценок, а оценки не принимались без предсказания.
+
 Предсказание **никогда** не переводит цель в выполненную. Метод, который мог бы это сделать,
 отсутствует, а не запрещён соглашением.
 
@@ -31,10 +36,11 @@
 
 ## Чего здесь нет
 
-**Судьи.** Канал чужой оценки приходит извне (речь оператора, разметка домена, отзыв), и
-выдумывать его нельзя: детектор режима на всех нынешних доменах отвечает «внешний судья не
-определён» (`perception/regime.py`), и цель с судьёй объявлена там **неприменимой**. Механизм
-готов, измерять его пока нечем, и это сказано числом покрытия, а не тишиной.
+**Судьи в самом домене.** Канал чужой оценки приходит извне, и выдумывать его по пикселям
+нельзя. С TASK-33 C простейший такой канал есть: `model/marks.py` — оператор после эпизода
+ставит отметку «получилось / частично / нет», и она входит сюда как `Judgement` с доверием.
+Детектор режима при объявленном канале отвечает по признаку «внешний судья» «да», и цель с
+судьёй становится применимой; без канала он по-прежнему отвечает «не определено».
 """
 
 from __future__ import annotations
@@ -63,10 +69,17 @@ class Judgement:
     judge: str
     aspect: str
     value: float
+    #: Доверие к источнику оценки, как у показания (`Testimony`). Весит обновление
+    #: ожидания: оценка с доверием 0.25 сдвигает `mu` вчетверо слабее. Промах в
+    #: калибровку идёт **полным**, без веса: промах — это факт о предсказании, и
+    #: сомнение в судье его не уменьшает.
+    trust: float = 1.0
 
     def __post_init__(self) -> None:
         if not 0.0 <= self.value <= 1.0:
             raise JudgedError(f"оценка вне [0,1]: {self.value}")
+        if not 0.0 <= self.trust <= 1.0:
+            raise JudgedError(f"доверие вне [0,1]: {self.trust}")
         if not self.judge or not self.aspect:
             raise JudgedError("оценка без судьи или без предмета не хранится")
 
@@ -92,14 +105,42 @@ class Reflected:
     def known(self) -> bool:
         return self.n > 0
 
-    def observe(self, predicted: float, actual: float) -> "Reflected":
-        """Судья ответил. Обновляет и ожидание, и промах."""
-        self.misses.append(abs(predicted - actual))
+    def observe(self, predicted: float | None, actual: float,
+                trust: float = 1.0) -> "Reflected":
+        """Судья ответил. Обновляет ожидание, а промах — если предсказание было.
+
+        `predicted is None` — первая встреча с этим судьёй: предсказывать было нечем, и
+        промаха не существует. Ожидание при этом обновляется: ответ судьи — данные о мире
+        независимо от того, ждал ли агент чего-нибудь.
+
+        Первая редакция **отвергала** такой ответ целиком, и это оказалось тупиком:
+        предсказание берётся из `mu`, `mu` растёт только из ответов, а ответы не
+        принимались без предсказания. Замер канала отметок дал ноль оценок из 2400 —
+        механизм не мог начаться. Нашёл это прогон, а не чтение: в коде каждая половина
+        читалась верно.
+
+        `trust` весит сдвиг ожидания, но **не** промах. Промах — факт о предсказании
+        агента: он либо угадал, либо нет, и недоверие к судье этого не меняет. Ожидание же
+        — утверждение о мире, и сомнительный источник должен двигать его слабее. Смешать
+        одно с другим значило бы позволить агенту улучшать свою калибровку, объявляя
+        неудобного судью недостоверным.
+        """
+        if not 0.0 <= trust <= 1.0:
+            raise JudgedError(f"доверие вне [0,1]: {trust}")
+        if predicted is not None:
+            self.misses.append(abs(predicted - actual))
         self.n += 1
-        self.mu = ((self.mu * (self.n - 1)) + actual) / self.n
-        spread = sum((m - (sum(self.misses) / len(self.misses))) ** 2
-                     for m in self.misses) / len(self.misses)
-        self.sigma = spread ** 0.5 if self.n > 1 else 0.5
+        step = trust / self.n
+        self.mu = self.mu + step * (actual - self.mu)
+        # Разброс — по промахам, и он существует только когда промахи есть. При ответе без
+        # предсказания их может не быть ни одного, и тогда разброс остаётся максимальным:
+        # это «не знаю», а не «ноль».
+        if len(self.misses) > 1:
+            mean = sum(self.misses) / len(self.misses)
+            spread = sum((m - mean) ** 2 for m in self.misses) / len(self.misses)
+            self.sigma = spread ** 0.5
+        else:
+            self.sigma = 0.5
         return self
 
     @property
@@ -113,6 +154,27 @@ class Reflected:
                 "calibration": (None if self.calibration is None
                                 else round(self.calibration, 4)),
                 "unit": "оценка"}
+
+
+def _sem(misses: list[float]) -> float | None:
+    """Стандартная ошибка среднего промаха. `None` — оценок меньше двух."""
+    n = len(misses)
+    if n < 2:
+        return None
+    mean = sum(misses) / n
+    var = sum((m - mean) ** 2 for m in misses) / (n - 1)
+    return (var / n) ** 0.5
+
+
+def _better_than_nothing(misses: list[float]) -> bool | None:
+    """Лучше ли модель ответа наугад. `None` — разница внутри ошибки измерения."""
+    if not misses:
+        return None
+    mean = sum(misses) / len(misses)
+    sem = _sem(misses)
+    if sem is not None and abs(0.5 - mean) <= sem:
+        return None
+    return mean < 0.5
 
 
 @dataclass(slots=True)
@@ -143,10 +205,11 @@ class ReflectedSelf:
         got = self.by_key.get((judge, aspect))
         return got.mu if got is not None and got.known else None
 
-    def observe(self, judgement: Judgement, *, predicted: float) -> Reflected:
+    def observe(self, judgement: Judgement, *,
+                predicted: float | None) -> Reflected:
         """Получена оценка. Единственный вход, меняющий модель."""
         return self.expect(judgement.judge, judgement.aspect).observe(
-            predicted, judgement.value)
+            predicted, judgement.value, judgement.trust)
 
     def calibration(self) -> dict[str, Any]:
         """Насколько модель ошибается. Главное число этого механизма.
@@ -156,16 +219,29 @@ class ReflectedSelf:
         зависимы, разные работы независимы.
         """
         misses = [m for r in self.by_key.values() for m in r.misses]
+        answers = sum(r.n for r in self.by_key.values())
         return {
             "pairs": len(self.by_key),
             "judged": len(misses),
+            # Ответов больше, чем промахов, ровно на первые встречи с судьями: там
+            # предсказывать было нечем. Держать эти оценки в знаменателе калибровки
+            # значило бы называть промахом отсутствие предсказания.
+            "answers": answers,
+            "without_prediction": answers - len(misses),
             "unit": "оценка",
             "miss_mean": (sum(misses) / len(misses)) if misses else None,
             "miss_worst": max(misses) if misses else None,
-            "better_than_nothing": (None if not misses
-                                    else (sum(misses) / len(misses)) < 0.5),
+            # Три исхода, а не два. У проверки «лучше наугад» нет запаса ровно на
+            # границе: судья, отвечающий монетой, даёт предел промаха ровно 0.5, и
+            # измеренное значение ложится по обе стороны от него случайно. На замере это
+            # дало «лучше наугад» на трёх сидах из пяти при промахе 0.494 — то есть
+            # проверка объявляла победу шумом. Поэтому при разнице меньше стандартной
+            # ошибки среднего ответ «не отличимо от наугад», а не «да».
+            "better_than_nothing": _better_than_nothing(misses),
+            "margin": _sem(misses),
             "why": ("промах 0.5 из 1.0 — это ответ наугад: модель хуже отсутствия модели, "
-                    "и решать по ней нельзя"),
+                    "и решать по ней нельзя. Разница меньше стандартной ошибки среднего "
+                    "означает «не отличимо», а не «лучше»"),
         }
 
     def as_dict(self) -> dict[str, Any]:
@@ -231,11 +307,10 @@ class JudgedGoal:
             raise JudgedError(
                 f"оценка от {judgement.judge} о {judgement.aspect} не относится к цели "
                 f"{self.goal.id}, которая ждёт {self.judge} о {self.aspect}")
-        if self.predicted is None:
-            raise JudgedError(
-                f"цель {self.goal.id} закрывается оценкой, но предсказания не было. "
-                "Тогда нечему учиться: калибровка считается по промаху, а промах — это "
-                "разница между предсказанным и полученным")
+        # Предсказания могло не быть — это первая встреча с судьёй. Цель всё равно
+        # закрывается: закрывает её **ответ судьи**, а не согласие агента с ним. Промах
+        # при этом не записывается: его не существует. Первая редакция отвергала такой
+        # ответ, и канал оценки не мог начаться вовсе (ноль оценок из 2400).
         self.verdict = judgement
         return reflected.observe(judgement, predicted=self.predicted)
 

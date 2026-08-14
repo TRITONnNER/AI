@@ -501,10 +501,15 @@ def bench_domain(name: str, *, seed: int = 0, frames: int = 140,
     # вместо числа (TASK-32, A). Отдельный экземпляр домена нарочно — детектор действует,
     # и подмешивать его действия в тот же прогон, по которому считались IoU, нельзя.
     probe = make_domain(name, profile, seed=seed)
+    # Есть ли у домена канал чужой оценки — заявляет сам домен, а не догадка по кадру
+    # (TASK-33 C). У синтетических доменов его нет, и признак остаётся «не определено»;
+    # появится отметка оператора или разметка домена — станет «да», и цель с судьёй
+    # перестанет быть неприменимой.
     reg = detect_regime(
         step=lambda a: np.asarray(probe.step(a, with_audio=False).frame,
                                   dtype=np.float64),
-        outputs=list(probe.outputs), profile=profile)
+        outputs=list(probe.outputs), profile=profile,
+        judge=getattr(probe, "has_judge", None))
     reg_report = regime_report(reg)
     par_verdict = regime_applicable("параллакс", reg)
 
