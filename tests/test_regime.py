@@ -133,7 +133,11 @@ def test_detect_takes_nothing_but_frames_and_outputs() -> None:
     assert calls, "детектор обязан действовать, а не догадываться"
     assert r.has(EGO_MOTION) is False
     assert r.has(WORLD_ALONE) is False
-    assert r.has(REVERSIBLE) is False
+    assert r.has(REVERSIBLE) is None, (
+        "в замкнутой среде ни одно действие не изменило вид, значит возвращать было "
+        "нечего. Это «проверить было нечем», а не «обратимых действий нет» — до TASK-33 B "
+        "здесь стояло False, и различие терялось")
+    assert r.evidence[REVERSIBLE].n == 0, "пар не было — и это видно по n"
     assert r.has(JUDGE) is None, "канал оценки не выдумывается по пикселям"
 
 
@@ -216,39 +220,127 @@ def test_thresholds_live_in_the_schema(profile=None) -> None:
         "в неподвижном мире множитель ограничивать нечего: сдвиг при бездействии ноль")
 
 
-# --- TASK-32, C: осторожность в разведке не читается (закреплённый дефект) ------
+# --- TASK-32, C → TASK-33, A: дефект исправлен, тест переехал -------------------
+#
+# Здесь стоял закреплённый дефект `test_caution_does_not_yet_reach_the_exploration_path`:
+# порядок проб не спрашивал цену ошибки, и счётчики нажатий необратимого выхода совпадали
+# при работающем пороге и при снятом. Дефект исправлен в TASK-33 A, и проверки переехали в
+# `tests/test_error_cost.py` — там и расхождение счётчиков, и обе ошибки метки «дорого».
+#
+# Отдельно стоит запомнить, **чем закреплённый тест оказался плох**: он сравнивал первые
+# четыре пробы, а они все приходят из ветви «ни разу не пробован», где цена у всех
+# кандидатов одинакова по построению. Поэтому он прошёл бы и до правки, и после — то есть
+# упасть при починке, как обещал, не мог. Доказательством стали счётчики, а не он.
 
 
-def test_caution_does_not_yet_reach_the_exploration_path() -> None:
-    """Закреплённый **дефект**, а не свойство: разведка не спрашивает осторожность.
+# --- TASK-33, B: опорный уровень домена ---------------------------------------
 
-    Замер (`tools/measure_reversibility.py`): счётчики нажатий по-настоящему необратимого
-    выхода совпали до единицы при работающем пороге и при снятом — 4, 4, 4, 4, 10 против
-    тех же, на всех пяти сидах. Осторожность читает планировщик (`avoid_risky`), а
-    необратимое нажимает разведка, и порядок её проб определяется полнотой знания, а не
-    ценой ошибки.
 
-    Тест закрепляет дефект нарочно: когда его починят, он **упадёт**, и это правильно —
-    правка обязана предъявить сдвиг числа (инвариант 25), а не пройти незаметно. Тогда
-    здесь окажется проверка на разошедшиеся счётчики.
+def _noisy_world(seed: int = 5, *, own_motion: int = 0):
+    """Мир, который едет сам на `own_motion` пикселей за шаг, и на 6 — от действия."""
+    rng = np.random.default_rng(seed)
+    base = rng.integers(0, 255, (48, 64)).astype(np.float64)
+    state = {"x": 0}
+
+    def step(action):
+        state["x"] += own_motion
+        if action is not None:
+            state["x"] += 6
+        return np.roll(base, state["x"], axis=1)
+
+    return step
+
+
+def test_without_a_stillness_record_every_feature_says_undetermined() -> None:
+    """Главное требование B: нет фона — нет ответа. Порог не подбирается.
+
+    Признак, оставшийся без опорного уровня, обязан отвечать «не определено», а не
+    сравнивать с нулём: сравнение с нулём уже трижды дало неверный признак — эго-движение
+    в проигрывателе видео, «мир идёт сам» во всех пяти доменах и «вид не вернулся» нигде.
     """
-    from harness.behaviour.babbling import Babbler
-    from harness.core.action import Reversibility
+    from harness.perception.regime import NO_BASELINE
+
+    r = detect(step=_noisy_world(own_motion=4), outputs=("OUT_01",), profile=_prof(),
+               baseline=NO_BASELINE)
+    for f in (EGO_MOTION, WORLD_ALONE, REVERSIBLE):
+        assert r.has(f) is None, f"{f} ответил без опорного уровня"
+        assert "записи неподвижности нет" in r.evidence[f].detail
+        assert r.evidence[f].reference == "нет"
+    # А признак, которому фон не нужен, ведёт себя как раньше: канал оценки — не измерение
+    # кадра, и опорный уровень ему не требуется.
+    assert r.evidence[JUDGE].reference != "нет"
+    assert not r.baseline.present
+
+
+def test_a_short_stillness_record_is_also_undetermined() -> None:
+    """Мало кадров — тоже «не определено»: одна пара даёт уверенность, которой нет."""
+    from harness.perception.regime import measure_baseline
+
+    prof = _prof(regime_baseline_min_frames=8)
+    step = _noisy_world(own_motion=3)
+    short = measure_baseline(step=step, frames=2, tolerance=1,
+                             print_of=lambda fr: _fingerprint(fr, prof))
+    assert short.present and not short.enough(8)
+    r = detect(step=step, outputs=("OUT_01",), profile=prof, baseline=short)
+    assert r.has(EGO_MOTION) is None
+    assert f"нужно {8}" in r.evidence[EGO_MOTION].detail
+
+
+def _fingerprint(frame, prof):
+    from harness.model.places import fingerprint
+    return fingerprint(frame, grid=int(prof.structural["place_grid"]),
+                       levels=int(prof.structural["place_levels"]),
+                       blur_px=int(prof.structural["place_blur_px"]))
+
+
+def test_the_baseline_measures_the_gap_the_check_actually_uses() -> None:
+    """Фон снимается через тот же промежуток, что и проверка обратимости, а не через один.
+
+    Между видом до действия и видом после двух действий проходит два шага мира. Мерка
+    через один шаг строже настоящего фона ровно на один шаг дрейфа, и в едущем домене
+    «вид вернулся» не находилось бы никогда.
+    """
+    from harness.perception.regime import measure_baseline
 
     prof = _prof()
-    outs = tuple(f"OUT_{i:02X}" for i in range(2, 10))
-    a = Babbler(prof, outs, rng_seed=1)
-    b = Babbler(prof, outs, rng_seed=1)
+    step = _noisy_world(own_motion=5)
+    bl = measure_baseline(step=step, frames=10, tolerance=1,
+                          print_of=lambda fr: _fingerprint(fr, prof), gap=2)
+    assert bl.gap == 2
+    assert bl.sim_gap_med <= bl.sim_med, (
+        "за два шага домен уезжает дальше, чем за один: фон через больший промежуток не "
+        "может быть строже")
 
-    # Одному из них объявляем один выход заведомо необратимым (осторожность 1.0), другому
-    # — заведомо обратимым. Порядок проб обязан **не измениться**, и это дефект.
-    for babbler, undone in ((a, False), (b, True)):
-        st = babbler.body.fact(outs[0], 1)
-        st.reversibility = Reversibility().observe(undone)
+    still = measure_baseline(step=_noisy_world(own_motion=0), frames=10, tolerance=1,
+                             print_of=lambda fr: _fingerprint(fr, prof), gap=2)
+    assert still.sim_gap_med == 1.0 and still.shift_max == 0.0, (
+        "в неподвижном домене опорный уровень обязан быть строгим, а не «примерно»")
 
-    first_a = [a.next_probe().output for _ in range(4)]
-    first_b = [b.next_probe().output for _ in range(4)]
-    assert first_a == first_b, (
-        "порядок проб разошёлся — значит осторожность в разведку дошла. Это хорошая "
-        "новость и падение этого теста: замените его на проверку сдвига счётчиков "
-        "(MEASUREMENT.md, 33.2)")
+
+def test_the_reference_of_the_view_check_is_declared_and_measured() -> None:
+    """Инвариант 23: отсчёт для «вид вернулся» живёт в схеме и меняет ответ.
+
+    Три отсчёта замерены по пяти доменам, и победил критерий тождества вида
+    (`MEASUREMENT.md`, 35). Здесь проверяется не победитель, а то, что выбор действительно
+    читается: настройка, не меняющая ни одного ответа, была бы мёртвой.
+    """
+    prof = _prof()
+    assert prof.structural["regime_view_reference"] == "criterion"
+    step = _noisy_world(own_motion=4)
+    bars = set()
+    for choice in ("criterion", "background", "looser"):
+        r = detect(step=_noisy_world(own_motion=4), outputs=("OUT_01", "OUT_02"),
+                   profile=_prof(regime_view_reference=choice))
+        bars.add(r.evidence[REVERSIBLE].reference.split("не ниже ")[1][:5])
+    assert len(bars) > 1, "выбор отсчёта не меняет планку — значит настройка мёртвая"
+    del step
+
+
+def test_the_reference_is_written_down_for_every_feature() -> None:
+    """У каждого признака сказано, с чем сравнивали. Иначе «сравнили с фоном» — слова."""
+    r = detect(step=_noisy_world(own_motion=2), outputs=("OUT_01",), profile=_prof())
+    for f in FEATURES:
+        assert r.evidence[f].reference, f"{f} не говорит, с чем сравнивали"
+    assert "бездействие" in r.evidence[EGO_MOTION].reference
+    assert r.baseline.frames > 0
+    assert r.baseline.as_dict()["unit"] == "пара кадров без действия"
