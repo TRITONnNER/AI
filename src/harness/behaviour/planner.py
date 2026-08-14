@@ -42,7 +42,7 @@ from dataclasses import dataclass, field
 from typing import Any, Callable, Iterator, Mapping, Sequence
 
 from ..core.action import (UNKNOWN, Action, Reversibility, action_key,
-                          macro_key, parse_action_key, parse_any_key)
+                          macro_key, parse_action_key, parse_any_key, too_risky)
 from ..core.branches import Arbitration
 from ..core.clocks import Stamp
 from ..core.journal import (Actor, ActorLayer, Journal, Kind as EntryKind,
@@ -279,7 +279,7 @@ class Planner:
                 if pred is None:
                     continue                    # «не знаю» ветку не строит
                 caution = self.model.caution(key)
-                if avoid_risky and caution >= self.caution_threshold:
+                if avoid_risky and too_risky(caution, self.caution_threshold):
                     continue
                 # Все наблюдённые исходы, а не только самый частый: отброшенная
                 # ветка бывает единственной, ведущей к цели.
@@ -326,7 +326,7 @@ class Planner:
         for s in chain:
             confidence *= s.p
         max_caution = max((s.caution for s in chain), default=0.0)
-        risky = max_caution >= self.caution_threshold
+        risky = too_risky(max_caution, self.caution_threshold)
         min_n = min((s.n for s in chain), default=0)
         return Plan(goal.id, list(chain), target, seconds, confidence, max_caution,
                     risky, self.expansions, min_step_n=min_n,

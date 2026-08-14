@@ -26,7 +26,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any
 
-from ..core.action import Reversibility
+from ..core.action import Reversibility, too_risky
 from ..core.journal import Journal, Kind as EntryKind
 from .beliefs import BeliefStore, Origin, Provenance, Testimony, entity_id
 
@@ -192,7 +192,7 @@ class BodyMap:
         первом случае и заполнен во втором.
         """
         return sorted(o for o, f in self.outputs.items()
-                      if f.state == "live" and f.reversibility.caution >= threshold)
+                      if f.state == "live" and too_risky(f.reversibility.caution, threshold))
 
     def undoable(self) -> dict[str, str]:
         """Для чего способ отката найден: выход → чем откатывается."""

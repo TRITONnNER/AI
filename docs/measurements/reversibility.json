@@ -1,63 +1,379 @@
 {
   "rows": [
     {
+      "branch_hits": {
+        "ни разу не пробован": 16,
+        "недобранный повтор": 32,
+        "обратимость неизвестна": 26,
+        "сочетание двух живых выходов": 0,
+        "уточнение": 466
+      },
+      "branches_dead": [
+        "сочетание двух живых выходов"
+      ],
+      "probes_by_branch": {
+        "ни разу не пробован": 16,
+        "недобранный повтор": 32,
+        "обратимость неизвестна": 26,
+        "уточнение": 466
+      },
+      "risky_probes_by_branch": {
+        "ни разу не пробован": 1,
+        "недобранный повтор": 2,
+        "обратимость неизвестна": 3
+      },
+      "deferred_by_cost": 469,
+      "repeats_dropped_by_cost": 0,
+      "branch_skipped_by_cost": 0,
+      "probed_without_benefit": 0,
+      "base_cost": 0.2,
+      "label": {
+        "meaningful": true,
+        "outputs": 16,
+        "coverage": 0.625,
+        "said_costly": 2,
+        "false_alarms": 1,
+        "false_alarm_share": 0.5,
+        "false_confirmations": 0,
+        "false_confirmation_share": 0.0,
+        "truly_irreversible_seen": 1
+      },
+      "predicted": {
+        "attempts": 517,
+        "unit": "попытка отката",
+        "coverage": 0.9806576402321083,
+        "false_alarms": 8,
+        "false_alarm_share": 0.1702127659574468,
+        "false_confirmations": 1,
+        "false_confirmation_share": 0.002127659574468085
+      },
       "seed": 1,
       "rollback": false,
       "gate": true,
+      "loud": false,
       "threshold": 0.72,
       "outputs": 16,
-      "known": 2,
+      "known": 8,
       "caution_median": 0.0,
       "risky_known": 0,
       "risky_known_share": 0.0,
-      "probes": 1501,
+      "probes": 1057,
       "truly_irreversible": 1,
-      "risky_chosen": 4,
-      "risky_chosen_share": 0.002664890073284477,
-      "risky_by_learned_share": 0.2731512325116589,
-      "inverse_found": 2,
+      "risky_chosen": 11,
+      "risky_chosen_share": 0.010406811731315043,
+      "risky_by_learned_share": 0.03122043519394513,
+      "inverse_found": 8,
       "unit": "прогон"
     },
     {
+      "branch_hits": {
+        "ни разу не пробован": 17,
+        "недобранный повтор": 34,
+        "обратимость неизвестна": 26,
+        "сочетание двух живых выходов": 0,
+        "уточнение": 463
+      },
+      "branches_dead": [
+        "сочетание двух живых выходов"
+      ],
+      "probes_by_branch": {
+        "ни разу не пробован": 17,
+        "недобранный повтор": 34,
+        "обратимость неизвестна": 26,
+        "уточнение": 463
+      },
+      "risky_probes_by_branch": {
+        "ни разу не пробован": 1,
+        "недобранный повтор": 2,
+        "обратимость неизвестна": 3
+      },
+      "deferred_by_cost": 466,
+      "repeats_dropped_by_cost": 0,
+      "branch_skipped_by_cost": 0,
+      "probed_without_benefit": 0,
+      "base_cost": 0.2,
+      "label": {
+        "meaningful": false,
+        "outputs": 17,
+        "coverage": 0.5882352941176471,
+        "said_costly": 2,
+        "false_alarms": 1,
+        "false_alarm_share": 0.5,
+        "false_confirmations": 0,
+        "false_confirmation_share": 0.0,
+        "truly_irreversible_seen": 1
+      },
+      "predicted": {
+        "attempts": 514,
+        "unit": "попытка отката",
+        "coverage": 0.980544747081712,
+        "false_alarms": 8,
+        "false_alarm_share": 0.1702127659574468,
+        "false_confirmations": 1,
+        "false_confirmation_share": 0.0021413276231263384
+      },
       "seed": 1,
       "rollback": true,
       "gate": true,
+      "loud": false,
       "threshold": 0.72,
       "outputs": 17,
-      "known": 2,
+      "known": 8,
       "caution_median": 0.0,
       "risky_known": 0,
       "risky_known_share": 0.0,
-      "probes": 1498,
+      "probes": 1054,
       "truly_irreversible": 1,
-      "risky_chosen": 4,
-      "risky_chosen_share": 0.0026702269692923898,
-      "risky_by_learned_share": 0.2750333778371162,
-      "inverse_found": 2,
+      "risky_chosen": 11,
+      "risky_chosen_share": 0.010436432637571158,
+      "risky_by_learned_share": 0.03415559772296015,
+      "inverse_found": 8,
       "unit": "прогон"
     },
     {
+      "branch_hits": {
+        "ни разу не пробован": 17,
+        "недобранный повтор": 34,
+        "обратимость неизвестна": 0,
+        "сочетание двух живых выходов": 0,
+        "уточнение": 714
+      },
+      "branches_dead": [
+        "обратимость неизвестна",
+        "сочетание двух живых выходов"
+      ],
+      "probes_by_branch": {
+        "ни разу не пробован": 17,
+        "недобранный повтор": 34,
+        "уточнение": 714
+      },
+      "risky_probes_by_branch": {
+        "ни разу не пробован": 1,
+        "недобранный повтор": 2
+      },
+      "deferred_by_cost": 0,
+      "repeats_dropped_by_cost": 0,
+      "branch_skipped_by_cost": 0,
+      "probed_without_benefit": 0,
+      "base_cost": 0.8,
+      "label": {
+        "meaningful": false,
+        "outputs": 17,
+        "coverage": 0.5882352941176471,
+        "said_costly": 0,
+        "false_alarms": 0,
+        "false_alarm_share": null,
+        "false_confirmations": 1,
+        "false_confirmation_share": 0.058823529411764705,
+        "truly_irreversible_seen": 1
+      },
+      "predicted": {
+        "attempts": 732,
+        "unit": "попытка отката",
+        "coverage": 0.9863387978142076,
+        "false_alarms": 0,
+        "false_alarm_share": null,
+        "false_confirmations": 15,
+        "false_confirmation_share": 0.020491803278688523
+      },
       "seed": 1,
       "rollback": true,
       "gate": false,
+      "loud": false,
       "threshold": 1.0,
       "outputs": 17,
       "known": 2,
       "caution_median": 0.0,
       "risky_known": 0,
       "risky_known_share": 0.0,
-      "probes": 1498,
+      "probes": 1497,
       "truly_irreversible": 1,
       "risky_chosen": 4,
-      "risky_chosen_share": 0.0026702269692923898,
-      "risky_by_learned_share": 0.2750333778371162,
+      "risky_chosen_share": 0.0026720106880427524,
+      "risky_by_learned_share": 0.0,
       "inverse_found": 2,
       "unit": "прогон"
     },
     {
+      "branch_hits": {
+        "ни разу не пробован": 17,
+        "недобранный повтор": 34,
+        "обратимость неизвестна": 26,
+        "сочетание двух живых выходов": 0,
+        "уточнение": 454
+      },
+      "branches_dead": [
+        "сочетание двух живых выходов"
+      ],
+      "probes_by_branch": {
+        "ни разу не пробован": 17,
+        "недобранный повтор": 34,
+        "обратимость неизвестна": 26,
+        "уточнение": 454
+      },
+      "risky_probes_by_branch": {
+        "ни разу не пробован": 2,
+        "недобранный повтор": 4,
+        "обратимость неизвестна": 3
+      },
+      "deferred_by_cost": 457,
+      "repeats_dropped_by_cost": 0,
+      "branch_skipped_by_cost": 0,
+      "probed_without_benefit": 0,
+      "base_cost": 0.2727,
+      "label": {
+        "meaningful": true,
+        "outputs": 17,
+        "coverage": 0.6470588235294118,
+        "said_costly": 3,
+        "false_alarms": 1,
+        "false_alarm_share": 0.3333333333333333,
+        "false_confirmations": 0,
+        "false_confirmation_share": 0.0,
+        "truly_irreversible_seen": 2
+      },
+      "predicted": {
+        "attempts": 506,
+        "unit": "попытка отката",
+        "coverage": 0.9782608695652174,
+        "false_alarms": 8,
+        "false_alarm_share": 0.16666666666666666,
+        "false_confirmations": 1,
+        "false_confirmation_share": 0.002183406113537118
+      },
+      "seed": 1,
+      "rollback": false,
+      "gate": true,
+      "loud": true,
+      "threshold": 0.72,
+      "outputs": 17,
+      "known": 8,
+      "caution_median": 0.0,
+      "risky_known": 0,
+      "risky_known_share": 0.0,
+      "probes": 1037,
+      "truly_irreversible": 2,
+      "risky_chosen": 15,
+      "risky_chosen_share": 0.01446480231436837,
+      "risky_by_learned_share": 0.03567984570877531,
+      "inverse_found": 8,
+      "unit": "прогон"
+    },
+    {
+      "branch_hits": {
+        "ни разу не пробован": 17,
+        "недобранный повтор": 34,
+        "обратимость неизвестна": 0,
+        "сочетание двух живых выходов": 0,
+        "уточнение": 705
+      },
+      "branches_dead": [
+        "обратимость неизвестна",
+        "сочетание двух живых выходов"
+      ],
+      "probes_by_branch": {
+        "ни разу не пробован": 17,
+        "недобранный повтор": 34,
+        "уточнение": 705
+      },
+      "risky_probes_by_branch": {
+        "ни разу не пробован": 2,
+        "недобранный повтор": 4,
+        "уточнение": 1
+      },
+      "deferred_by_cost": 0,
+      "repeats_dropped_by_cost": 0,
+      "branch_skipped_by_cost": 0,
+      "probed_without_benefit": 0,
+      "base_cost": 0.8182,
+      "label": {
+        "meaningful": true,
+        "outputs": 17,
+        "coverage": 0.6470588235294118,
+        "said_costly": 0,
+        "false_alarms": 0,
+        "false_alarm_share": null,
+        "false_confirmations": 2,
+        "false_confirmation_share": 0.11764705882352941,
+        "truly_irreversible_seen": 2
+      },
+      "predicted": {
+        "attempts": 723,
+        "unit": "попытка отката",
+        "coverage": 0.9847856154910097,
+        "false_alarms": 0,
+        "false_alarm_share": null,
+        "false_confirmations": 16,
+        "false_confirmation_share": 0.022130013831258646
+      },
+      "seed": 1,
+      "rollback": false,
+      "gate": false,
+      "loud": true,
+      "threshold": 1.0,
+      "outputs": 17,
+      "known": 2,
+      "caution_median": 0.0,
+      "risky_known": 0,
+      "risky_known_share": 0.0,
+      "probes": 1479,
+      "truly_irreversible": 2,
+      "risky_chosen": 9,
+      "risky_chosen_share": 0.006085192697768763,
+      "risky_by_learned_share": 0.0,
+      "inverse_found": 2,
+      "unit": "прогон"
+    },
+    {
+      "branch_hits": {
+        "ни разу не пробован": 16,
+        "недобранный повтор": 32,
+        "обратимость неизвестна": 0,
+        "сочетание двух живых выходов": 0,
+        "уточнение": 699
+      },
+      "branches_dead": [
+        "обратимость неизвестна",
+        "сочетание двух живых выходов"
+      ],
+      "probes_by_branch": {
+        "ни разу не пробован": 16,
+        "недобранный повтор": 32,
+        "уточнение": 699
+      },
+      "risky_probes_by_branch": {
+        "ни разу не пробован": 1,
+        "недобранный повтор": 2
+      },
+      "deferred_by_cost": 699,
+      "repeats_dropped_by_cost": 0,
+      "branch_skipped_by_cost": 0,
+      "probed_without_benefit": 0,
+      "base_cost": 0.9,
+      "label": {
+        "meaningful": true,
+        "outputs": 16,
+        "coverage": 0.625,
+        "said_costly": 15,
+        "false_alarms": 14,
+        "false_alarm_share": 0.9333333333333333,
+        "false_confirmations": 0,
+        "false_confirmation_share": 0.0,
+        "truly_irreversible_seen": 1
+      },
+      "predicted": {
+        "attempts": 717,
+        "unit": "попытка отката",
+        "coverage": 0.9860529986052998,
+        "false_alarms": 1,
+        "false_alarm_share": 0.058823529411764705,
+        "false_confirmations": 1,
+        "false_confirmation_share": 0.0014285714285714286
+      },
       "seed": 2,
       "rollback": false,
       "gate": true,
+      "loud": false,
       "threshold": 0.72,
       "outputs": 16,
       "known": 1,
@@ -73,45 +389,312 @@
       "unit": "прогон"
     },
     {
+      "branch_hits": {
+        "ни разу не пробован": 17,
+        "недобранный повтор": 34,
+        "обратимость неизвестна": 0,
+        "сочетание двух живых выходов": 0,
+        "уточнение": 732
+      },
+      "branches_dead": [
+        "обратимость неизвестна",
+        "сочетание двух живых выходов"
+      ],
+      "probes_by_branch": {
+        "ни разу не пробован": 17,
+        "недобранный повтор": 34,
+        "уточнение": 732
+      },
+      "risky_probes_by_branch": {
+        "ни разу не пробован": 1,
+        "недобранный повтор": 2
+      },
+      "deferred_by_cost": 732,
+      "repeats_dropped_by_cost": 0,
+      "branch_skipped_by_cost": 0,
+      "probed_without_benefit": 0,
+      "base_cost": 0.3636,
+      "label": {
+        "meaningful": false,
+        "outputs": 17,
+        "coverage": 0.6470588235294118,
+        "said_costly": 4,
+        "false_alarms": 3,
+        "false_alarm_share": 0.75,
+        "false_confirmations": 0,
+        "false_confirmation_share": 0.0,
+        "truly_irreversible_seen": 1
+      },
+      "predicted": {
+        "attempts": 749,
+        "unit": "попытка отката",
+        "coverage": 0.9853137516688919,
+        "false_alarms": 7,
+        "false_alarm_share": 0.3684210526315789,
+        "false_confirmations": 1,
+        "false_confirmation_share": 0.0013698630136986301
+      },
       "seed": 2,
       "rollback": true,
       "gate": true,
+      "loud": false,
       "threshold": 0.72,
       "outputs": 17,
       "known": 7,
       "caution_median": 0.0,
       "risky_known": 0,
       "risky_known_share": 0.0,
-      "probes": 809,
+      "probes": 1532,
       "truly_irreversible": 1,
       "risky_chosen": 4,
-      "risky_chosen_share": 0.004944375772558714,
-      "risky_by_learned_share": 0.04573547589616811,
+      "risky_chosen_share": 0.0026109660574412533,
+      "risky_by_learned_share": 0.024151436031331592,
       "inverse_found": 7,
       "unit": "прогон"
     },
     {
+      "branch_hits": {
+        "ни разу не пробован": 17,
+        "недобранный повтор": 34,
+        "обратимость неизвестна": 0,
+        "сочетание двух живых выходов": 0,
+        "уточнение": 732
+      },
+      "branches_dead": [
+        "обратимость неизвестна",
+        "сочетание двух живых выходов"
+      ],
+      "probes_by_branch": {
+        "ни разу не пробован": 17,
+        "недобранный повтор": 34,
+        "уточнение": 732
+      },
+      "risky_probes_by_branch": {
+        "ни разу не пробован": 1,
+        "недобранный повтор": 2
+      },
+      "deferred_by_cost": 0,
+      "repeats_dropped_by_cost": 0,
+      "branch_skipped_by_cost": 0,
+      "probed_without_benefit": 0,
+      "base_cost": 0.3636,
+      "label": {
+        "meaningful": false,
+        "outputs": 17,
+        "coverage": 0.6470588235294118,
+        "said_costly": 0,
+        "false_alarms": 0,
+        "false_alarm_share": null,
+        "false_confirmations": 1,
+        "false_confirmation_share": 0.058823529411764705,
+        "truly_irreversible_seen": 1
+      },
+      "predicted": {
+        "attempts": 748,
+        "unit": "попытка отката",
+        "coverage": 0.9852941176470589,
+        "false_alarms": 0,
+        "false_alarm_share": null,
+        "false_confirmations": 13,
+        "false_confirmation_share": 0.017379679144385027
+      },
       "seed": 2,
       "rollback": true,
       "gate": false,
+      "loud": false,
       "threshold": 1.0,
       "outputs": 17,
       "known": 7,
       "caution_median": 0.0,
       "risky_known": 0,
       "risky_known_share": 0.0,
-      "probes": 809,
+      "probes": 1531,
       "truly_irreversible": 1,
       "risky_chosen": 4,
-      "risky_chosen_share": 0.004944375772558714,
-      "risky_by_learned_share": 0.04573547589616811,
+      "risky_chosen_share": 0.002612671456564337,
+      "risky_by_learned_share": 0.0,
       "inverse_found": 7,
       "unit": "прогон"
     },
     {
+      "branch_hits": {
+        "ни разу не пробован": 17,
+        "недобранный повтор": 34,
+        "обратимость неизвестна": 0,
+        "сочетание двух живых выходов": 0,
+        "уточнение": 687
+      },
+      "branches_dead": [
+        "обратимость неизвестна",
+        "сочетание двух живых выходов"
+      ],
+      "probes_by_branch": {
+        "ни разу не пробован": 17,
+        "недобранный повтор": 34,
+        "уточнение": 687
+      },
+      "risky_probes_by_branch": {
+        "ни разу не пробован": 2,
+        "недобранный повтор": 4
+      },
+      "deferred_by_cost": 687,
+      "repeats_dropped_by_cost": 0,
+      "branch_skipped_by_cost": 0,
+      "probed_without_benefit": 0,
+      "base_cost": 0.9091,
+      "label": {
+        "meaningful": true,
+        "outputs": 17,
+        "coverage": 0.6470588235294118,
+        "said_costly": 16,
+        "false_alarms": 14,
+        "false_alarm_share": 0.875,
+        "false_confirmations": 0,
+        "false_confirmation_share": 0.0,
+        "truly_irreversible_seen": 2
+      },
+      "predicted": {
+        "attempts": 706,
+        "unit": "попытка отката",
+        "coverage": 0.9844192634560907,
+        "false_alarms": 1,
+        "false_alarm_share": 0.05555555555555555,
+        "false_confirmations": 1,
+        "false_confirmation_share": 0.0014534883720930232
+      },
+      "seed": 2,
+      "rollback": false,
+      "gate": true,
+      "loud": true,
+      "threshold": 0.72,
+      "outputs": 17,
+      "known": 1,
+      "caution_median": 0.0,
+      "risky_known": 0,
+      "risky_known_share": 0.0,
+      "probes": 1444,
+      "truly_irreversible": 2,
+      "risky_chosen": 8,
+      "risky_chosen_share": 0.00554016620498615,
+      "risky_by_learned_share": 0.518005540166205,
+      "inverse_found": 1,
+      "unit": "прогон"
+    },
+    {
+      "branch_hits": {
+        "ни разу не пробован": 17,
+        "недобранный повтор": 34,
+        "обратимость неизвестна": 0,
+        "сочетание двух живых выходов": 0,
+        "уточнение": 687
+      },
+      "branches_dead": [
+        "обратимость неизвестна",
+        "сочетание двух живых выходов"
+      ],
+      "probes_by_branch": {
+        "ни разу не пробован": 17,
+        "недобранный повтор": 34,
+        "уточнение": 687
+      },
+      "risky_probes_by_branch": {
+        "ни разу не пробован": 2,
+        "недобранный повтор": 4,
+        "уточнение": 1
+      },
+      "deferred_by_cost": 0,
+      "repeats_dropped_by_cost": 0,
+      "branch_skipped_by_cost": 0,
+      "probed_without_benefit": 0,
+      "base_cost": 0.9091,
+      "label": {
+        "meaningful": true,
+        "outputs": 17,
+        "coverage": 0.6470588235294118,
+        "said_costly": 0,
+        "false_alarms": 0,
+        "false_alarm_share": null,
+        "false_confirmations": 2,
+        "false_confirmation_share": 0.11764705882352941,
+        "truly_irreversible_seen": 2
+      },
+      "predicted": {
+        "attempts": 704,
+        "unit": "попытка отката",
+        "coverage": 0.984375,
+        "false_alarms": 0,
+        "false_alarm_share": null,
+        "false_confirmations": 18,
+        "false_confirmation_share": 0.02556818181818182
+      },
+      "seed": 2,
+      "rollback": false,
+      "gate": false,
+      "loud": true,
+      "threshold": 1.0,
+      "outputs": 17,
+      "known": 1,
+      "caution_median": 0.0,
+      "risky_known": 0,
+      "risky_known_share": 0.0,
+      "probes": 1442,
+      "truly_irreversible": 2,
+      "risky_chosen": 9,
+      "risky_chosen_share": 0.0062413314840499305,
+      "risky_by_learned_share": 0.0,
+      "inverse_found": 1,
+      "unit": "прогон"
+    },
+    {
+      "branch_hits": {
+        "ни разу не пробован": 16,
+        "недобранный повтор": 32,
+        "обратимость неизвестна": 0,
+        "сочетание двух живых выходов": 0,
+        "уточнение": 690
+      },
+      "branches_dead": [
+        "обратимость неизвестна",
+        "сочетание двух живых выходов"
+      ],
+      "probes_by_branch": {
+        "ни разу не пробован": 16,
+        "недобранный повтор": 32,
+        "уточнение": 690
+      },
+      "risky_probes_by_branch": {
+        "ни разу не пробован": 1,
+        "недобранный повтор": 2
+      },
+      "deferred_by_cost": 690,
+      "repeats_dropped_by_cost": 0,
+      "branch_skipped_by_cost": 0,
+      "probed_without_benefit": 0,
+      "base_cost": 0.9091,
+      "label": {
+        "meaningful": true,
+        "outputs": 16,
+        "coverage": 0.6875,
+        "said_costly": 15,
+        "false_alarms": 14,
+        "false_alarm_share": 0.9333333333333333,
+        "false_confirmations": 0,
+        "false_confirmation_share": 0.0,
+        "truly_irreversible_seen": 1
+      },
+      "predicted": {
+        "attempts": 709,
+        "unit": "попытка отката",
+        "coverage": 0.9844851904090268,
+        "false_alarms": 1,
+        "false_alarm_share": 0.05555555555555555,
+        "false_confirmations": 1,
+        "false_confirmation_share": 0.001447178002894356
+      },
       "seed": 3,
       "rollback": false,
       "gate": true,
+      "loud": false,
       "threshold": 0.72,
       "outputs": 16,
       "known": 1,
@@ -127,9 +710,55 @@
       "unit": "прогон"
     },
     {
+      "branch_hits": {
+        "ни разу не пробован": 17,
+        "недобранный повтор": 34,
+        "обратимость неизвестна": 0,
+        "сочетание двух живых выходов": 0,
+        "уточнение": 678
+      },
+      "branches_dead": [
+        "обратимость неизвестна",
+        "сочетание двух живых выходов"
+      ],
+      "probes_by_branch": {
+        "ни разу не пробован": 17,
+        "недобранный повтор": 34,
+        "уточнение": 678
+      },
+      "risky_probes_by_branch": {
+        "ни разу не пробован": 1,
+        "недобранный повтор": 2
+      },
+      "deferred_by_cost": 678,
+      "repeats_dropped_by_cost": 0,
+      "branch_skipped_by_cost": 0,
+      "probed_without_benefit": 0,
+      "base_cost": 0.9167,
+      "label": {
+        "meaningful": false,
+        "outputs": 17,
+        "coverage": 0.7058823529411765,
+        "said_costly": 16,
+        "false_alarms": 15,
+        "false_alarm_share": 0.9375,
+        "false_confirmations": 0,
+        "false_confirmation_share": 0.0,
+        "truly_irreversible_seen": 1
+      },
+      "predicted": {
+        "attempts": 698,
+        "unit": "попытка отката",
+        "coverage": 0.9828080229226361,
+        "false_alarms": 1,
+        "false_alarm_share": 0.05263157894736842,
+        "false_confirmations": 1,
+        "false_confirmation_share": 0.0014727540500736377
+      },
       "seed": 3,
       "rollback": true,
       "gate": true,
+      "loud": false,
       "threshold": 0.72,
       "outputs": 17,
       "known": 1,
@@ -145,81 +774,572 @@
       "unit": "прогон"
     },
     {
+      "branch_hits": {
+        "ни разу не пробован": 17,
+        "недобранный повтор": 34,
+        "обратимость неизвестна": 0,
+        "сочетание двух живых выходов": 0,
+        "уточнение": 678
+      },
+      "branches_dead": [
+        "обратимость неизвестна",
+        "сочетание двух живых выходов"
+      ],
+      "probes_by_branch": {
+        "ни разу не пробован": 17,
+        "недобранный повтор": 34,
+        "уточнение": 678
+      },
+      "risky_probes_by_branch": {
+        "ни разу не пробован": 1,
+        "недобранный повтор": 2
+      },
+      "deferred_by_cost": 0,
+      "repeats_dropped_by_cost": 0,
+      "branch_skipped_by_cost": 0,
+      "probed_without_benefit": 0,
+      "base_cost": 0.9167,
+      "label": {
+        "meaningful": false,
+        "outputs": 17,
+        "coverage": 0.7058823529411765,
+        "said_costly": 0,
+        "false_alarms": 0,
+        "false_alarm_share": null,
+        "false_confirmations": 1,
+        "false_confirmation_share": 0.058823529411764705,
+        "truly_irreversible_seen": 1
+      },
+      "predicted": {
+        "attempts": 695,
+        "unit": "попытка отката",
+        "coverage": 0.9827338129496402,
+        "false_alarms": 0,
+        "false_alarm_share": null,
+        "false_confirmations": 19,
+        "false_confirmation_share": 0.027338129496402876
+      },
       "seed": 3,
       "rollback": true,
       "gate": false,
+      "loud": false,
       "threshold": 1.0,
       "outputs": 17,
       "known": 1,
       "caution_median": 0.0,
       "risky_known": 0,
       "risky_known_share": 0.0,
-      "probes": 1427,
+      "probes": 1424,
       "truly_irreversible": 1,
       "risky_chosen": 4,
-      "risky_chosen_share": 0.002803083391730904,
+      "risky_chosen_share": 0.0028089887640449437,
+      "risky_by_learned_share": 0.0,
+      "inverse_found": 1,
+      "unit": "прогон"
+    },
+    {
+      "branch_hits": {
+        "ни разу не пробован": 17,
+        "недобранный повтор": 34,
+        "обратимость неизвестна": 0,
+        "сочетание двух живых выходов": 0,
+        "уточнение": 678
+      },
+      "branches_dead": [
+        "обратимость неизвестна",
+        "сочетание двух живых выходов"
+      ],
+      "probes_by_branch": {
+        "ни разу не пробован": 17,
+        "недобранный повтор": 34,
+        "уточнение": 678
+      },
+      "risky_probes_by_branch": {
+        "ни разу не пробован": 2,
+        "недобранный повтор": 4
+      },
+      "deferred_by_cost": 678,
+      "repeats_dropped_by_cost": 0,
+      "branch_skipped_by_cost": 0,
+      "probed_without_benefit": 0,
+      "base_cost": 0.9167,
+      "label": {
+        "meaningful": true,
+        "outputs": 17,
+        "coverage": 0.7058823529411765,
+        "said_costly": 16,
+        "false_alarms": 14,
+        "false_alarm_share": 0.875,
+        "false_confirmations": 0,
+        "false_confirmation_share": 0.0,
+        "truly_irreversible_seen": 2
+      },
+      "predicted": {
+        "attempts": 698,
+        "unit": "попытка отката",
+        "coverage": 0.9828080229226361,
+        "false_alarms": 1,
+        "false_alarm_share": 0.05263157894736842,
+        "false_confirmations": 1,
+        "false_confirmation_share": 0.0014727540500736377
+      },
+      "seed": 3,
+      "rollback": false,
+      "gate": true,
+      "loud": true,
+      "threshold": 0.72,
+      "outputs": 17,
+      "known": 1,
+      "caution_median": 0.0,
+      "risky_known": 0,
+      "risky_known_share": 0.0,
+      "probes": 1427,
+      "truly_irreversible": 2,
+      "risky_chosen": 8,
+      "risky_chosen_share": 0.005606166783461808,
       "risky_by_learned_share": 0.5206727400140154,
       "inverse_found": 1,
       "unit": "прогон"
     },
     {
+      "branch_hits": {
+        "ни разу не пробован": 17,
+        "недобранный повтор": 34,
+        "обратимость неизвестна": 0,
+        "сочетание двух живых выходов": 0,
+        "уточнение": 678
+      },
+      "branches_dead": [
+        "обратимость неизвестна",
+        "сочетание двух живых выходов"
+      ],
+      "probes_by_branch": {
+        "ни разу не пробован": 17,
+        "недобранный повтор": 34,
+        "уточнение": 678
+      },
+      "risky_probes_by_branch": {
+        "ни разу не пробован": 2,
+        "недобранный повтор": 4,
+        "уточнение": 1
+      },
+      "deferred_by_cost": 0,
+      "repeats_dropped_by_cost": 0,
+      "branch_skipped_by_cost": 0,
+      "probed_without_benefit": 0,
+      "base_cost": 0.9167,
+      "label": {
+        "meaningful": true,
+        "outputs": 17,
+        "coverage": 0.7058823529411765,
+        "said_costly": 0,
+        "false_alarms": 0,
+        "false_alarm_share": null,
+        "false_confirmations": 2,
+        "false_confirmation_share": 0.11764705882352941,
+        "truly_irreversible_seen": 2
+      },
+      "predicted": {
+        "attempts": 695,
+        "unit": "попытка отката",
+        "coverage": 0.9827338129496402,
+        "false_alarms": 0,
+        "false_alarm_share": null,
+        "false_confirmations": 19,
+        "false_confirmation_share": 0.027338129496402876
+      },
+      "seed": 3,
+      "rollback": false,
+      "gate": false,
+      "loud": true,
+      "threshold": 1.0,
+      "outputs": 17,
+      "known": 1,
+      "caution_median": 0.0,
+      "risky_known": 0,
+      "risky_known_share": 0.0,
+      "probes": 1424,
+      "truly_irreversible": 2,
+      "risky_chosen": 9,
+      "risky_chosen_share": 0.006320224719101123,
+      "risky_by_learned_share": 0.0,
+      "inverse_found": 1,
+      "unit": "прогон"
+    },
+    {
+      "branch_hits": {
+        "ни разу не пробован": 16,
+        "недобранный повтор": 32,
+        "обратимость неизвестна": 25,
+        "сочетание двух живых выходов": 0,
+        "уточнение": 476
+      },
+      "branches_dead": [
+        "сочетание двух живых выходов"
+      ],
+      "probes_by_branch": {
+        "ни разу не пробован": 16,
+        "недобранный повтор": 32,
+        "обратимость неизвестна": 25,
+        "уточнение": 476
+      },
+      "risky_probes_by_branch": {
+        "ни разу не пробован": 1,
+        "недобранный повтор": 2,
+        "обратимость неизвестна": 3
+      },
+      "deferred_by_cost": 479,
+      "repeats_dropped_by_cost": 0,
+      "branch_skipped_by_cost": 0,
+      "probed_without_benefit": 0,
+      "base_cost": 0.2,
+      "label": {
+        "meaningful": true,
+        "outputs": 16,
+        "coverage": 0.625,
+        "said_costly": 2,
+        "false_alarms": 1,
+        "false_alarm_share": 0.5,
+        "false_confirmations": 0,
+        "false_confirmation_share": 0.0,
+        "truly_irreversible_seen": 1
+      },
+      "predicted": {
+        "attempts": 526,
+        "unit": "попытка отката",
+        "coverage": 0.9809885931558935,
+        "false_alarms": 8,
+        "false_alarm_share": 0.17391304347826086,
+        "false_confirmations": 1,
+        "false_confirmation_share": 0.0020833333333333333
+      },
       "seed": 4,
       "rollback": false,
       "gate": true,
+      "loud": false,
       "threshold": 0.72,
       "outputs": 16,
+      "known": 8,
+      "caution_median": 0.0,
+      "risky_known": 0,
+      "risky_known_share": 0.0,
+      "probes": 1075,
+      "truly_irreversible": 1,
+      "risky_chosen": 10,
+      "risky_chosen_share": 0.009302325581395349,
+      "risky_by_learned_share": 0.029767441860465118,
+      "inverse_found": 8,
+      "unit": "прогон"
+    },
+    {
+      "branch_hits": {
+        "ни разу не пробован": 17,
+        "недобранный повтор": 34,
+        "обратимость неизвестна": 25,
+        "сочетание двух живых выходов": 0,
+        "уточнение": 383
+      },
+      "branches_dead": [
+        "сочетание двух живых выходов"
+      ],
+      "probes_by_branch": {
+        "ни разу не пробован": 17,
+        "недобранный повтор": 34,
+        "обратимость неизвестна": 25,
+        "уточнение": 383
+      },
+      "risky_probes_by_branch": {
+        "ни разу не пробован": 1,
+        "недобранный повтор": 2,
+        "обратимость неизвестна": 3
+      },
+      "deferred_by_cost": 386,
+      "repeats_dropped_by_cost": 0,
+      "branch_skipped_by_cost": 0,
+      "probed_without_benefit": 0,
+      "base_cost": 0.1818,
+      "label": {
+        "meaningful": false,
+        "outputs": 17,
+        "coverage": 0.6470588235294118,
+        "said_costly": 3,
+        "false_alarms": 2,
+        "false_alarm_share": 0.6666666666666666,
+        "false_confirmations": 0,
+        "false_confirmation_share": 0.0,
+        "truly_irreversible_seen": 1
+      },
+      "predicted": {
+        "attempts": 435,
+        "unit": "попытка отката",
+        "coverage": 0.9747126436781609,
+        "false_alarms": 9,
+        "false_alarm_share": 0.1875,
+        "false_confirmations": 4,
+        "false_confirmation_share": 0.0103359173126615
+      },
+      "seed": 4,
+      "rollback": true,
+      "gate": true,
+      "loud": false,
+      "threshold": 0.72,
+      "outputs": 17,
+      "known": 9,
+      "caution_median": 0.0,
+      "risky_known": 1,
+      "risky_known_share": 0.1111111111111111,
+      "probes": 894,
+      "truly_irreversible": 1,
+      "risky_chosen": 10,
+      "risky_chosen_share": 0.011185682326621925,
+      "risky_by_learned_share": 0.042505592841163314,
+      "inverse_found": 9,
+      "unit": "прогон"
+    },
+    {
+      "branch_hits": {
+        "ни разу не пробован": 17,
+        "недобранный повтор": 34,
+        "обратимость неизвестна": 0,
+        "сочетание двух живых выходов": 0,
+        "уточнение": 705
+      },
+      "branches_dead": [
+        "обратимость неизвестна",
+        "сочетание двух живых выходов"
+      ],
+      "probes_by_branch": {
+        "ни разу не пробован": 17,
+        "недобранный повтор": 34,
+        "уточнение": 705
+      },
+      "risky_probes_by_branch": {
+        "ни разу не пробован": 1,
+        "недобранный повтор": 2
+      },
+      "deferred_by_cost": 0,
+      "repeats_dropped_by_cost": 0,
+      "branch_skipped_by_cost": 0,
+      "probed_without_benefit": 0,
+      "base_cost": 0.7273,
+      "label": {
+        "meaningful": false,
+        "outputs": 17,
+        "coverage": 0.6470588235294118,
+        "said_costly": 0,
+        "false_alarms": 0,
+        "false_alarm_share": null,
+        "false_confirmations": 1,
+        "false_confirmation_share": 0.058823529411764705,
+        "truly_irreversible_seen": 1
+      },
+      "predicted": {
+        "attempts": 724,
+        "unit": "попытка отката",
+        "coverage": 0.9848066298342542,
+        "false_alarms": 0,
+        "false_alarm_share": null,
+        "false_confirmations": 16,
+        "false_confirmation_share": 0.022099447513812154
+      },
+      "seed": 4,
+      "rollback": true,
+      "gate": false,
+      "loud": false,
+      "threshold": 1.0,
+      "outputs": 17,
+      "known": 3,
+      "caution_median": 0.0,
+      "risky_known": 0,
+      "risky_known_share": 0.0,
+      "probes": 1480,
+      "truly_irreversible": 1,
+      "risky_chosen": 4,
+      "risky_chosen_share": 0.002702702702702703,
+      "risky_by_learned_share": 0.0,
+      "inverse_found": 3,
+      "unit": "прогон"
+    },
+    {
+      "branch_hits": {
+        "ни разу не пробован": 17,
+        "недобранный повтор": 34,
+        "обратимость неизвестна": 25,
+        "сочетание двух живых выходов": 0,
+        "уточнение": 464
+      },
+      "branches_dead": [
+        "сочетание двух живых выходов"
+      ],
+      "probes_by_branch": {
+        "ни разу не пробован": 17,
+        "недобранный повтор": 34,
+        "обратимость неизвестна": 25,
+        "уточнение": 464
+      },
+      "risky_probes_by_branch": {
+        "ни разу не пробован": 2,
+        "недобранный повтор": 4,
+        "обратимость неизвестна": 3
+      },
+      "deferred_by_cost": 467,
+      "repeats_dropped_by_cost": 0,
+      "branch_skipped_by_cost": 0,
+      "probed_without_benefit": 0,
+      "base_cost": 0.2727,
+      "label": {
+        "meaningful": true,
+        "outputs": 17,
+        "coverage": 0.6470588235294118,
+        "said_costly": 3,
+        "false_alarms": 1,
+        "false_alarm_share": 0.3333333333333333,
+        "false_confirmations": 0,
+        "false_confirmation_share": 0.0,
+        "truly_irreversible_seen": 2
+      },
+      "predicted": {
+        "attempts": 515,
+        "unit": "попытка отката",
+        "coverage": 0.9786407766990292,
+        "false_alarms": 8,
+        "false_alarm_share": 0.1702127659574468,
+        "false_confirmations": 1,
+        "false_confirmation_share": 0.002136752136752137
+      },
+      "seed": 4,
+      "rollback": false,
+      "gate": true,
+      "loud": true,
+      "threshold": 0.72,
+      "outputs": 17,
+      "known": 8,
+      "caution_median": 0.0,
+      "risky_known": 0,
+      "risky_known_share": 0.0,
+      "probes": 1055,
+      "truly_irreversible": 2,
+      "risky_chosen": 14,
+      "risky_chosen_share": 0.013270142180094787,
+      "risky_by_learned_share": 0.034123222748815164,
+      "inverse_found": 8,
+      "unit": "прогон"
+    },
+    {
+      "branch_hits": {
+        "ни разу не пробован": 17,
+        "недобранный повтор": 34,
+        "обратимость неизвестна": 0,
+        "сочетание двух живых выходов": 0,
+        "уточнение": 705
+      },
+      "branches_dead": [
+        "обратимость неизвестна",
+        "сочетание двух живых выходов"
+      ],
+      "probes_by_branch": {
+        "ни разу не пробован": 17,
+        "недобранный повтор": 34,
+        "уточнение": 705
+      },
+      "risky_probes_by_branch": {
+        "ни разу не пробован": 2,
+        "недобранный повтор": 4,
+        "уточнение": 1
+      },
+      "deferred_by_cost": 0,
+      "repeats_dropped_by_cost": 0,
+      "branch_skipped_by_cost": 0,
+      "probed_without_benefit": 0,
+      "base_cost": 0.8182,
+      "label": {
+        "meaningful": true,
+        "outputs": 17,
+        "coverage": 0.6470588235294118,
+        "said_costly": 0,
+        "false_alarms": 0,
+        "false_alarm_share": null,
+        "false_confirmations": 2,
+        "false_confirmation_share": 0.11764705882352941,
+        "truly_irreversible_seen": 2
+      },
+      "predicted": {
+        "attempts": 723,
+        "unit": "попытка отката",
+        "coverage": 0.9847856154910097,
+        "false_alarms": 0,
+        "false_alarm_share": null,
+        "false_confirmations": 16,
+        "false_confirmation_share": 0.022130013831258646
+      },
+      "seed": 4,
+      "rollback": false,
+      "gate": false,
+      "loud": true,
+      "threshold": 1.0,
+      "outputs": 17,
       "known": 2,
       "caution_median": 0.0,
       "risky_known": 0,
       "risky_known_share": 0.0,
-      "probes": 1501,
-      "truly_irreversible": 1,
-      "risky_chosen": 4,
-      "risky_chosen_share": 0.002664890073284477,
-      "risky_by_learned_share": 0.033311125916055964,
+      "probes": 1479,
+      "truly_irreversible": 2,
+      "risky_chosen": 9,
+      "risky_chosen_share": 0.006085192697768763,
+      "risky_by_learned_share": 0.0,
       "inverse_found": 2,
       "unit": "прогон"
     },
     {
-      "seed": 4,
-      "rollback": true,
-      "gate": true,
-      "threshold": 0.72,
-      "outputs": 17,
-      "known": 3,
-      "caution_median": 0.0,
-      "risky_known": 0,
-      "risky_known_share": 0.0,
-      "probes": 1482,
-      "truly_irreversible": 1,
-      "risky_chosen": 4,
-      "risky_chosen_share": 0.002699055330634278,
-      "risky_by_learned_share": 0.033738191632928474,
-      "inverse_found": 3,
-      "unit": "прогон"
-    },
-    {
-      "seed": 4,
-      "rollback": true,
-      "gate": false,
-      "threshold": 1.0,
-      "outputs": 17,
-      "known": 3,
-      "caution_median": 0.0,
-      "risky_known": 0,
-      "risky_known_share": 0.0,
-      "probes": 1482,
-      "truly_irreversible": 1,
-      "risky_chosen": 4,
-      "risky_chosen_share": 0.002699055330634278,
-      "risky_by_learned_share": 0.033738191632928474,
-      "inverse_found": 3,
-      "unit": "прогон"
-    },
-    {
+      "branch_hits": {
+        "ни разу не пробован": 16,
+        "недобранный повтор": 32,
+        "обратимость неизвестна": 0,
+        "сочетание двух живых выходов": 0,
+        "уточнение": 708
+      },
+      "branches_dead": [
+        "обратимость неизвестна",
+        "сочетание двух живых выходов"
+      ],
+      "probes_by_branch": {
+        "ни разу не пробован": 16,
+        "недобранный повтор": 32,
+        "уточнение": 708
+      },
+      "risky_probes_by_branch": {
+        "ни разу не пробован": 1,
+        "недобранный повтор": 2
+      },
+      "deferred_by_cost": 708,
+      "repeats_dropped_by_cost": 1,
+      "branch_skipped_by_cost": 0,
+      "probed_without_benefit": 0,
+      "base_cost": 0.8889,
+      "label": {
+        "meaningful": true,
+        "outputs": 16,
+        "coverage": 0.5625,
+        "said_costly": 15,
+        "false_alarms": 14,
+        "false_alarm_share": 0.9333333333333333,
+        "false_confirmations": 0,
+        "false_confirmation_share": 0.0,
+        "truly_irreversible_seen": 1
+      },
+      "predicted": {
+        "attempts": 725,
+        "unit": "попытка отката",
+        "coverage": 0.9875862068965517,
+        "false_alarms": 1,
+        "false_alarm_share": 0.0625,
+        "false_confirmations": 1,
+        "false_confirmation_share": 0.0014104372355430183
+      },
       "seed": 5,
       "rollback": false,
       "gate": true,
+      "loud": false,
       "threshold": 0.72,
       "outputs": 16,
       "known": 1,
@@ -235,39 +1355,262 @@
       "unit": "прогон"
     },
     {
+      "branch_hits": {
+        "ни разу не пробован": 17,
+        "недобранный повтор": 25,
+        "обратимость неизвестна": 38,
+        "сочетание двух живых выходов": 0,
+        "уточнение": 406
+      },
+      "branches_dead": [
+        "сочетание двух живых выходов"
+      ],
+      "probes_by_branch": {
+        "ни разу не пробован": 17,
+        "недобранный повтор": 25,
+        "обратимость неизвестна": 38,
+        "уточнение": 406
+      },
+      "risky_probes_by_branch": {
+        "ни разу не пробован": 1,
+        "недобранный повтор": 1,
+        "обратимость неизвестна": 5
+      },
+      "deferred_by_cost": 406,
+      "repeats_dropped_by_cost": 468,
+      "branch_skipped_by_cost": 444,
+      "probed_without_benefit": 0,
+      "base_cost": 0.4,
+      "label": {
+        "meaningful": false,
+        "outputs": 17,
+        "coverage": 0.5882352941176471,
+        "said_costly": 4,
+        "false_alarms": 3,
+        "false_alarm_share": 0.75,
+        "false_confirmations": 0,
+        "false_confirmation_share": 0.0,
+        "truly_irreversible_seen": 1
+      },
+      "predicted": {
+        "attempts": 458,
+        "unit": "попытка отката",
+        "coverage": 0.9781659388646288,
+        "false_alarms": 6,
+        "false_alarm_share": 0.11764705882352941,
+        "false_confirmations": 1,
+        "false_confirmation_share": 0.002457002457002457
+      },
       "seed": 5,
       "rollback": true,
       "gate": true,
+      "loud": false,
       "threshold": 0.72,
       "outputs": 17,
       "known": 6,
       "caution_median": 0.0,
       "risky_known": 0,
       "risky_known_share": 0.0,
-      "probes": 926,
+      "probes": 944,
       "truly_irreversible": 1,
       "risky_chosen": 10,
-      "risky_chosen_share": 0.01079913606911447,
-      "risky_by_learned_share": 0.06803455723542116,
+      "risky_chosen_share": 0.01059322033898305,
+      "risky_by_learned_share": 0.06567796610169492,
       "inverse_found": 6,
       "unit": "прогон"
     },
     {
+      "branch_hits": {
+        "ни разу не пробован": 17,
+        "недобранный повтор": 34,
+        "обратимость неизвестна": 41,
+        "сочетание двух живых выходов": 0,
+        "уточнение": 304
+      },
+      "branches_dead": [
+        "сочетание двух живых выходов"
+      ],
+      "probes_by_branch": {
+        "ни разу не пробован": 17,
+        "недобранный повтор": 34,
+        "обратимость неизвестна": 41,
+        "уточнение": 304
+      },
+      "risky_probes_by_branch": {
+        "ни разу не пробован": 1,
+        "недобранный повтор": 2,
+        "обратимость неизвестна": 4
+      },
+      "deferred_by_cost": 0,
+      "repeats_dropped_by_cost": 0,
+      "branch_skipped_by_cost": 0,
+      "probed_without_benefit": 0,
+      "base_cost": 0.4,
+      "label": {
+        "meaningful": false,
+        "outputs": 17,
+        "coverage": 0.5882352941176471,
+        "said_costly": 0,
+        "false_alarms": 0,
+        "false_alarm_share": null,
+        "false_confirmations": 1,
+        "false_confirmation_share": 0.058823529411764705,
+        "truly_irreversible_seen": 1
+      },
+      "predicted": {
+        "attempts": 365,
+        "unit": "попытка отката",
+        "coverage": 0.9726027397260274,
+        "false_alarms": 0,
+        "false_alarm_share": null,
+        "false_confirmations": 56,
+        "false_confirmation_share": 0.15342465753424658
+      },
       "seed": 5,
       "rollback": true,
       "gate": false,
+      "loud": false,
       "threshold": 1.0,
       "outputs": 17,
       "known": 6,
       "caution_median": 0.0,
       "risky_known": 0,
       "risky_known_share": 0.0,
-      "probes": 926,
+      "probes": 761,
       "truly_irreversible": 1,
-      "risky_chosen": 10,
-      "risky_chosen_share": 0.01079913606911447,
-      "risky_by_learned_share": 0.06803455723542116,
+      "risky_chosen": 11,
+      "risky_chosen_share": 0.01445466491458607,
+      "risky_by_learned_share": 0.0,
       "inverse_found": 6,
+      "unit": "прогон"
+    },
+    {
+      "branch_hits": {
+        "ни разу не пробован": 17,
+        "недобранный повтор": 34,
+        "обратимость неизвестна": 0,
+        "сочетание двух живых выходов": 0,
+        "уточнение": 696
+      },
+      "branches_dead": [
+        "обратимость неизвестна",
+        "сочетание двух живых выходов"
+      ],
+      "probes_by_branch": {
+        "ни разу не пробован": 17,
+        "недобранный повтор": 34,
+        "уточнение": 696
+      },
+      "risky_probes_by_branch": {
+        "ни разу не пробован": 2,
+        "недобранный повтор": 4
+      },
+      "deferred_by_cost": 696,
+      "repeats_dropped_by_cost": 2,
+      "branch_skipped_by_cost": 0,
+      "probed_without_benefit": 0,
+      "base_cost": 0.9,
+      "label": {
+        "meaningful": true,
+        "outputs": 17,
+        "coverage": 0.5882352941176471,
+        "said_costly": 16,
+        "false_alarms": 14,
+        "false_alarm_share": 0.875,
+        "false_confirmations": 0,
+        "false_confirmation_share": 0.0,
+        "truly_irreversible_seen": 2
+      },
+      "predicted": {
+        "attempts": 714,
+        "unit": "попытка отката",
+        "coverage": 0.9859943977591037,
+        "false_alarms": 1,
+        "false_alarm_share": 0.058823529411764705,
+        "false_confirmations": 1,
+        "false_confirmation_share": 0.0014347202295552368
+      },
+      "seed": 5,
+      "rollback": false,
+      "gate": true,
+      "loud": true,
+      "threshold": 0.72,
+      "outputs": 17,
+      "known": 1,
+      "caution_median": 0.0,
+      "risky_known": 0,
+      "risky_known_share": 0.0,
+      "probes": 1461,
+      "truly_irreversible": 2,
+      "risky_chosen": 8,
+      "risky_chosen_share": 0.0054757015742642025,
+      "risky_by_learned_share": 0.5167693360711841,
+      "inverse_found": 1,
+      "unit": "прогон"
+    },
+    {
+      "branch_hits": {
+        "ни разу не пробован": 17,
+        "недобранный повтор": 34,
+        "обратимость неизвестна": 0,
+        "сочетание двух живых выходов": 0,
+        "уточнение": 696
+      },
+      "branches_dead": [
+        "обратимость неизвестна",
+        "сочетание двух живых выходов"
+      ],
+      "probes_by_branch": {
+        "ни разу не пробован": 17,
+        "недобранный повтор": 34,
+        "уточнение": 696
+      },
+      "risky_probes_by_branch": {
+        "ни разу не пробован": 2,
+        "недобранный повтор": 4,
+        "уточнение": 1
+      },
+      "deferred_by_cost": 0,
+      "repeats_dropped_by_cost": 0,
+      "branch_skipped_by_cost": 0,
+      "probed_without_benefit": 0,
+      "base_cost": 0.9,
+      "label": {
+        "meaningful": true,
+        "outputs": 17,
+        "coverage": 0.5882352941176471,
+        "said_costly": 0,
+        "false_alarms": 0,
+        "false_alarm_share": null,
+        "false_confirmations": 2,
+        "false_confirmation_share": 0.11764705882352941,
+        "truly_irreversible_seen": 2
+      },
+      "predicted": {
+        "attempts": 713,
+        "unit": "попытка отката",
+        "coverage": 0.9859747545582047,
+        "false_alarms": 0,
+        "false_alarm_share": null,
+        "false_confirmations": 17,
+        "false_confirmation_share": 0.023842917251051893
+      },
+      "seed": 5,
+      "rollback": false,
+      "gate": false,
+      "loud": true,
+      "threshold": 1.0,
+      "outputs": 17,
+      "known": 1,
+      "caution_median": 0.0,
+      "risky_known": 0,
+      "risky_known_share": 0.0,
+      "probes": 1460,
+      "truly_irreversible": 2,
+      "risky_chosen": 9,
+      "risky_chosen_share": 0.0061643835616438354,
+      "risky_by_learned_share": 0.0,
+      "inverse_found": 1,
       "unit": "прогон"
     }
   ],
@@ -277,46 +1620,159 @@
       "unit": "прогон",
       "caution_median": 0.0,
       "risky_known_share": 0.0,
-      "risky_chosen_share": 0.0027008777852802163,
+      "risky_chosen_share": 0.0027643400138217,
       "risky_by_learned_share": 0.5151924375422012,
       "inverse_found": 1,
-      "probes": 1481
+      "probes": 1447
     },
     "с откатом": {
       "n": 5,
       "unit": "прогон",
       "caution_median": 0.0,
       "risky_known_share": 0.0,
-      "risky_chosen_share": 0.002803083391730904,
-      "risky_by_learned_share": 0.06803455723542116,
-      "inverse_found": 3,
-      "probes": 1427
+      "risky_chosen_share": 0.010436432637571158,
+      "risky_by_learned_share": 0.042505592841163314,
+      "inverse_found": 7,
+      "probes": 1054
     },
     "с откатом, порог снят (контроль)": {
       "n": 5,
       "unit": "прогон",
       "caution_median": 0.0,
       "risky_known_share": 0.0,
-      "risky_chosen_share": 0.002803083391730904,
-      "risky_by_learned_share": 0.06803455723542116,
+      "risky_chosen_share": 0.002702702702702703,
+      "risky_by_learned_share": 0.0,
       "inverse_found": 3,
+      "probes": 1480
+    },
+    "необратимое не молчит": {
+      "n": 5,
+      "unit": "прогон",
+      "caution_median": 0.0,
+      "risky_known_share": 0.0,
+      "risky_chosen_share": 0.005606166783461808,
+      "risky_by_learned_share": 0.5167693360711841,
+      "inverse_found": 1,
       "probes": 1427
+    },
+    "необратимое не молчит, порог снят": {
+      "n": 5,
+      "unit": "прогон",
+      "caution_median": 0.0,
+      "risky_known_share": 0.0,
+      "risky_chosen_share": 0.0061643835616438354,
+      "risky_by_learned_share": 0.0,
+      "inverse_found": 1,
+      "probes": 1460
     }
   },
   "verdict": {
     "grew": true,
-    "off": 0.0027008777852802163,
-    "on": 0.002803083391730904,
-    "control": 0.002803083391730904,
-    "gate_matters": false,
-    "identical_counts_seeds": [
-      1,
+    "off": 0.0027643400138217,
+    "on": 0.010436432637571158,
+    "control": 0.002702702702702703,
+    "gate_matters": true,
+    "identical_counts_seeds": [],
+    "identical_counts": false,
+    "identical_counts_seeds_degenerate": [
       2,
-      3,
-      4,
-      5
+      3
     ],
-    "identical_counts": true
+    "counts_by_seed": {
+      "1": {
+        "порог": 15,
+        "снят": 9
+      },
+      "2": {
+        "порог": 8,
+        "снят": 9
+      },
+      "3": {
+        "порог": 8,
+        "снят": 9
+      },
+      "4": {
+        "порог": 14,
+        "снят": 9
+      },
+      "5": {
+        "порог": 8,
+        "снят": 9
+      }
+    },
+    "counts_by_seed_degenerate": {
+      "1": {
+        "порог": 11,
+        "снят": 4
+      },
+      "2": {
+        "порог": 4,
+        "снят": 4
+      },
+      "3": {
+        "порог": 4,
+        "снят": 4
+      },
+      "4": {
+        "порог": 10,
+        "снят": 4
+      },
+      "5": {
+        "порог": 10,
+        "снят": 11
+      }
+    },
+    "branches_dead_always": [
+      "сочетание двух живых выходов"
+    ],
+    "branches_dead_sometimes": [
+      "обратимость неизвестна"
+    ],
+    "deferred_by_cost": 678,
+    "repeats_dropped_by_cost": 0,
+    "branch_skipped_by_cost": 0,
+    "label": {
+      "n": 15,
+      "unit": "прогон",
+      "coverage": 0.6397058823529412,
+      "false_alarm_share": 0.7091666666666667,
+      "false_confirmation_share": 0.0392156862745098,
+      "false_alarms": 88,
+      "false_confirmations": 10,
+      "outputs": 250
+    },
+    "predicted": {
+      "без отката": {
+        "n": 5,
+        "unit": "прогон (доли по попыткам внутри прогона)",
+        "attempts": 3194,
+        "coverage": 0.9844851904090268,
+        "false_alarm_share": 0.0625,
+        "false_confirmation_share": 0.001447178002894356,
+        "false_alarms": 19,
+        "false_confirmations": 5
+      },
+      "с откатом": {
+        "n": 5,
+        "unit": "прогон (доли по попыткам внутри прогона)",
+        "attempts": 2854,
+        "coverage": 0.980544747081712,
+        "false_alarm_share": 0.1702127659574468,
+        "false_confirmation_share": 0.0021413276231263384,
+        "false_alarms": 31,
+        "false_confirmations": 8
+      },
+      "необратимое не молчит": {
+        "n": 5,
+        "unit": "прогон (доли по попыткам внутри прогона)",
+        "attempts": 3139,
+        "coverage": 0.9828080229226361,
+        "false_alarm_share": 0.058823529411764705,
+        "false_confirmation_share": 0.0014727540500736377,
+        "false_alarms": 19,
+        "false_confirmations": 5
+      }
+    }
   },
   "seeds": [
     1,

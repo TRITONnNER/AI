@@ -129,7 +129,18 @@ def fig_regime(out: Path, data: dict[str, Any]) -> Path:
 
 
 def fig_reversibility(out: Path, data: dict[str, Any]) -> Path:
-    """Утверждение: счётчики совпадают, значит порог осторожности в разведке не читается."""
+    """Утверждение: счётчики совпадают, значит порог осторожности в разведке не читается.
+
+    Утверждение **устарело**: дефект исправлен в TASK-33 A, и счётчики разошлись. Поэтому
+    рисовать эту картинку по новым данным нельзя — заголовок сказал бы неправду о числах,
+    которые в неё попали. Файл 39 остаётся записью состояния «до», а новое утверждение
+    живёт в 40 (`tools/make_task33_figures.py`).
+    """
+    if not data["verdict"].get("identical_counts", True):
+        raise SystemExit(
+            "39-obratimost-ne-vliyaet.png утверждает «счётчики совпадают», а в записи они "
+            "разошлись (TASK-33 A). Картинка не перерисовывается: рисуйте 40 — "
+            "python3 tools/make_task33_figures.py")
     rows = [r for r in data["rows"] if r["rollback"]]
     seeds = sorted({r["seed"] for r in rows})
     fig, (ax,) = _fig(620)

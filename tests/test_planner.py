@@ -497,18 +497,23 @@ def test_planner_reaches_a_place_in_the_interactive_world() -> None:
               seconds_per_seq=1 / 30.0, mode="start")
     model = ForwardModel.from_graph(graph)
     refinements: list[dict] = []
-    for i in range(1500):
+
+    def explore_one(i: int) -> None:
+        nonlocal model
         if i % 25 == 0:
             # Уточнение карты — часть разведки, а не отдельный этап. Именно на этом
             # сиде переключатель света склеивал два состояния мира в одно место, и
             # без деления подтверждённый на двенадцати наблюдениях переход врал на
             # первом же шаге плана: доходили 2 плана из 36.
-            refinements += graph.refine()
+            refinements.extend(graph.refine())
             model = ForwardModel.from_graph(graph)
         out, ms = choose_probe(model, graph.current, world.outputs, hold_ms=hold,
                                min_n=min_n, inverse=inverse,
                                last_output=state["last"])
         step(out, ms)
+
+    for i in range(1500):
+        explore_one(i)
 
     refinements += graph.refine()
     model = ForwardModel.from_graph(graph)
@@ -536,10 +541,29 @@ def test_planner_reaches_a_place_in_the_interactive_world() -> None:
             frontier = nxt
         return {k: v for k, v in depth.items() if v > 0}
 
+    # Где именно застанет агента последний шаг разведки — свойство сида, а не
+    # разведки: шаг мог открыть новое место, из которого подтверждённых переходов ещё
+    # нет по определению. Требовать «на 1500-м шаге стоим там, откуда есть дорога»
+    # значит проверять удачу, и эта удача кончилась, как только порядок проб в лепете
+    # стал читать цену ошибки (TASK-33 A): обратных пар нашлось больше, разведка
+    # пошла иначе и остановилась в свежем месте.
+    #
+    # Поэтому разведка продолжается, пока дорога не появится, — с потолком, чтобы
+    # «не знает пока» отличалось от «не знает никогда».
     here = graph.current
     assert here is not None
     reachable = model_reach(here)
-    assert reachable, "стоим там, откуда модель дороги не знает"
+    extra = 0
+    while not reachable and extra < 400:
+        explore_one(1500 + extra)
+        extra += 1
+        refinements.extend(graph.refine())
+        model = ForwardModel.from_graph(graph)
+        here = graph.current
+        assert here is not None
+        reachable = model_reach(here)
+    assert reachable, ("стоим там, откуда модель дороги не знает, и она не появилась "
+                       f"за {extra} дополнительных шагов разведки")
 
     target = sorted(reachable)[-1]
     goal = _goal(target, test=lambda: graph.current == target)
