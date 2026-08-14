@@ -432,16 +432,43 @@ class TraceReserve:
 
     Единственное, что резерв умеет сообщить, — кончился он или нет. При исчерпании
     правильное поведение — остановить запись и сообщить, а не чистить.
+
+    ## Путь из тупика — вывоз, а не чистка (TASK-32, B)
+
+    «Остановить и сообщить» правильно, но это тупик: при 20 ГБ резерва след кончается за
+    ~2000 часов, и дальше работать нечем. Путь — `core/archive.Archive`: старые сегменты
+    уезжают в холодное хранилище и возвращаются по запросу. Вывоз **не теряет ничего**,
+    поэтому применим и к нулевому уровню, которому понижение недоступно, — и именно это
+    делает его путём, а не поблажкой.
+
+    Резерв про вывоз знает ровно одно: сколько байтов уехало (`archived_mb`), чтобы
+    честно считать занятое. Ссылки на холодное хранилище у него нет — разделение остаётся
+    архитектурным, как и с вытеснением.
     """
 
-    def __init__(self, root: str | Path, *, reserve_mb: float = 1024.0) -> None:
+    def __init__(self, root: str | Path, *, reserve_mb: float = 1024.0,
+                 archived_mb: float = 0.0) -> None:
         self.root = Path(root)
         self.root.mkdir(parents=True, exist_ok=True)
         self.reserve_mb = float(reserve_mb)
+        # Сколько байтов следа уехало в холодное хранилище. Величина, а не ссылка:
+        # резерв не должен уметь дотянуться до архива, иначе разделение перестанет быть
+        # архитектурным. Кто вывозит — тот и сообщает.
+        self.archived_mb = float(archived_mb)
 
     def used_mb(self) -> float:
+        """Занятое **в горячем** пространстве: вывезенное здесь больше не лежит."""
         return sum(p.stat().st_size for p in self.root.rglob("*")
                    if p.is_file()) / (1024 * 1024)
+
+    def note_archived(self, mb: float) -> float:
+        """Учесть вывезенное. Возвращает новый итог вывезенного за всё время."""
+        if mb < 0:
+            raise ReserveError(
+                f"вывезено {mb} МиБ: отрицательный вывоз означал бы удаление, "
+                "а его нет (инвариант 14)")
+        self.archived_mb += float(mb)
+        return self.archived_mb
 
     @property
     def exhausted(self) -> bool:
@@ -452,11 +479,27 @@ class TraceReserve:
             return None
         return max(0.0, (self.reserve_mb - self.used_mb()) / mb_per_hour)
 
+    def hours_left_with_archive(self, mb_per_hour: float) -> float | None:
+        """Сколько часов осталось, **если вывозить**. Отличие от `hours_left` — путь.
+
+        Вывоз освобождает горячее место целиком, поэтому предел здесь — не резерв, а
+        холодное хранилище, размер которого системе неизвестен. Значит честный ответ —
+        `None` со смыслом «пока есть куда вывозить, часы не кончаются», и подменять его
+        числом нельзя: выдуманное число тут же станет обещанием.
+        """
+        return None
+
     def stats(self) -> dict[str, Any]:
         used = self.used_mb()
         return {"level": Level.TRACE.title, "used_mb": round(used, 3),
                 "reserve_mb": self.reserve_mb, "exhausted": self.exhausted,
-                "evictable": Level.TRACE.evictable}
+                "evictable": Level.TRACE.evictable,
+                # Вывезенное — отдельным числом, а не вычтенным из занятого: «место
+                # освободилось» и «следа стало меньше» разные утверждения, и первое не
+                # должно выглядеть как второе.
+                "archived_mb": round(self.archived_mb, 3),
+                "path_out": ("вывоз в холодное хранилище (core/archive)"
+                             if self.exhausted else "")}
 
 
 # ---------------------------------------------------------------------------

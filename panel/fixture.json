@@ -5217,7 +5217,7 @@
   "source": "core.settings.SCHEMA"
  },
  "about": {
-  "session": "/tmp/panel-session-h4imhpho/session",
+  "session": "/tmp/panel-session-oa53q7pt/session",
   "origins": {
    "живая запись оператора": "снято на машине оператора",
    "синтетический прогон": "посчитано по журналу этого прогона",
