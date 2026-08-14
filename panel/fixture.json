@@ -3044,6 +3044,7 @@
    "record_cost",
    "record_feedback",
    "regime",
+   "reversibility",
    "slowdown",
    "storage_rate",
    "text_boundary"
@@ -5216,7 +5217,7 @@
   "source": "core.settings.SCHEMA"
  },
  "about": {
-  "session": "/tmp/panel-session-etkb0cka/session",
+  "session": "/tmp/panel-session-h4imhpho/session",
   "origins": {
    "живая запись оператора": "снято на машине оператора",
    "синтетический прогон": "посчитано по журналу этого прогона",

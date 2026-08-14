@@ -214,3 +214,41 @@ def test_thresholds_live_in_the_schema(profile=None) -> None:
     assert detect(step=still_world, outputs=("OUT_01",),
                   profile=strict).has(EGO_MOTION) is True, (
         "в неподвижном мире множитель ограничивать нечего: сдвиг при бездействии ноль")
+
+
+# --- TASK-32, C: осторожность в разведке не читается (закреплённый дефект) ------
+
+
+def test_caution_does_not_yet_reach_the_exploration_path() -> None:
+    """Закреплённый **дефект**, а не свойство: разведка не спрашивает осторожность.
+
+    Замер (`tools/measure_reversibility.py`): счётчики нажатий по-настоящему необратимого
+    выхода совпали до единицы при работающем пороге и при снятом — 4, 4, 4, 4, 10 против
+    тех же, на всех пяти сидах. Осторожность читает планировщик (`avoid_risky`), а
+    необратимое нажимает разведка, и порядок её проб определяется полнотой знания, а не
+    ценой ошибки.
+
+    Тест закрепляет дефект нарочно: когда его починят, он **упадёт**, и это правильно —
+    правка обязана предъявить сдвиг числа (инвариант 25), а не пройти незаметно. Тогда
+    здесь окажется проверка на разошедшиеся счётчики.
+    """
+    from harness.behaviour.babbling import Babbler
+    from harness.core.action import Reversibility
+
+    prof = _prof()
+    outs = tuple(f"OUT_{i:02X}" for i in range(2, 10))
+    a = Babbler(prof, outs, rng_seed=1)
+    b = Babbler(prof, outs, rng_seed=1)
+
+    # Одному из них объявляем один выход заведомо необратимым (осторожность 1.0), другому
+    # — заведомо обратимым. Порядок проб обязан **не измениться**, и это дефект.
+    for babbler, undone in ((a, False), (b, True)):
+        st = babbler.body.fact(outs[0], 1)
+        st.reversibility = Reversibility().observe(undone)
+
+    first_a = [a.next_probe().output for _ in range(4)]
+    first_b = [b.next_probe().output for _ in range(4)]
+    assert first_a == first_b, (
+        "порядок проб разошёлся — значит осторожность в разведку дошла. Это хорошая "
+        "новость и падение этого теста: замените его на проверку сдвига счётчиков "
+        "(MEASUREMENT.md, 33.2)")
