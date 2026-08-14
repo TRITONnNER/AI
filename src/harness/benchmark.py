@@ -32,6 +32,9 @@ from .core.clocks import Clocks
 from .core.profile import Profile, from_schema
 from .corpus.domains import DOMAINS, Domain, make_domain
 from .model.places import PlaceGraph, fingerprint
+from .perception.regime import applicable as regime_applicable
+from .perception.regime import detect as detect_regime
+from .perception.regime import report as regime_report
 from .vision.predict import PredictionError
 from .vision.selfworld import (COUPLING, MERGED, NO_SIGNAL, PARALLAX, SCREEN,
                                STILLNESS, STRENGTH, UNDECIDED, LayerArbiter,
@@ -134,6 +137,13 @@ class DomainResult:
     background_rate: float
     # содержимое
     t_content_moves: bool
+    #: Режим среды (TASK-32, A) и приговоры по механизмам. `parallax_iou` остаётся числом
+    #: всегда — оно нужно исследователю, — но в сводку идёт только там, где параллакс
+    #: применим: смешивать «плохо» и «не о том» и есть та ошибка, из-за которой разброс
+    #: 0.196–0.815 читался как качество метода.
+    regime: dict[str, Any] = field(default_factory=dict)
+    parallax_applicable: bool | None = None
+    parallax_note: str = ""
     expected: str = ""
     verdict: str = ""
 
@@ -144,6 +154,14 @@ class DomainResult:
         return {
             "domain": self.domain, "frames": self.frames,
             "signal": self.signal, "signal_reason": self.signal_reason,
+            "regime": self.regime,
+            "parallax_applicable": self.parallax_applicable,
+            "parallax_note": self.parallax_note,
+            # Число параллакса в сводке — только там, где он применим. Само число
+            # остаётся в `parallax_iou`, и это не дублирование: одно для исследователя,
+            # второе для сводки, и путать их нельзя.
+            "parallax_iou_reported": (self.parallax_iou
+                                      if self.parallax_applicable else None),
             "iou": r(self.iou), "recall": r(self.recall),
             "precision": r(self.precision),
             "recall_static": r(self.recall_static),
@@ -478,8 +496,22 @@ def bench_domain(name: str, *, seed: int = 0, frames: int = 140,
 
     ratio = (copy_error.summary()["mean"] / max(1e-9, shift_error.summary()["mean"]))
 
+    # Режим среды определяется **наблюдением, на том же домене** и до того, как числа
+    # уйдут в сводку: механизм, которому нужного признака нет, докладывает «неприменимо»
+    # вместо числа (TASK-32, A). Отдельный экземпляр домена нарочно — детектор действует,
+    # и подмешивать его действия в тот же прогон, по которому считались IoU, нельзя.
+    probe = make_domain(name, profile, seed=seed)
+    reg = detect_regime(
+        step=lambda a: np.asarray(probe.step(a, with_audio=False).frame,
+                                  dtype=np.float64),
+        outputs=list(probe.outputs), profile=profile)
+    reg_report = regime_report(reg)
+    par_verdict = regime_applicable("параллакс", reg)
+
     res = DomainResult(
         domain=name, frames=frames, mask_unstable=mask_unstable,
+        regime=reg_report, parallax_applicable=par_verdict.applicable,
+        parallax_note=par_verdict.line,
         signal=verd.signal, signal_reason=verd.reason,
         iou=iou, recall=recall, precision=precision,
         recall_static=recall_static, recall_animated=recall_animated,
