@@ -39,6 +39,7 @@
 
 from __future__ import annotations
 
+from contextlib import nullcontext
 from dataclasses import dataclass, field
 from typing import Any, Callable
 
@@ -252,10 +253,14 @@ class PerceptionStack:
     clock: Any
     frames: int = 0
     skipped: dict[str, int] = field(default_factory=dict)
+    cascade: Any = None
+    blocked: dict[str, int] = field(default_factory=dict)
 
     @classmethod
-    def from_profile(cls, profile: Profile, *, graph: Any = None) -> "PerceptionStack":
+    def from_profile(cls, profile: Profile, *, graph: Any = None,
+                     cascade: Any = None) -> "PerceptionStack":
         from ..vision.layers import LayerClock
+        from .cascade import Cascade
 
         p = profile.parameters
         layers: dict[str, PerceptionLayer] = {
@@ -264,20 +269,65 @@ class PerceptionStack:
             MID: MidLayer(profile, float(p["layer_mid_hz"]), graph=graph),
             FAR: FarLayer(profile, float(p["layer_far_hz"])),
         }
-        return cls(layers=layers, clock=LayerClock.from_profile(profile))
+        return cls(layers=layers, clock=LayerClock.from_profile(profile),
+                   cascade=cascade if cascade is not None else Cascade.from_profile(profile))
 
-    def feed(self, frame: np.ndarray) -> list[LayerAnswer]:
-        """Дать кадр. Обновятся только те слои, которым пора."""
+    def feed(self, frame: Any, *, error: float | None = None,
+             t_self: int = 0) -> list[LayerAnswer]:
+        """Дать кадр. Обновятся только те слои, которым пора **и кому позволено**.
+
+        Два разных «не обновился», и они считаются раздельно:
+
+        - `skipped` — слою не пора по его частоте. Так было всегда;
+        - `blocked` — каскад запер ступень: кадр не менялся или совпал с
+          предсказанием. Это новое, и это ответ на то, что отметки «без изменений»
+          доходили до журнала и не доходили до восприятия.
+
+        `frame` может быть отметкой `UNCHANGED` от источника — тогда смотреть
+        нечего ни одному слою, и это не потеря кадра, а ответ.
+        """
+        from ..capture.base import UNCHANGED
+        from .cascade import CHANGE, LAYER_STAGE
+
         self.frames += 1
+        verdict = None
+        if self.cascade is not None:
+            verdict = self.cascade.admit(frame, error=error, t_self=t_self)
+
+        # Кадра нет вовсе — обновлять нечего ни при каком вердикте. Часы при этом не
+        # идут: неподвижный экран не должен продвигать очередь слоёв, иначе после
+        # минуты неподвижности всем «пора» разом.
+        # `frames_seen` считает **обороты, предложенные слою**, а не кадры, на которые
+        # он посмотрел: иначе две ветки запирания считались бы по-разному, и доля
+        # запертого зависела бы от того, кто именно запер.
+        if frame is UNCHANGED:
+            for name in ORDER:
+                self.layers[name].frames_seen += 1
+                self.blocked[name] = self.blocked.get(name, 0) + 1
+            return []
+
+        top = None if verdict is None else verdict.top
+        if top is not None and top <= CHANGE:
+            for name in ORDER:
+                self.layers[name].frames_seen += 1
+                self.blocked[name] = self.blocked.get(name, 0) + 1
+            return []
+
         due = set(self.clock.tick())
         out: list[LayerAnswer] = []
         for name in ORDER:
             layer = self.layers[name]
             layer.frames_seen += 1
-            if name in due:
-                out.append(layer.update(frame, self.frames))
+            if top is not None and LAYER_STAGE[name] > top:
+                self.blocked[name] = self.blocked.get(name, 0) + 1
+            elif name in due:
+                with (self.cascade.timed(LAYER_STAGE[name]) if self.cascade is not None
+                      else nullcontext()):
+                    out.append(layer.update(frame, self.frames))
             else:
                 self.skipped[name] = self.skipped.get(name, 0) + 1
+        if self.cascade is not None:
+            self.cascade.settle()
         return out
 
     def answer(self, name: str) -> LayerAnswer | None:
@@ -323,4 +373,6 @@ class PerceptionStack:
         return {"frames": self.frames,
                 "layers": [self.layers[n].stats() for n in ORDER],
                 "skipped": dict(sorted(self.skipped.items())),
-                "clock": self.clock.summary()}
+                "blocked": dict(sorted(self.blocked.items())),
+                "clock": self.clock.summary(),
+                "cascade": None if self.cascade is None else self.cascade.stats()}

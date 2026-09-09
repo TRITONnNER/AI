@@ -96,7 +96,16 @@ def test_answer_carries_its_age() -> None:
 
 
 def test_updates_are_skipped_exactly_as_the_frequencies_say() -> None:
-    profile = _profile()
+    """Частотный контракт — при **выключенном** каскаде, и это не обход теста.
+
+    Каскад запирает ступени на неизменившемся кадре, поэтому при нём число
+    обновлений отвечает уже на другой вопрос: «сколько раз слою было пора **и**
+    было на что смотреть». Здесь проверяется первая половина, поэтому вторая
+    выключена явно — `cascade_enabled=False` объявлен в схеме именно как
+    контрольный прогон. Что даёт включённый каскад на тех же кадрах, проверяет
+    `test_cascade.py::test_the_gate_shifts_the_number_of_updates`.
+    """
+    profile = _profile(cascade_enabled=False)
     stack = PerceptionStack.from_profile(profile)
     for frame in _frames(profile, n=120):
         stack.feed(frame)

@@ -1,0 +1,1725 @@
+{
+  "rows": [
+    {
+      "domain": "game",
+      "seed": 11,
+      "idle": 0.0,
+      "frames": 600,
+      "share_reaching": {
+        "change": 1.0,
+        "flow": 0.351667,
+        "fingerprint": 0.131667,
+        "model": 0.001667
+      },
+      "unchanged": {
+        "free": 0,
+        "measured": 389,
+        "share": 0.6483
+      },
+      "quiet": 132,
+      "ratio": 600.0,
+      "stage0_ms_per_call": 0.5211,
+      "error_quantiles": {
+        "p05": 0.0,
+        "p50": 0.04038,
+        "p95": 0.27661
+      },
+      "error_n": 599
+    },
+    {
+      "domain": "game",
+      "seed": 12,
+      "idle": 0.0,
+      "frames": 600,
+      "share_reaching": {
+        "change": 1.0,
+        "flow": 0.346667,
+        "fingerprint": 0.121667,
+        "model": 0.001667
+      },
+      "unchanged": {
+        "free": 0,
+        "measured": 392,
+        "share": 0.6533
+      },
+      "quiet": 135,
+      "ratio": 600.0,
+      "stage0_ms_per_call": 0.5227,
+      "error_quantiles": {
+        "p05": 0.0,
+        "p50": 0.000551,
+        "p95": 0.270522
+      },
+      "error_n": 599
+    },
+    {
+      "domain": "game",
+      "seed": 13,
+      "idle": 0.0,
+      "frames": 600,
+      "share_reaching": {
+        "change": 1.0,
+        "flow": 0.325,
+        "fingerprint": 0.126667,
+        "model": 0.001667
+      },
+      "unchanged": {
+        "free": 0,
+        "measured": 405,
+        "share": 0.675
+      },
+      "quiet": 119,
+      "ratio": 600.0,
+      "stage0_ms_per_call": 0.535,
+      "error_quantiles": {
+        "p05": 0.0,
+        "p50": 0.0,
+        "p95": 0.273293
+      },
+      "error_n": 599
+    },
+    {
+      "domain": "document",
+      "seed": 11,
+      "idle": 0.0,
+      "frames": 600,
+      "share_reaching": {
+        "change": 1.0,
+        "flow": 0.991667,
+        "fingerprint": 0.333333,
+        "model": 0.038333
+      },
+      "unchanged": {
+        "free": 0,
+        "measured": 5,
+        "share": 0.0083
+      },
+      "quiet": 395,
+      "ratio": 26.1,
+      "stage0_ms_per_call": 0.5184,
+      "error_quantiles": {
+        "p05": 0.001476,
+        "p50": 0.003855,
+        "p95": 0.362073
+      },
+      "error_n": 599
+    },
+    {
+      "domain": "document",
+      "seed": 12,
+      "idle": 0.0,
+      "frames": 600,
+      "share_reaching": {
+        "change": 1.0,
+        "flow": 0.991667,
+        "fingerprint": 0.281667,
+        "model": 0.035
+      },
+      "unchanged": {
+        "free": 0,
+        "measured": 5,
+        "share": 0.0083
+      },
+      "quiet": 426,
+      "ratio": 28.6,
+      "stage0_ms_per_call": 0.5332,
+      "error_quantiles": {
+        "p05": 0.001207,
+        "p50": 0.003661,
+        "p95": 0.390843
+      },
+      "error_n": 599
+    },
+    {
+      "domain": "document",
+      "seed": 13,
+      "idle": 0.0,
+      "frames": 600,
+      "share_reaching": {
+        "change": 1.0,
+        "flow": 0.993333,
+        "fingerprint": 0.341667,
+        "model": 0.043333
+      },
+      "unchanged": {
+        "free": 0,
+        "measured": 4,
+        "share": 0.0067
+      },
+      "quiet": 391,
+      "ratio": 23.1,
+      "stage0_ms_per_call": 0.5448,
+      "error_quantiles": {
+        "p05": 0.001402,
+        "p50": 0.003855,
+        "p95": 0.405918
+      },
+      "error_n": 599
+    },
+    {
+      "domain": "desktop",
+      "seed": 11,
+      "idle": 0.0,
+      "frames": 600,
+      "share_reaching": {
+        "change": 1.0,
+        "flow": 0.73,
+        "fingerprint": 0.001667,
+        "model": 0.001667
+      },
+      "unchanged": {
+        "free": 0,
+        "measured": 162,
+        "share": 0.27
+      },
+      "quiet": 437,
+      "ratio": 600.0,
+      "stage0_ms_per_call": 0.5373,
+      "error_quantiles": {
+        "p05": 0.000195,
+        "p50": 0.00146,
+        "p95": 0.002045
+      },
+      "error_n": 599
+    },
+    {
+      "domain": "desktop",
+      "seed": 12,
+      "idle": 0.0,
+      "frames": 600,
+      "share_reaching": {
+        "change": 1.0,
+        "flow": 0.738333,
+        "fingerprint": 0.001667,
+        "model": 0.001667
+      },
+      "unchanged": {
+        "free": 0,
+        "measured": 157,
+        "share": 0.2617
+      },
+      "quiet": 442,
+      "ratio": 600.0,
+      "stage0_ms_per_call": 0.5398,
+      "error_quantiles": {
+        "p05": 0.000195,
+        "p50": 0.001558,
+        "p95": 0.004866
+      },
+      "error_n": 599
+    },
+    {
+      "domain": "desktop",
+      "seed": 13,
+      "idle": 0.0,
+      "frames": 600,
+      "share_reaching": {
+        "change": 1.0,
+        "flow": 0.735,
+        "fingerprint": 0.001667,
+        "model": 0.001667
+      },
+      "unchanged": {
+        "free": 0,
+        "measured": 159,
+        "share": 0.265
+      },
+      "quiet": 440,
+      "ratio": 600.0,
+      "stage0_ms_per_call": 0.5247,
+      "error_quantiles": {
+        "p05": 0.000195,
+        "p50": 0.00146,
+        "p95": 0.002045
+      },
+      "error_n": 599
+    },
+    {
+      "domain": "video",
+      "seed": 11,
+      "idle": 0.0,
+      "frames": 600,
+      "share_reaching": {
+        "change": 1.0,
+        "flow": 0.913333,
+        "fingerprint": 0.043333,
+        "model": 0.001667
+      },
+      "unchanged": {
+        "free": 0,
+        "measured": 52,
+        "share": 0.0867
+      },
+      "quiet": 522,
+      "ratio": 600.0,
+      "stage0_ms_per_call": 0.5456,
+      "error_quantiles": {
+        "p05": 0.000409,
+        "p50": 0.054136,
+        "p95": 0.140076
+      },
+      "error_n": 599
+    },
+    {
+      "domain": "video",
+      "seed": 12,
+      "idle": 0.0,
+      "frames": 600,
+      "share_reaching": {
+        "change": 1.0,
+        "flow": 0.935,
+        "fingerprint": 0.065,
+        "model": 0.001667
+      },
+      "unchanged": {
+        "free": 0,
+        "measured": 39,
+        "share": 0.065
+      },
+      "quiet": 522,
+      "ratio": 600.0,
+      "stage0_ms_per_call": 0.5307,
+      "error_quantiles": {
+        "p05": 0.000682,
+        "p50": 0.055087,
+        "p95": 0.160115
+      },
+      "error_n": 599
+    },
+    {
+      "domain": "video",
+      "seed": 13,
+      "idle": 0.0,
+      "frames": 600,
+      "share_reaching": {
+        "change": 1.0,
+        "flow": 0.915,
+        "fingerprint": 0.036667,
+        "model": 0.001667
+      },
+      "unchanged": {
+        "free": 0,
+        "measured": 51,
+        "share": 0.085
+      },
+      "quiet": 527,
+      "ratio": 600.0,
+      "stage0_ms_per_call": 0.5387,
+      "error_quantiles": {
+        "p05": 0.000545,
+        "p50": 0.05469,
+        "p95": 0.141056
+      },
+      "error_n": 599
+    },
+    {
+      "domain": "depth",
+      "seed": 11,
+      "idle": 0.0,
+      "frames": 600,
+      "share_reaching": {
+        "change": 1.0,
+        "flow": 0.865,
+        "fingerprint": 0.001667,
+        "model": 0.001667
+      },
+      "unchanged": {
+        "free": 0,
+        "measured": 81,
+        "share": 0.135
+      },
+      "quiet": 518,
+      "ratio": 600.0,
+      "stage0_ms_per_call": 0.5444,
+      "error_quantiles": {
+        "p05": 0.000318,
+        "p50": 0.002168,
+        "p95": 0.084913
+      },
+      "error_n": 599
+    },
+    {
+      "domain": "depth",
+      "seed": 12,
+      "idle": 0.0,
+      "frames": 600,
+      "share_reaching": {
+        "change": 1.0,
+        "flow": 0.881667,
+        "fingerprint": 0.001667,
+        "model": 0.001667
+      },
+      "unchanged": {
+        "free": 0,
+        "measured": 71,
+        "share": 0.1183
+      },
+      "quiet": 528,
+      "ratio": 600.0,
+      "stage0_ms_per_call": 0.5554,
+      "error_quantiles": {
+        "p05": 0.000418,
+        "p50": 0.002365,
+        "p95": 0.076453
+      },
+      "error_n": 599
+    },
+    {
+      "domain": "depth",
+      "seed": 13,
+      "idle": 0.0,
+      "frames": 600,
+      "share_reaching": {
+        "change": 1.0,
+        "flow": 0.868333,
+        "fingerprint": 0.006667,
+        "model": 0.001667
+      },
+      "unchanged": {
+        "free": 0,
+        "measured": 79,
+        "share": 0.1317
+      },
+      "quiet": 517,
+      "ratio": 600.0,
+      "stage0_ms_per_call": 0.5318,
+      "error_quantiles": {
+        "p05": 0.000319,
+        "p50": 0.002225,
+        "p95": 0.092435
+      },
+      "error_n": 599
+    },
+    {
+      "domain": "game",
+      "seed": 11,
+      "idle": 0.25,
+      "frames": 600,
+      "share_reaching": {
+        "change": 1.0,
+        "flow": 0.26,
+        "fingerprint": 0.063333,
+        "model": 0.001667
+      },
+      "unchanged": {
+        "free": 0,
+        "measured": 444,
+        "share": 0.74
+      },
+      "quiet": 118,
+      "ratio": 600.0,
+      "stage0_ms_per_call": 0.5352,
+      "error_quantiles": {
+        "p05": 0.0,
+        "p50": 0.0,
+        "p95": 0.174914
+      },
+      "error_n": 599
+    },
+    {
+      "domain": "game",
+      "seed": 12,
+      "idle": 0.25,
+      "frames": 600,
+      "share_reaching": {
+        "change": 1.0,
+        "flow": 0.238333,
+        "fingerprint": 0.093333,
+        "model": 0.001667
+      },
+      "unchanged": {
+        "free": 0,
+        "measured": 457,
+        "share": 0.7617
+      },
+      "quiet": 87,
+      "ratio": 600.0,
+      "stage0_ms_per_call": 0.5428,
+      "error_quantiles": {
+        "p05": 0.0,
+        "p50": 0.0,
+        "p95": 0.271698
+      },
+      "error_n": 599
+    },
+    {
+      "domain": "game",
+      "seed": 13,
+      "idle": 0.25,
+      "frames": 600,
+      "share_reaching": {
+        "change": 1.0,
+        "flow": 0.27,
+        "fingerprint": 0.093333,
+        "model": 0.001667
+      },
+      "unchanged": {
+        "free": 0,
+        "measured": 438,
+        "share": 0.73
+      },
+      "quiet": 106,
+      "ratio": 600.0,
+      "stage0_ms_per_call": 0.5499,
+      "error_quantiles": {
+        "p05": 0.0,
+        "p50": 0.0,
+        "p95": 0.264078
+      },
+      "error_n": 599
+    },
+    {
+      "domain": "document",
+      "seed": 11,
+      "idle": 0.25,
+      "frames": 600,
+      "share_reaching": {
+        "change": 1.0,
+        "flow": 0.996667,
+        "fingerprint": 0.275,
+        "model": 0.035
+      },
+      "unchanged": {
+        "free": 0,
+        "measured": 2,
+        "share": 0.0033
+      },
+      "quiet": 433,
+      "ratio": 28.6,
+      "stage0_ms_per_call": 0.5388,
+      "error_quantiles": {
+        "p05": 0.001359,
+        "p50": 0.003661,
+        "p95": 0.361714
+      },
+      "error_n": 599
+    },
+    {
+      "domain": "document",
+      "seed": 12,
+      "idle": 0.25,
+      "frames": 600,
+      "share_reaching": {
+        "change": 1.0,
+        "flow": 0.991667,
+        "fingerprint": 0.275,
+        "model": 0.036667
+      },
+      "unchanged": {
+        "free": 0,
+        "measured": 5,
+        "share": 0.0083
+      },
+      "quiet": 430,
+      "ratio": 27.3,
+      "stage0_ms_per_call": 0.5371,
+      "error_quantiles": {
+        "p05": 0.001246,
+        "p50": 0.003622,
+        "p95": 0.390804
+      },
+      "error_n": 599
+    },
+    {
+      "domain": "document",
+      "seed": 13,
+      "idle": 0.25,
+      "frames": 600,
+      "share_reaching": {
+        "change": 1.0,
+        "flow": 0.991667,
+        "fingerprint": 0.23,
+        "model": 0.031667
+      },
+      "unchanged": {
+        "free": 0,
+        "measured": 5,
+        "share": 0.0083
+      },
+      "quiet": 457,
+      "ratio": 31.6,
+      "stage0_ms_per_call": 0.5205,
+      "error_quantiles": {
+        "p05": 0.001359,
+        "p50": 0.003544,
+        "p95": 0.402133
+      },
+      "error_n": 599
+    },
+    {
+      "domain": "desktop",
+      "seed": 11,
+      "idle": 0.25,
+      "frames": 600,
+      "share_reaching": {
+        "change": 1.0,
+        "flow": 0.733333,
+        "fingerprint": 0.001667,
+        "model": 0.001667
+      },
+      "unchanged": {
+        "free": 0,
+        "measured": 160,
+        "share": 0.2667
+      },
+      "quiet": 439,
+      "ratio": 600.0,
+      "stage0_ms_per_call": 0.5326,
+      "error_quantiles": {
+        "p05": 0.000195,
+        "p50": 0.00146,
+        "p95": 0.004107
+      },
+      "error_n": 599
+    },
+    {
+      "domain": "desktop",
+      "seed": 12,
+      "idle": 0.25,
+      "frames": 600,
+      "share_reaching": {
+        "change": 1.0,
+        "flow": 0.736667,
+        "fingerprint": 0.001667,
+        "model": 0.001667
+      },
+      "unchanged": {
+        "free": 0,
+        "measured": 158,
+        "share": 0.2633
+      },
+      "quiet": 441,
+      "ratio": 600.0,
+      "stage0_ms_per_call": 0.5225,
+      "error_quantiles": {
+        "p05": 0.000195,
+        "p50": 0.00146,
+        "p95": 0.002045
+      },
+      "error_n": 599
+    },
+    {
+      "domain": "desktop",
+      "seed": 13,
+      "idle": 0.25,
+      "frames": 600,
+      "share_reaching": {
+        "change": 1.0,
+        "flow": 0.733333,
+        "fingerprint": 0.001667,
+        "model": 0.001667
+      },
+      "unchanged": {
+        "free": 0,
+        "measured": 160,
+        "share": 0.2667
+      },
+      "quiet": 439,
+      "ratio": 600.0,
+      "stage0_ms_per_call": 0.5268,
+      "error_quantiles": {
+        "p05": 0.000195,
+        "p50": 0.00146,
+        "p95": 0.002045
+      },
+      "error_n": 599
+    },
+    {
+      "domain": "video",
+      "seed": 11,
+      "idle": 0.25,
+      "frames": 600,
+      "share_reaching": {
+        "change": 1.0,
+        "flow": 0.926667,
+        "fingerprint": 0.035,
+        "model": 0.001667
+      },
+      "unchanged": {
+        "free": 0,
+        "measured": 44,
+        "share": 0.0733
+      },
+      "quiet": 535,
+      "ratio": 600.0,
+      "stage0_ms_per_call": 0.5323,
+      "error_quantiles": {
+        "p05": 0.000545,
+        "p50": 0.054656,
+        "p95": 0.135497
+      },
+      "error_n": 599
+    },
+    {
+      "domain": "video",
+      "seed": 12,
+      "idle": 0.25,
+      "frames": 600,
+      "share_reaching": {
+        "change": 1.0,
+        "flow": 0.935,
+        "fingerprint": 0.04,
+        "model": 0.001667
+      },
+      "unchanged": {
+        "free": 0,
+        "measured": 39,
+        "share": 0.065
+      },
+      "quiet": 537,
+      "ratio": 600.0,
+      "stage0_ms_per_call": 0.5136,
+      "error_quantiles": {
+        "p05": 0.000682,
+        "p50": 0.054904,
+        "p95": 0.137745
+      },
+      "error_n": 599
+    },
+    {
+      "domain": "video",
+      "seed": 13,
+      "idle": 0.25,
+      "frames": 600,
+      "share_reaching": {
+        "change": 1.0,
+        "flow": 0.92,
+        "fingerprint": 0.033333,
+        "model": 0.001667
+      },
+      "unchanged": {
+        "free": 0,
+        "measured": 48,
+        "share": 0.08
+      },
+      "quiet": 532,
+      "ratio": 600.0,
+      "stage0_ms_per_call": 0.5265,
+      "error_quantiles": {
+        "p05": 0.000409,
+        "p50": 0.053609,
+        "p95": 0.125769
+      },
+      "error_n": 599
+    },
+    {
+      "domain": "depth",
+      "seed": 11,
+      "idle": 0.25,
+      "frames": 600,
+      "share_reaching": {
+        "change": 1.0,
+        "flow": 0.856667,
+        "fingerprint": 0.001667,
+        "model": 0.001667
+      },
+      "unchanged": {
+        "free": 0,
+        "measured": 86,
+        "share": 0.1433
+      },
+      "quiet": 513,
+      "ratio": 600.0,
+      "stage0_ms_per_call": 0.5365,
+      "error_quantiles": {
+        "p05": 0.000355,
+        "p50": 0.002068,
+        "p95": 0.077689
+      },
+      "error_n": 599
+    },
+    {
+      "domain": "depth",
+      "seed": 12,
+      "idle": 0.25,
+      "frames": 600,
+      "share_reaching": {
+        "change": 1.0,
+        "flow": 0.886667,
+        "fingerprint": 0.001667,
+        "model": 0.001667
+      },
+      "unchanged": {
+        "free": 0,
+        "measured": 68,
+        "share": 0.1133
+      },
+      "quiet": 531,
+      "ratio": 600.0,
+      "stage0_ms_per_call": 0.537,
+      "error_quantiles": {
+        "p05": 0.000345,
+        "p50": 0.002147,
+        "p95": 0.091198
+      },
+      "error_n": 599
+    },
+    {
+      "domain": "depth",
+      "seed": 13,
+      "idle": 0.25,
+      "frames": 600,
+      "share_reaching": {
+        "change": 1.0,
+        "flow": 0.878333,
+        "fingerprint": 0.001667,
+        "model": 0.001667
+      },
+      "unchanged": {
+        "free": 0,
+        "measured": 73,
+        "share": 0.1217
+      },
+      "quiet": 526,
+      "ratio": 600.0,
+      "stage0_ms_per_call": 0.5384,
+      "error_quantiles": {
+        "p05": 0.00032,
+        "p50": 0.002062,
+        "p95": 0.070069
+      },
+      "error_n": 599
+    },
+    {
+      "domain": "game",
+      "seed": 11,
+      "idle": 0.5,
+      "frames": 600,
+      "share_reaching": {
+        "change": 1.0,
+        "flow": 0.241667,
+        "fingerprint": 0.068333,
+        "model": 0.001667
+      },
+      "unchanged": {
+        "free": 0,
+        "measured": 455,
+        "share": 0.7583
+      },
+      "quiet": 104,
+      "ratio": 600.0,
+      "stage0_ms_per_call": 0.5268,
+      "error_quantiles": {
+        "p05": 0.0,
+        "p50": 0.0,
+        "p95": 0.170524
+      },
+      "error_n": 599
+    },
+    {
+      "domain": "game",
+      "seed": 12,
+      "idle": 0.5,
+      "frames": 600,
+      "share_reaching": {
+        "change": 1.0,
+        "flow": 0.183333,
+        "fingerprint": 0.07,
+        "model": 0.001667
+      },
+      "unchanged": {
+        "free": 0,
+        "measured": 490,
+        "share": 0.8167
+      },
+      "quiet": 68,
+      "ratio": 600.0,
+      "stage0_ms_per_call": 0.5454,
+      "error_quantiles": {
+        "p05": 0.0,
+        "p50": 0.0,
+        "p95": 0.265684
+      },
+      "error_n": 599
+    },
+    {
+      "domain": "game",
+      "seed": 13,
+      "idle": 0.5,
+      "frames": 600,
+      "share_reaching": {
+        "change": 1.0,
+        "flow": 0.275,
+        "fingerprint": 0.08,
+        "model": 0.001667
+      },
+      "unchanged": {
+        "free": 0,
+        "measured": 435,
+        "share": 0.725
+      },
+      "quiet": 117,
+      "ratio": 600.0,
+      "stage0_ms_per_call": 0.5282,
+      "error_quantiles": {
+        "p05": 0.0,
+        "p50": 8.2e-05,
+        "p95": 0.17465
+      },
+      "error_n": 599
+    },
+    {
+      "domain": "document",
+      "seed": 11,
+      "idle": 0.5,
+      "frames": 600,
+      "share_reaching": {
+        "change": 1.0,
+        "flow": 0.991667,
+        "fingerprint": 0.205,
+        "model": 0.023333
+      },
+      "unchanged": {
+        "free": 0,
+        "measured": 5,
+        "share": 0.0083
+      },
+      "quiet": 472,
+      "ratio": 42.9,
+      "stage0_ms_per_call": 0.5483,
+      "error_quantiles": {
+        "p05": 0.001168,
+        "p50": 0.003466,
+        "p95": 0.352323
+      },
+      "error_n": 599
+    },
+    {
+      "domain": "document",
+      "seed": 12,
+      "idle": 0.5,
+      "frames": 600,
+      "share_reaching": {
+        "change": 1.0,
+        "flow": 0.991667,
+        "fingerprint": 0.23,
+        "model": 0.031667
+      },
+      "unchanged": {
+        "free": 0,
+        "measured": 5,
+        "share": 0.0083
+      },
+      "quiet": 457,
+      "ratio": 31.6,
+      "stage0_ms_per_call": 0.5464,
+      "error_quantiles": {
+        "p05": 0.001161,
+        "p50": 0.003466,
+        "p95": 0.389087
+      },
+      "error_n": 599
+    },
+    {
+      "domain": "document",
+      "seed": 13,
+      "idle": 0.5,
+      "frames": 600,
+      "share_reaching": {
+        "change": 1.0,
+        "flow": 0.991667,
+        "fingerprint": 0.228333,
+        "model": 0.035
+      },
+      "unchanged": {
+        "free": 0,
+        "measured": 5,
+        "share": 0.0083
+      },
+      "quiet": 458,
+      "ratio": 28.6,
+      "stage0_ms_per_call": 0.534,
+      "error_quantiles": {
+        "p05": 0.001203,
+        "p50": 0.003544,
+        "p95": 0.406503
+      },
+      "error_n": 599
+    },
+    {
+      "domain": "desktop",
+      "seed": 11,
+      "idle": 0.5,
+      "frames": 600,
+      "share_reaching": {
+        "change": 1.0,
+        "flow": 0.728333,
+        "fingerprint": 0.001667,
+        "model": 0.001667
+      },
+      "unchanged": {
+        "free": 0,
+        "measured": 163,
+        "share": 0.2717
+      },
+      "quiet": 436,
+      "ratio": 600.0,
+      "stage0_ms_per_call": 0.5307,
+      "error_quantiles": {
+        "p05": 0.000195,
+        "p50": 0.00146,
+        "p95": 0.002045
+      },
+      "error_n": 599
+    },
+    {
+      "domain": "desktop",
+      "seed": 12,
+      "idle": 0.5,
+      "frames": 600,
+      "share_reaching": {
+        "change": 1.0,
+        "flow": 0.743333,
+        "fingerprint": 0.001667,
+        "model": 0.001667
+      },
+      "unchanged": {
+        "free": 0,
+        "measured": 154,
+        "share": 0.2567
+      },
+      "quiet": 445,
+      "ratio": 600.0,
+      "stage0_ms_per_call": 0.522,
+      "error_quantiles": {
+        "p05": 0.000195,
+        "p50": 0.001558,
+        "p95": 0.006665
+      },
+      "error_n": 599
+    },
+    {
+      "domain": "desktop",
+      "seed": 13,
+      "idle": 0.5,
+      "frames": 600,
+      "share_reaching": {
+        "change": 1.0,
+        "flow": 0.735,
+        "fingerprint": 0.001667,
+        "model": 0.001667
+      },
+      "unchanged": {
+        "free": 0,
+        "measured": 159,
+        "share": 0.265
+      },
+      "quiet": 440,
+      "ratio": 600.0,
+      "stage0_ms_per_call": 0.5326,
+      "error_quantiles": {
+        "p05": 0.000195,
+        "p50": 0.00146,
+        "p95": 0.005524
+      },
+      "error_n": 599
+    },
+    {
+      "domain": "video",
+      "seed": 11,
+      "idle": 0.5,
+      "frames": 600,
+      "share_reaching": {
+        "change": 1.0,
+        "flow": 0.926667,
+        "fingerprint": 0.041667,
+        "model": 0.001667
+      },
+      "unchanged": {
+        "free": 0,
+        "measured": 44,
+        "share": 0.0733
+      },
+      "quiet": 531,
+      "ratio": 600.0,
+      "stage0_ms_per_call": 0.5427,
+      "error_quantiles": {
+        "p05": 0.000545,
+        "p50": 0.054278,
+        "p95": 0.137374
+      },
+      "error_n": 599
+    },
+    {
+      "domain": "video",
+      "seed": 12,
+      "idle": 0.5,
+      "frames": 600,
+      "share_reaching": {
+        "change": 1.0,
+        "flow": 0.945,
+        "fingerprint": 0.026667,
+        "model": 0.001667
+      },
+      "unchanged": {
+        "free": 0,
+        "measured": 33,
+        "share": 0.055
+      },
+      "quiet": 551,
+      "ratio": 600.0,
+      "stage0_ms_per_call": 0.5318,
+      "error_quantiles": {
+        "p05": 0.000668,
+        "p50": 0.054885,
+        "p95": 0.114788
+      },
+      "error_n": 599
+    },
+    {
+      "domain": "video",
+      "seed": 13,
+      "idle": 0.5,
+      "frames": 600,
+      "share_reaching": {
+        "change": 1.0,
+        "flow": 0.9,
+        "fingerprint": 0.036667,
+        "model": 0.001667
+      },
+      "unchanged": {
+        "free": 0,
+        "measured": 60,
+        "share": 0.1
+      },
+      "quiet": 518,
+      "ratio": 600.0,
+      "stage0_ms_per_call": 0.5291,
+      "error_quantiles": {
+        "p05": 0.000409,
+        "p50": 0.002862,
+        "p95": 0.13705
+      },
+      "error_n": 599
+    },
+    {
+      "domain": "depth",
+      "seed": 11,
+      "idle": 0.5,
+      "frames": 600,
+      "share_reaching": {
+        "change": 1.0,
+        "flow": 0.885,
+        "fingerprint": 0.006667,
+        "model": 0.001667
+      },
+      "unchanged": {
+        "free": 0,
+        "measured": 69,
+        "share": 0.115
+      },
+      "quiet": 527,
+      "ratio": 600.0,
+      "stage0_ms_per_call": 0.5296,
+      "error_quantiles": {
+        "p05": 0.00041,
+        "p50": 0.002147,
+        "p95": 0.080885
+      },
+      "error_n": 599
+    },
+    {
+      "domain": "depth",
+      "seed": 12,
+      "idle": 0.5,
+      "frames": 600,
+      "share_reaching": {
+        "change": 1.0,
+        "flow": 0.83,
+        "fingerprint": 0.003333,
+        "model": 0.001667
+      },
+      "unchanged": {
+        "free": 0,
+        "measured": 102,
+        "share": 0.17
+      },
+      "quiet": 496,
+      "ratio": 600.0,
+      "stage0_ms_per_call": 0.5411,
+      "error_quantiles": {
+        "p05": 0.000239,
+        "p50": 0.001988,
+        "p95": 0.07343
+      },
+      "error_n": 599
+    },
+    {
+      "domain": "depth",
+      "seed": 13,
+      "idle": 0.5,
+      "frames": 600,
+      "share_reaching": {
+        "change": 1.0,
+        "flow": 0.816667,
+        "fingerprint": 0.003333,
+        "model": 0.001667
+      },
+      "unchanged": {
+        "free": 0,
+        "measured": 110,
+        "share": 0.1833
+      },
+      "quiet": 488,
+      "ratio": 600.0,
+      "stage0_ms_per_call": 0.5333,
+      "error_quantiles": {
+        "p05": 0.000318,
+        "p50": 0.001908,
+        "p95": 0.080449
+      },
+      "error_n": 599
+    },
+    {
+      "domain": "game",
+      "seed": 11,
+      "idle": 0.8,
+      "frames": 600,
+      "share_reaching": {
+        "change": 1.0,
+        "flow": 0.401667,
+        "fingerprint": 0.023333,
+        "model": 0.001667
+      },
+      "unchanged": {
+        "free": 0,
+        "measured": 359,
+        "share": 0.5983
+      },
+      "quiet": 227,
+      "ratio": 600.0,
+      "stage0_ms_per_call": 0.5127,
+      "error_quantiles": {
+        "p05": 0.0,
+        "p50": 0.000592,
+        "p95": 0.116577
+      },
+      "error_n": 599
+    },
+    {
+      "domain": "game",
+      "seed": 12,
+      "idle": 0.8,
+      "frames": 600,
+      "share_reaching": {
+        "change": 1.0,
+        "flow": 0.133333,
+        "fingerprint": 0.023333,
+        "model": 0.001667
+      },
+      "unchanged": {
+        "free": 0,
+        "measured": 520,
+        "share": 0.8667
+      },
+      "quiet": 66,
+      "ratio": 600.0,
+      "stage0_ms_per_call": 0.5141,
+      "error_quantiles": {
+        "p05": 0.0,
+        "p50": 0.0,
+        "p95": 0.091854
+      },
+      "error_n": 599
+    },
+    {
+      "domain": "game",
+      "seed": 13,
+      "idle": 0.8,
+      "frames": 600,
+      "share_reaching": {
+        "change": 1.0,
+        "flow": 0.411667,
+        "fingerprint": 0.033333,
+        "model": 0.001667
+      },
+      "unchanged": {
+        "free": 0,
+        "measured": 353,
+        "share": 0.5883
+      },
+      "quiet": 227,
+      "ratio": 600.0,
+      "stage0_ms_per_call": 0.5132,
+      "error_quantiles": {
+        "p05": 0.0,
+        "p50": 0.000572,
+        "p95": 0.125769
+      },
+      "error_n": 599
+    },
+    {
+      "domain": "document",
+      "seed": 11,
+      "idle": 0.8,
+      "frames": 600,
+      "share_reaching": {
+        "change": 1.0,
+        "flow": 0.993333,
+        "fingerprint": 0.078333,
+        "model": 0.008333
+      },
+      "unchanged": {
+        "free": 0,
+        "measured": 4,
+        "share": 0.0067
+      },
+      "quiet": 549,
+      "ratio": 120.0,
+      "stage0_ms_per_call": 0.5158,
+      "error_quantiles": {
+        "p05": 0.001168,
+        "p50": 0.003154,
+        "p95": 0.27647
+      },
+      "error_n": 599
+    },
+    {
+      "domain": "document",
+      "seed": 12,
+      "idle": 0.8,
+      "frames": 600,
+      "share_reaching": {
+        "change": 1.0,
+        "flow": 0.991667,
+        "fingerprint": 0.088333,
+        "model": 0.018333
+      },
+      "unchanged": {
+        "free": 0,
+        "measured": 5,
+        "share": 0.0083
+      },
+      "quiet": 542,
+      "ratio": 54.5,
+      "stage0_ms_per_call": 0.5137,
+      "error_quantiles": {
+        "p05": 0.001161,
+        "p50": 0.003115,
+        "p95": 0.306918
+      },
+      "error_n": 599
+    },
+    {
+      "domain": "document",
+      "seed": 13,
+      "idle": 0.8,
+      "frames": 600,
+      "share_reaching": {
+        "change": 1.0,
+        "flow": 0.991667,
+        "fingerprint": 0.083333,
+        "model": 0.02
+      },
+      "unchanged": {
+        "free": 0,
+        "measured": 5,
+        "share": 0.0083
+      },
+      "quiet": 545,
+      "ratio": 50.0,
+      "stage0_ms_per_call": 0.522,
+      "error_quantiles": {
+        "p05": 0.001168,
+        "p50": 0.003232,
+        "p95": 0.322039
+      },
+      "error_n": 599
+    },
+    {
+      "domain": "desktop",
+      "seed": 11,
+      "idle": 0.8,
+      "frames": 600,
+      "share_reaching": {
+        "change": 1.0,
+        "flow": 0.738333,
+        "fingerprint": 0.001667,
+        "model": 0.001667
+      },
+      "unchanged": {
+        "free": 0,
+        "measured": 157,
+        "share": 0.2617
+      },
+      "quiet": 442,
+      "ratio": 600.0,
+      "stage0_ms_per_call": 0.5152,
+      "error_quantiles": {
+        "p05": 0.000195,
+        "p50": 0.00146,
+        "p95": 0.002045
+      },
+      "error_n": 599
+    },
+    {
+      "domain": "desktop",
+      "seed": 12,
+      "idle": 0.8,
+      "frames": 600,
+      "share_reaching": {
+        "change": 1.0,
+        "flow": 0.733333,
+        "fingerprint": 0.001667,
+        "model": 0.001667
+      },
+      "unchanged": {
+        "free": 0,
+        "measured": 160,
+        "share": 0.2667
+      },
+      "quiet": 439,
+      "ratio": 600.0,
+      "stage0_ms_per_call": 0.5224,
+      "error_quantiles": {
+        "p05": 0.000195,
+        "p50": 0.00146,
+        "p95": 0.002045
+      },
+      "error_n": 599
+    },
+    {
+      "domain": "desktop",
+      "seed": 13,
+      "idle": 0.8,
+      "frames": 600,
+      "share_reaching": {
+        "change": 1.0,
+        "flow": 0.748333,
+        "fingerprint": 0.001667,
+        "model": 0.001667
+      },
+      "unchanged": {
+        "free": 0,
+        "measured": 151,
+        "share": 0.2517
+      },
+      "quiet": 448,
+      "ratio": 600.0,
+      "stage0_ms_per_call": 0.5195,
+      "error_quantiles": {
+        "p05": 0.000195,
+        "p50": 0.001558,
+        "p95": 0.009937
+      },
+      "error_n": 599
+    },
+    {
+      "domain": "video",
+      "seed": 11,
+      "idle": 0.8,
+      "frames": 600,
+      "share_reaching": {
+        "change": 1.0,
+        "flow": 0.958333,
+        "fingerprint": 0.013333,
+        "model": 0.001667
+      },
+      "unchanged": {
+        "free": 0,
+        "measured": 25,
+        "share": 0.0417
+      },
+      "quiet": 567,
+      "ratio": 600.0,
+      "stage0_ms_per_call": 0.5311,
+      "error_quantiles": {
+        "p05": 0.000954,
+        "p50": 0.055049,
+        "p95": 0.083829
+      },
+      "error_n": 599
+    },
+    {
+      "domain": "video",
+      "seed": 12,
+      "idle": 0.8,
+      "frames": 600,
+      "share_reaching": {
+        "change": 1.0,
+        "flow": 0.895,
+        "fingerprint": 0.025,
+        "model": 0.001667
+      },
+      "unchanged": {
+        "free": 0,
+        "measured": 63,
+        "share": 0.105
+      },
+      "quiet": 522,
+      "ratio": 600.0,
+      "stage0_ms_per_call": 0.5292,
+      "error_quantiles": {
+        "p05": 0.000273,
+        "p50": 0.002726,
+        "p95": 0.092063
+      },
+      "error_n": 599
+    },
+    {
+      "domain": "video",
+      "seed": 13,
+      "idle": 0.8,
+      "frames": 600,
+      "share_reaching": {
+        "change": 1.0,
+        "flow": 0.961667,
+        "fingerprint": 0.023333,
+        "model": 0.001667
+      },
+      "unchanged": {
+        "free": 0,
+        "measured": 23,
+        "share": 0.0383
+      },
+      "quiet": 563,
+      "ratio": 600.0,
+      "stage0_ms_per_call": 0.5262,
+      "error_quantiles": {
+        "p05": 0.000954,
+        "p50": 0.054905,
+        "p95": 0.089268
+      },
+      "error_n": 599
+    },
+    {
+      "domain": "depth",
+      "seed": 11,
+      "idle": 0.8,
+      "frames": 600,
+      "share_reaching": {
+        "change": 1.0,
+        "flow": 0.823333,
+        "fingerprint": 0.005,
+        "model": 0.001667
+      },
+      "unchanged": {
+        "free": 0,
+        "measured": 106,
+        "share": 0.1767
+      },
+      "quiet": 491,
+      "ratio": 600.0,
+      "stage0_ms_per_call": 0.5281,
+      "error_quantiles": {
+        "p05": 0.000239,
+        "p50": 0.0018,
+        "p95": 0.038067
+      },
+      "error_n": 599
+    },
+    {
+      "domain": "depth",
+      "seed": 12,
+      "idle": 0.8,
+      "frames": 600,
+      "share_reaching": {
+        "change": 1.0,
+        "flow": 0.83,
+        "fingerprint": 0.01,
+        "model": 0.001667
+      },
+      "unchanged": {
+        "free": 0,
+        "measured": 102,
+        "share": 0.17
+      },
+      "quiet": 492,
+      "ratio": 600.0,
+      "stage0_ms_per_call": 0.5313,
+      "error_quantiles": {
+        "p05": 0.000287,
+        "p50": 0.001908,
+        "p95": 0.058035
+      },
+      "error_n": 599
+    },
+    {
+      "domain": "depth",
+      "seed": 13,
+      "idle": 0.8,
+      "frames": 600,
+      "share_reaching": {
+        "change": 1.0,
+        "flow": 0.851667,
+        "fingerprint": 0.01,
+        "model": 0.001667
+      },
+      "unchanged": {
+        "free": 0,
+        "measured": 89,
+        "share": 0.1483
+      },
+      "quiet": 505,
+      "ratio": 600.0,
+      "stage0_ms_per_call": 0.5329,
+      "error_quantiles": {
+        "p05": 0.000318,
+        "p50": 0.001908,
+        "p95": 0.04853
+      },
+      "error_n": 599
+    }
+  ],
+  "by_idle": {
+    "0.0": {
+      "n_runs": 15,
+      "unit": "прогон",
+      "model_share_median": 0.001667,
+      "model_share_range": [
+        0.001667,
+        0.043333
+      ],
+      "runs_over_launch_ceiling": 0,
+      "ratio_median": 600.0,
+      "runs_never_reaching_model": 0,
+      "unchanged_share_median": 0.1317
+    },
+    "0.25": {
+      "n_runs": 15,
+      "unit": "прогон",
+      "model_share_median": 0.001667,
+      "model_share_range": [
+        0.001667,
+        0.036667
+      ],
+      "runs_over_launch_ceiling": 0,
+      "ratio_median": 600.0,
+      "runs_never_reaching_model": 0,
+      "unchanged_share_median": 0.1217
+    },
+    "0.5": {
+      "n_runs": 15,
+      "unit": "прогон",
+      "model_share_median": 0.001667,
+      "model_share_range": [
+        0.001667,
+        0.035
+      ],
+      "runs_over_launch_ceiling": 0,
+      "ratio_median": 600.0,
+      "runs_never_reaching_model": 0,
+      "unchanged_share_median": 0.17
+    },
+    "0.8": {
+      "n_runs": 15,
+      "unit": "прогон",
+      "model_share_median": 0.001667,
+      "model_share_range": [
+        0.001667,
+        0.02
+      ],
+      "runs_over_launch_ceiling": 0,
+      "ratio_median": 600.0,
+      "runs_never_reaching_model": 0,
+      "unchanged_share_median": 0.17
+    }
+  },
+  "stage_ms_per_call": {
+    "change": 0.5315,
+    "flow": 17.6107,
+    "fingerprint": 1.4729,
+    "model": null
+  },
+  "stage_cost_note": "цена ступени 3 не измерена: большой модели за файрволом в этом окружении нет. Правдоподобное число здесь молча вошло бы в бюджет, поэтому стоит null",
+  "error_scale": {
+    "flow_gate": 0.15,
+    "model_gate": 0.35,
+    "p50_across_runs": 0.002107,
+    "p95_max_across_runs": 0.406503,
+    "per_domain": {
+      "game": {
+        "p50_median": 0.0,
+        "p95_max": 0.27661,
+        "reaches_flow_gate": true,
+        "reaches_model_gate": false,
+        "model_calls_median": 1.0
+      },
+      "document": {
+        "p50_median": 0.003544,
+        "p95_max": 0.406503,
+        "reaches_flow_gate": true,
+        "reaches_model_gate": true,
+        "model_calls_median": 20.0
+      },
+      "desktop": {
+        "p50_median": 0.00146,
+        "p95_max": 0.009937,
+        "reaches_flow_gate": false,
+        "reaches_model_gate": false,
+        "model_calls_median": 1.0
+      },
+      "video": {
+        "p50_median": 0.054673,
+        "p95_max": 0.160115,
+        "reaches_flow_gate": true,
+        "reaches_model_gate": false,
+        "model_calls_median": 1.0
+      },
+      "depth": {
+        "p50_median": 0.002065,
+        "p95_max": 0.092435,
+        "reaches_flow_gate": false,
+        "reaches_model_gate": false,
+        "model_calls_median": 1.0
+      }
+    },
+    "domains_below_model_gate": [
+      "depth",
+      "desktop",
+      "game",
+      "video"
+    ],
+    "vacuous_by_scale": false,
+    "vacuous_domains_share": "4/5",
+    "why": "если рабочий диапазон ошибки домена лежит ниже порога, ступень недостижима по построению, и «доля ниже потолка» есть ложное подтверждение, а не выполненный критерий: порог сравнивается не с тем, с чем надо (та же ошибка, что в разделе 35)"
+  },
+  "preregistered": {
+    "model_share": [
+      0.02,
+      0.05
+    ],
+    "ratio": [
+      100.0,
+      300.0
+    ],
+    "launch_ceiling": 0.1,
+    "expected_first_run_higher": true,
+    "where": "MEASUREMENT.md, раздел 37"
+  },
+  "outcome": {
+    "model_share_median_all": 0.001667,
+    "runs": 60,
+    "runs_over_launch_ceiling": 0,
+    "launch_ceiling_met_but_vacuous_on": [
+      "depth",
+      "desktop",
+      "game",
+      "video"
+    ],
+    "runs_calling_model_more_than_once": 12,
+    "stage_cost_monotonic": false
+  },
+  "domains": [
+    "game",
+    "document",
+    "desktop",
+    "video",
+    "depth"
+  ],
+  "seeds": [
+    11,
+    12,
+    13
+  ],
+  "idle_shares": [
+    0.0,
+    0.25,
+    0.5,
+    0.8
+  ],
+  "frames_per_run": 600,
+  "unit": "прогон (домен, сид, доля бездействия)",
+  "claim": "каскад запирает ступени выше нулевой на неизменившемся кадре и на кадре, совпавшем с предсказанием; доля кадров, доходящих до большой модели, и отношение нулевой ступени к третьей измерены против предрегистрации раздела 37",
+  "how_refuted": "если доля, доходящая до ступени 3, выше 10 %, критерий запуска A4 (пункт 5) не выполнен и бюджет не сходится; если доля не зависит от доли бездействия, гейт не подключён к тому, что меняется"
+}
