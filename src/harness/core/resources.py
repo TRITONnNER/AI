@@ -276,8 +276,13 @@ class ResourceGovernor:
 
     # --- разрешения ---------------------------------------------------------
 
-    def admit(self, op: str) -> Admission:
+    def admit(self, op: str, *, cost_usd: float = 0.0) -> Admission:
         """Можно ли выполнить операцию прямо сейчас.
+
+        `cost_usd` — во что обойдётся **этот** вызов модели, если он платный. С ним
+        предел принуждается **до** траты (см. `would_breach_model`); без него
+        остаётся только запоздалый отказ, и это объявленное ограничение, а не
+        умолчание: тот, кто не назвал цену, платит первым превышением.
 
         Нулевой уровень пропускается **всегда**, и это не поблажка, а инвариант 14:
         нехватка места никогда не запускает удаление следа и никогда не мешает его
@@ -292,8 +297,12 @@ class ResourceGovernor:
             return Admission(False, self._refuse_frames)
         if op == OP_FRAME and self._refuse_frames:
             return Admission(False, self._refuse_frames)
-        if op == OP_MODEL and self._refuse_model:
-            return Admission(False, self._refuse_model)
+        if op == OP_MODEL:
+            if self._refuse_model:
+                return Admission(False, self._refuse_model)
+            ahead = self.would_breach_model(cost_usd)
+            if ahead is not None:
+                return Admission(False, ahead)
         if op == OP_BELIEF:
             allowed = self.task_cap()
             if self.beliefs >= allowed:
@@ -303,10 +312,38 @@ class ResourceGovernor:
                        if allowed != self.belief_cap else ""))
         return Admission(True)
 
-    def require(self, op: str) -> None:
-        a = self.admit(op)
+    def require(self, op: str, *, cost_usd: float = 0.0) -> None:
+        a = self.admit(op, cost_usd=cost_usd)
         if not a:
             raise ResourceError(f"{op} не разрешена: {a.reason}")
+
+    def would_breach_model(self, cost_usd: float = 0.0) -> str | None:
+        """Что нарушится, если сделать **ещё один** вызов модели. `None` — ничего.
+
+        Здесь предел принуждается до превышения, а не после, и разница не
+        косметическая. `check` отмечает упор, когда `usd_spent` уже перевалил за
+        предел: деньги к этому моменту потрачены, и «предел» описывает прошлое.
+        Отказ обязан случиться **перед** вызовом, иначе объявленный потолок расхода
+        не потолок, а отметка о том, что его пробили.
+
+        Частота считается так же: вопрос не «превышена ли она сейчас», а «превысит
+        ли её этот вызов». Первая формулировка пропускает ровно один лишний вызов
+        каждый раз, когда упирается, и на длинной серии это систематическая
+        недостача, а не округление.
+        """
+        cost = max(0.0, float(cost_usd))
+        if self.spend_cap_usd > 0:
+            after = self.usd_spent + cost
+            if after > self.spend_cap_usd:
+                return (f"вызов довёл бы расход до ${after:.4f} при пределе "
+                        f"${self.spend_cap_usd:.2f}")
+        if self.model_rate_cap > 0:
+            self.model_call_rate()          # заодно чистит окно от старых вызовов
+            after_rate = (len(self._model_calls_at) + 1) / 60.0
+            if after_rate > self.model_rate_cap:
+                return (f"вызов довёл бы частоту до {after_rate:.2f} запр/с при "
+                        f"пределе {self.model_rate_cap:.2f}")
+        return None
 
     # --- расход -------------------------------------------------------------
 

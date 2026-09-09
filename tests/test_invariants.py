@@ -703,3 +703,69 @@ def test_invariant_14_eviction_has_no_reference_to_the_reserve(tmp_path: Path) -
         "вытеснения появилась ссылка, которую можно передать дальше")
     assert not levels.Level.TRACE.evictable
     assert levels.Level.TRACE not in levels.LADDER
+
+
+# --- инвариант 24: разрыв часов принуждается на границе восприятия -----------
+#
+# Инвариант объявлен в CLAUDE.md и до этой правки не был реализован **вовсе**:
+# `perceives_clock_gap` упоминался в CLAUDE.md и MIND.md, а в схеме и в коде его не
+# было. Защита держалась обстоятельством — «до журнала пока никто не дотянулся», — и
+# ровно об этом инвариант и предупреждает: обстоятельство отваливается молча.
+
+
+def test_invariant_24_the_switch_exists_in_the_schema() -> None:
+    """Переключатель структурный и попадает в `profile_hash`, а не живёт в коде."""
+    from harness.core.settings import SCHEMA
+
+    got = [s for s in SCHEMA if s.key == "perceives_clock_gap"]
+    assert got, "инвариант 24 ссылается на переключатель, которого нет в схеме"
+    assert got[0].structural, "видимость небытия обязана форкать журнал"
+    assert got[0].default is False, (
+        "по умолчанию агент разрыва не видит: включение — контрольный прогон")
+
+
+def test_invariant_24_the_gap_is_hidden_at_the_perception_boundary() -> None:
+    """Экземпляр стоял, мир ушёл — агент этого не видит, а журнал видит."""
+    from harness.agentside.perception import ClockGate
+    from harness.core.clocks import Stamp
+
+    gate = ClockGate(perceives_gap=False)
+    true_stamp = Stamp(t_self=10, t_world=100)
+    assert gate.admit(true_stamp) == true_stamp, "до разрыва граница ничего не меняет"
+
+    gate.note_gap(500)                       # харнесс: пока стоял, мир ушёл на 500
+    true_stamp = Stamp(t_self=11, t_world=601)
+    shown = gate.admit(true_stamp)
+    assert shown.t_world == 101, f"агенту видно {shown.t_world}, разрыв не скрыт"
+    assert shown.t_self == 11, "собственные циклы не подменяются: они и не прерывались"
+    assert true_stamp.t_world == 601, "истинная отметка обязана остаться истинной"
+    assert gate.state()["hidden_world_ticks"] == 500
+
+
+def test_invariant_24_the_switch_on_lets_the_agent_see_its_own_absence() -> None:
+    """Включённый переключатель — законный контрольный прогон, а не поломка."""
+    from harness.agentside.perception import ClockGate
+    from harness.core.clocks import Stamp
+
+    gate = ClockGate(perceives_gap=True)
+    gate.note_gap(500)
+    shown = gate.admit(Stamp(t_self=11, t_world=601))
+    assert shown.t_world == 601, "с включённым переключателем разрыв обязан быть виден"
+    assert gate.state()["hidden_world_ticks"] == 0
+
+
+def test_invariant_24_percept_carries_no_wall_clock() -> None:
+    """`wall_clock` — второй, более прямой канал к разрыву, и его в восприятии нет.
+
+    Проверяется полем, а не намерением: инвариант предупреждает именно о том, что
+    защита обстоятельством отваливается при появлении первого читателя. Появится
+    поле — тест покраснеет, и добавление станет решением, а не опечаткой.
+    """
+    from dataclasses import fields
+
+    from harness.agentside.perception import Percept
+
+    names = {f.name for f in fields(Percept)}
+    assert names == {"stamp", "pixels", "audio", "symbols"}, (
+        f"в восприятии появилось поле: {sorted(names)}. Часы стены или реальное "
+        "время дают агенту разрыв напрямую, минуя гейт")

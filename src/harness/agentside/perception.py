@@ -18,6 +18,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from typing import Any
 
 import numpy as np
 
@@ -70,3 +71,68 @@ class Percept:
     @property
     def shape(self) -> tuple[int, ...]:
         return tuple(self.pixels.shape)
+
+
+class ClockGate:
+    """Гейт разрыва часов. Инвариант 24.
+
+    Экземпляр остановили — его циклы не шли, а мир ушёл вперёд. `t_self` непрерывен,
+    `t_world` прыгнул, и это **единственное доступное агенту свидетельство о
+    собственном небытии**. Видит ли он его — структурный переключатель
+    `perceives_clock_gap`, а не обстоятельство.
+
+    Почему гейт стоит здесь, а не у журнала. «До журнала пока никто не дотянулся» —
+    защита обстоятельством: она отваливается молча при появлении первого читателя, и
+    заметить это будет нечем. Гейт обязан стоять там, где формируется `Percept`, то
+    есть на границе между харнессом и агентом. Журнал при этом хранит **истинные**
+    часы: инвариант 2 не смягчается, смягчается только то, что уходит агенту.
+
+    Разрыв не угадывается по величине скачка, а **сообщается**: остановка и запуск
+    экземпляра — событие харнесса, а не вывод из чисел. Порог «скачок больше такого-то
+    считается разрывом» был бы третьим порогом, нарисованным рукой, и ошибался бы в
+    обе стороны: медленный мир дал бы ложную тревогу, короткая остановка прошла бы
+    незамеченной.
+    """
+
+    __slots__ = ("perceives_gap", "_offset", "gaps", "hidden_ticks")
+
+    def __init__(self, *, perceives_gap: bool = False) -> None:
+        self.perceives_gap = bool(perceives_gap)
+        self._offset = 0
+        self.gaps = 0
+        self.hidden_ticks = 0
+
+    @classmethod
+    def from_profile(cls, profile: Any) -> "ClockGate":
+        return cls(perceives_gap=bool(profile.structural["perceives_clock_gap"]))
+
+    def note_gap(self, skipped_world_ticks: int) -> None:
+        """Харнесс сообщает: пока экземпляр стоял, мир ушёл на столько тиков."""
+        skipped = int(skipped_world_ticks)
+        if skipped < 0:
+            raise PerceptError(f"разрыв не бывает отрицательным: {skipped}")
+        self.gaps += 1
+        if not self.perceives_gap:
+            self._offset += skipped
+            self.hidden_ticks += skipped
+
+    def admit(self, stamp: Stamp) -> Stamp:
+        """Что из отметки увидит агент.
+
+        При включённом переключателе — ровно то, что было: контрольный прогон, в
+        котором свидетельство о небытии агенту доступно.
+        """
+        if self.perceives_gap or not self._offset:
+            return stamp
+        shown = stamp.t_world - self._offset
+        if shown < 0:
+            # Смещение больше самих часов бывает только при неверном учёте разрывов.
+            # Отдать отрицательное время значило бы подсунуть агенту невозможное.
+            raise PerceptError(
+                f"скрытый разрыв {self._offset} больше t_world {stamp.t_world}: "
+                "разрывы учтены неверно")
+        return Stamp(stamp.t_self, shown, stamp.t_content)
+
+    def state(self) -> dict[str, Any]:
+        return {"perceives_clock_gap": self.perceives_gap, "gaps": self.gaps,
+                "hidden_world_ticks": self.hidden_ticks}

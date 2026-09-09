@@ -1117,3 +1117,61 @@ def test_instance_count_is_structural() -> None:
     from harness.core.settings import structural_keys
 
     assert "instances" in structural_keys()
+
+
+# --- пределы расхода принуждаются до превышения, а не после (SPEC-FULL, A1) ---
+
+
+def test_the_spend_cap_refuses_before_the_money_is_gone() -> None:
+    """Потолок, срабатывающий после траты, — не потолок, а отметка о пробое.
+
+    Сдвиг числа: при пределе $0.10 и потраченных $0.09 вызов ценой $0.05 прежде
+    разрешался (упор ставился на следующей проверке, уже при $0.14), теперь
+    отказывается. `usd_spent` остаётся 0.09, а не становится 0.14.
+    """
+    from harness.core.profile import from_schema
+    from harness.core.resources import OP_MODEL, ResourceGovernor
+
+    g = ResourceGovernor(from_schema("ТЕСТ-расход", spend_cap_usd=0.10))
+    g.spend(usd=0.09, model_calls=1)
+
+    assert not g.admit(OP_MODEL, cost_usd=0.05), "предел пропустил вызов за предел"
+    assert g.usd_spent == pytest.approx(0.09), "деньги потрачены до отказа"
+    assert g.admit(OP_MODEL, cost_usd=0.005), "вызов в пределах обязан пройти"
+
+    # Без названной цены остаётся только запоздалый отказ, и это объявлено, а не
+    # умолчание: тот, кто не назвал цену, платит первым превышением.
+    assert g.admit(OP_MODEL), "без цены отказывать не на чем — так и объявлено"
+
+
+def test_the_rate_cap_counts_the_call_it_is_about_to_allow() -> None:
+    """Вопрос не «превышена ли частота», а «превысит ли её этот вызов».
+
+    Прежняя формулировка пропускала ровно один лишний вызов каждый раз, когда
+    упиралась: на длинной серии это систематическая недостача, а не округление.
+    """
+    import time
+
+    from harness.core.profile import from_schema
+    from harness.core.resources import OP_MODEL, ResourceGovernor
+
+    g = ResourceGovernor(from_schema("ТЕСТ-темп", token_budget_per_min=0.05))
+    now = time.monotonic()
+    for _ in range(3):
+        g.spend(model_calls=1, at=now)
+
+    assert g.model_call_rate() == pytest.approx(0.05), "частота ровно на пределе"
+    a = g.admit(OP_MODEL)
+    assert not a, "вызов на пределе обязан быть отказан: он же и превысит"
+    assert "довёл бы" in (a.reason or ""), a.reason
+
+
+def test_a_cap_of_zero_means_no_cap_and_not_a_ban() -> None:
+    """Ноль в схеме объявлен как «предела нет». Иначе он запретил бы всё разом."""
+    from harness.core.profile import from_schema
+    from harness.core.resources import OP_MODEL, ResourceGovernor
+
+    g = ResourceGovernor(from_schema("ТЕСТ-без-предела", spend_cap_usd=0.0,
+                                     token_budget_per_min=0.0))
+    assert g.admit(OP_MODEL, cost_usd=1000.0), "ноль означает «предела нет»"
+    assert g.would_breach_model(1000.0) is None
