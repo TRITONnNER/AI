@@ -51,6 +51,7 @@ from __future__ import annotations
 
 import hashlib
 from dataclasses import dataclass, field
+from collections.abc import Mapping
 from typing import Any, Callable, Iterable, Protocol, Sequence
 
 from .beliefs import (Belief, BeliefError, BeliefStore, Entity, EntityKind, Origin,
@@ -116,6 +117,111 @@ class Quantized:
     def from_profile(cls, profile: Any) -> "Quantized":
         # Настройка структурная: ширина корзины меняет форму опыта.
         return cls(float(profile.structural["fingerprint_bucket"]))
+
+
+#: Что считает тождество, а что — свойство. Набор закрытый и объявленный.
+#:
+#: Из спецификации, A2.4: инвариантная часть — форма, положение, поведение; изменчивая —
+#: цвет, яркость, размер на экране. Деление не вкусовое, а проверяемое: перекрашенный
+#: предмет обязан остаться той же карточкой, а перекраска — стать событием.
+INVARIANT_PARTS: tuple[str, ...] = ("shape", "position", "behaviour")
+VARIABLE_PARTS: tuple[str, ...] = ("colour", "brightness", "size")
+
+
+@dataclass(frozen=True, slots=True)
+class PropertyChange:
+    """Свойство сменилось при том же тождестве. Это событие, а не новая карточка.
+
+    Ради этого A2.4 и делался: полоска здоровья, мигающий индикатор, смена дня и ночи
+    — всё это один предмет с меняющимся свойством. Прежде каждое такое изменение
+    заводило новую карточку, и предмет расщеплялся тем сильнее, чем живее он был.
+    """
+
+    fingerprint: str
+    part: str
+    before: Any
+    after: Any
+    seq: int | None = None
+
+    def as_dict(self) -> dict[str, Any]:
+        return {"fingerprint": self.fingerprint, "part": self.part,
+                "before": self.before, "after": self.after, "seq": self.seq}
+
+
+@dataclass(frozen=True, slots=True)
+class Split:
+    """Отпечаток из двух частей: инвариантная считает тождество, изменчивая — свойства.
+
+    Полезная нагрузка здесь — отображение с ключами из `INVARIANT_PARTS` и
+    `VARIABLE_PARTS`, а не голое число: разделить части можно, только если источник
+    сказал, что чем является. Ключ вне набора — ошибка, а не молчаливый пропуск:
+    незнакомая часть, тихо ушедшая в свойства, сделала бы тождество слепым к тому,
+    чего мы не предусмотрели.
+
+    Тождество считает вложенный отпечаток (`inner`) — квантование или точный хеш, —
+    и это осознанно: разделение частей и огрубление значений решают разные задачи, и
+    смешивать их в одном классе значило бы получить один рычаг вместо двух.
+    """
+
+    inner: Fingerprinter
+    name: str = "разделённый"
+    _properties: dict[str, dict[str, Any]] = field(default_factory=dict, compare=False)
+    _changes: list[PropertyChange] = field(default_factory=list, compare=False)
+
+    def __call__(self, payload: Any) -> str:
+        return self.observe(payload)[0]
+
+    def observe(self, payload: Any, seq: int | None = None
+                ) -> tuple[str, list[PropertyChange]]:
+        """Отпечаток и список сменившихся свойств при том же тождестве."""
+        if not isinstance(payload, Mapping):
+            raise TypeError(
+                f"разделённому отпечатку нужна нагрузка с объявленными частями, "
+                f"пришло {type(payload).__name__}. Без этого неизвестно, что здесь "
+                "форма, а что цвет")
+        unknown = sorted(set(payload) - set(INVARIANT_PARTS) - set(VARIABLE_PARTS))
+        if unknown:
+            raise ValueError(
+                f"части вне набора: {unknown}. Набор закрыт: незнакомая часть, тихо "
+                f"ушедшая в свойства, сделала бы тождество слепым. Известны "
+                f"{sorted(INVARIANT_PARTS + VARIABLE_PARTS)}")
+        core = [payload[k] for k in INVARIANT_PARTS if k in payload]
+        if not core:
+            raise ValueError(
+                "в нагрузке нет ни одной инвариантной части: тождество считать нечем. "
+                f"Инвариантные — {list(INVARIANT_PARTS)}")
+
+        got = self.inner(core)
+        now = {k: payload[k] for k in VARIABLE_PARTS if k in payload}
+        was = self._properties.get(got)
+        changes: list[PropertyChange] = []
+        if was is not None:
+            for part, value in now.items():
+                if part in was and was[part] != value:
+                    changes.append(PropertyChange(got, part, was[part], value, seq))
+        self._properties[got] = {**(was or {}), **now}
+        self._changes.extend(changes)
+        return got, changes
+
+    def near(self, a: str, b: str) -> bool:
+        """Близость — свойство вложенного отпечатка: он один знает про корзины."""
+        return self.inner.near(a, b)
+
+    def properties(self, fingerprint: str) -> dict[str, Any]:
+        """Последние известные свойства карточки. Пусто — свойств не приходило."""
+        return dict(self._properties.get(fingerprint, {}))
+
+    @property
+    def changes(self) -> list[PropertyChange]:
+        return list(self._changes)
+
+    def state(self) -> dict[str, Any]:
+        by_part: dict[str, int] = {}
+        for c in self._changes:
+            by_part[c.part] = by_part.get(c.part, 0) + 1
+        return {"cards": len(self._properties), "changes": len(self._changes),
+                "changes_by_part": dict(sorted(by_part.items())),
+                "inner": self.inner.name}
 
 
 @dataclass(frozen=True, slots=True)

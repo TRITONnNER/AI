@@ -337,22 +337,34 @@ class PlaceGraph:
         self.refine_cell_min_n = int(refine_cell_min_n)
         self.refine_max_tests = int(refine_max_tests)
         self.record_loops = bool(record_loops)
+        #: Три средства узнавания (A2). `None` — прежнее поведение: порог из схемы и
+        #: одиночный вид. Это контрольная точка, с которой сравниваются остальные
+        #: сочетания, поэтому она обязана оставаться достижимой.
+        self.recognizer: Any = None
+        self.last_recognition: Any = None
 
     @classmethod
     def from_profile(cls, profile: Any) -> "PlaceGraph":
         """Граф с параметрами из профиля. Рабочий путь — этот, а не конструктор."""
         p = profile.parameters
-        return cls(same_place_similarity=float(p["place_same_similarity"]),
-                   variant_similarity=float(p["place_variant_similarity"]),
-                   refine_margin=float(p["place_refine_margin"]),
-                   refine_min_n=int(p["place_refine_min_n"]),
-                   refine_cell_min_n=int(p["place_refine_cell_min_n"]),
-                   refine_max_tests=int(p["place_refine_max_tests"]),
-                   record_loops=bool(profile.structural["place_record_loops"]),
-                   grid=int(profile.structural["place_grid"]),
-                   levels=int(profile.structural["place_levels"]),
-                   blur_px=int(profile.structural["place_blur_px"]),
-                   level_tolerance=int(profile.structural["place_level_tolerance"]))
+        graph = cls(same_place_similarity=float(p["place_same_similarity"]),
+                    variant_similarity=float(p["place_variant_similarity"]),
+                    refine_margin=float(p["place_refine_margin"]),
+                    refine_min_n=int(p["place_refine_min_n"]),
+                    refine_cell_min_n=int(p["place_refine_cell_min_n"]),
+                    refine_max_tests=int(p["place_refine_max_tests"]),
+                    record_loops=bool(profile.structural["place_record_loops"]),
+                    grid=int(profile.structural["place_grid"]),
+                    levels=int(profile.structural["place_levels"]),
+                    blur_px=int(profile.structural["place_blur_px"]),
+                    level_tolerance=int(profile.structural["place_level_tolerance"]))
+        st = profile.structural
+        if (st["place_sequence_matching"] or st["place_adaptive_threshold"]
+                or st["place_novelty_hypothesis"]):
+            from .recognition import Recognizer
+
+            graph.recognizer = Recognizer.from_profile(profile)
+        return graph
 
     def see(self, frame: Any, seq: int, *, seconds_per_seq: float = 1.0,
             mode: str = "unknown", exclude: Any = None) -> str:
@@ -381,6 +393,19 @@ class PlaceGraph:
             if s > score:
                 best, score = (p.base or p.id), s
         return best, score
+
+    def candidates(self, fp: tuple[int, ...]) -> list[tuple[str, float]]:
+        """Все места и похожесть на каждое. Нужно узнаванию (A2): оно решает само.
+
+        `recognize` отдаёт только лучшее, и этого мало трём средствам сразу:
+        сопоставление последовательностей может поднять не лучшего по одиночному
+        виду, а гипотеза нового места считает по всему распределению.
+        """
+        out: list[tuple[str, float]] = []
+        for place in self.places.values():
+            out.append(((place.base or place.id),
+                        place.best_similarity(fp, tolerance=self.level_tolerance)))
+        return out
 
     def _feature_value(self, feature: str, fp: tuple[int, ...],
                        level: float | None, contrast: float | None) -> float | None:
@@ -451,9 +476,19 @@ class PlaceGraph:
         # Ребро описывает переход, значит помнить надо исходную сторону, а не ту, в
         # которую пришли: делить придётся место, откуда действие повело по-разному.
         src_level, src_contrast, src_cells = self._level, self._contrast, self._cells
-        best, score = self.recognize(fp)
 
-        if best is not None and score >= self.same:
+        if self.recognizer is not None:
+            # Три средства A2 решают сами: отрезок пути может поднять не лучшего по
+            # одиночному виду, порог может прийти из фона домена, а гипотеза нового
+            # места может отклонить совпадение, которое не лучше случайного.
+            got = self.recognizer.look(fp, seq, self.candidates(fp))
+            self.last_recognition = got
+            best, score, matched = got.place, got.score, got.same
+        else:
+            best, score = self.recognize(fp)
+            matched = best is not None and score >= self.same
+
+        if matched and best is not None:
             base = self.places[best]
             base.visits += 1
             base.last_seq = max(base.last_seq, seq)
@@ -522,6 +557,10 @@ class PlaceGraph:
         self.current = place.id
         self._last_seq = seq
         self._level, self._contrast, self._cells = level, contrast, fp
+        if self.recognizer is not None:
+            # Отрезок привязывается к **основе**, а не к полосе: полосы получились
+            # делением и имеют тот же отпечаток, значит и путь в них один.
+            self.recognizer.remember(place.base or place.id)
         return place.id
 
     def _observe_edge(self, src: str, dst: str, mode: str, seconds: float,

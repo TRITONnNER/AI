@@ -1175,6 +1175,29 @@ def cmd_selftest(args: argparse.Namespace) -> int:
     return 0 if res.ok else 1
 
 
+def cmd_launch(args: argparse.Namespace) -> int:
+    """Критерий «запуск состоялся» (SPEC-FULL, A4). 0 — состоялся, 1 — нет.
+
+    Ненулевой код при невыполненном критерии, а не при ошибке команды: по нему
+    ставится проверка в сценарий, ровно как у `params`. Смысл тот же — величина,
+    которую никто не спрашивает, меняется незамеченной.
+
+    Вакуумно выполненный пункт **не засчитывается** и код не обнуляет: критерий,
+    закрывающий пункт «сошлось потому, что механизм не работал», объявил бы запуск
+    состоявшимся (инвариант 32).
+    """
+    import json as _json
+
+    from .launch import evaluate
+
+    verdict = evaluate(args.session, measurements=args.measurements)
+    if args.json:
+        print(_json.dumps(verdict.as_dict(), ensure_ascii=False, indent=2))
+    else:
+        print(verdict.text())
+    return 0 if verdict.launched else 1
+
+
 def cmd_params(args: argparse.Namespace) -> int:
     """Мёртвые и однобокие параметры. 0 — дефектов нет, 1 — есть.
 
@@ -1604,6 +1627,14 @@ def build_parser() -> argparse.ArgumentParser:
                          "кадров здесь правильный ответ, а не отказ")
     st.add_argument("--json", action="store_true")
     st.set_defaults(fn=cmd_selftest)
+
+    lau = sub.add_parser("launch", help="критерий «запуск состоялся» (A4): семь пунктов")
+    lau.add_argument("session", type=_path_arg, nargs="?", default=None,
+                     help="каталог сессии; без него пункты по журналу «не проверены»")
+    lau.add_argument("--measurements", type=_path_arg, default=None,
+                     help="каталог замеров; по умолчанию docs/measurements")
+    lau.add_argument("--json", action="store_true")
+    lau.set_defaults(fn=cmd_launch)
 
     pm = sub.add_parser("params", help="мёртвые и однобокие параметры (инвариант 30)")
     pm.add_argument("--all", action="store_true",

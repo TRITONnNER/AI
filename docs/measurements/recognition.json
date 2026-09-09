@@ -1,0 +1,1536 @@
+{
+  "rows": [
+    {
+      "means": {
+        "place_sequence_matching": false,
+        "place_adaptive_threshold": false,
+        "place_novelty_hypothesis": false
+      },
+      "label": "контроль",
+      "seed": 11,
+      "observations": 1500,
+      "places": 211,
+      "new_per_observation_tail": 0.09867,
+      "curve": [
+        [
+          250,
+          47
+        ],
+        [
+          500,
+          96
+        ],
+        [
+          750,
+          137
+        ],
+        [
+          1000,
+          169
+        ],
+        [
+          1250,
+          186
+        ],
+        [
+          1500,
+          211
+        ]
+      ],
+      "threshold": null,
+      "rejected_by_novelty": null,
+      "false_split": {
+        "n": 743,
+        "fired": 712,
+        "share": 0.9582772543741588
+      },
+      "false_merge": {
+        "n": 1995,
+        "fired": 8,
+        "share": 0.0040100250626566416
+      },
+      "ambiguous_pairs": 1259
+    },
+    {
+      "means": {
+        "place_sequence_matching": false,
+        "place_adaptive_threshold": false,
+        "place_novelty_hypothesis": false
+      },
+      "label": "контроль",
+      "seed": 12,
+      "observations": 1500,
+      "places": 218,
+      "new_per_observation_tail": 0.08133,
+      "curve": [
+        [
+          250,
+          63
+        ],
+        [
+          500,
+          111
+        ],
+        [
+          750,
+          157
+        ],
+        [
+          1000,
+          178
+        ],
+        [
+          1250,
+          211
+        ],
+        [
+          1500,
+          218
+        ]
+      ],
+      "threshold": null,
+      "rejected_by_novelty": null,
+      "false_split": {
+        "n": 481,
+        "fired": 470,
+        "share": 0.9771309771309772
+      },
+      "false_merge": {
+        "n": 2819,
+        "fired": 10,
+        "share": 0.0035473572188719402
+      },
+      "ambiguous_pairs": 698
+    },
+    {
+      "means": {
+        "place_sequence_matching": false,
+        "place_adaptive_threshold": false,
+        "place_novelty_hypothesis": false
+      },
+      "label": "контроль",
+      "seed": 13,
+      "observations": 1500,
+      "places": 151,
+      "new_per_observation_tail": 0.06933,
+      "curve": [
+        [
+          250,
+          46
+        ],
+        [
+          500,
+          90
+        ],
+        [
+          750,
+          99
+        ],
+        [
+          1000,
+          128
+        ],
+        [
+          1250,
+          137
+        ],
+        [
+          1500,
+          151
+        ]
+      ],
+      "threshold": null,
+      "rejected_by_novelty": null,
+      "false_split": {
+        "n": 684,
+        "fired": 662,
+        "share": 0.9678362573099415
+      },
+      "false_merge": {
+        "n": 2195,
+        "fired": 26,
+        "share": 0.01184510250569476
+      },
+      "ambiguous_pairs": 1120
+    },
+    {
+      "means": {
+        "place_sequence_matching": false,
+        "place_adaptive_threshold": false,
+        "place_novelty_hypothesis": true
+      },
+      "label": "новизна",
+      "seed": 11,
+      "observations": 1500,
+      "places": 211,
+      "new_per_observation_tail": 0.09867,
+      "curve": [
+        [
+          250,
+          47
+        ],
+        [
+          500,
+          96
+        ],
+        [
+          750,
+          137
+        ],
+        [
+          1000,
+          169
+        ],
+        [
+          1250,
+          186
+        ],
+        [
+          1500,
+          211
+        ]
+      ],
+      "threshold": {
+        "value": 0.82,
+        "source": "схема",
+        "n": 0,
+        "adaptive": false,
+        "background_p95": null
+      },
+      "rejected_by_novelty": 0,
+      "false_split": {
+        "n": 743,
+        "fired": 712,
+        "share": 0.9582772543741588
+      },
+      "false_merge": {
+        "n": 1995,
+        "fired": 8,
+        "share": 0.0040100250626566416
+      },
+      "ambiguous_pairs": 1259
+    },
+    {
+      "means": {
+        "place_sequence_matching": false,
+        "place_adaptive_threshold": false,
+        "place_novelty_hypothesis": true
+      },
+      "label": "новизна",
+      "seed": 12,
+      "observations": 1500,
+      "places": 218,
+      "new_per_observation_tail": 0.08133,
+      "curve": [
+        [
+          250,
+          63
+        ],
+        [
+          500,
+          111
+        ],
+        [
+          750,
+          157
+        ],
+        [
+          1000,
+          178
+        ],
+        [
+          1250,
+          211
+        ],
+        [
+          1500,
+          218
+        ]
+      ],
+      "threshold": {
+        "value": 0.82,
+        "source": "схема",
+        "n": 0,
+        "adaptive": false,
+        "background_p95": null
+      },
+      "rejected_by_novelty": 0,
+      "false_split": {
+        "n": 481,
+        "fired": 470,
+        "share": 0.9771309771309772
+      },
+      "false_merge": {
+        "n": 2819,
+        "fired": 10,
+        "share": 0.0035473572188719402
+      },
+      "ambiguous_pairs": 698
+    },
+    {
+      "means": {
+        "place_sequence_matching": false,
+        "place_adaptive_threshold": false,
+        "place_novelty_hypothesis": true
+      },
+      "label": "новизна",
+      "seed": 13,
+      "observations": 1500,
+      "places": 151,
+      "new_per_observation_tail": 0.06933,
+      "curve": [
+        [
+          250,
+          46
+        ],
+        [
+          500,
+          90
+        ],
+        [
+          750,
+          99
+        ],
+        [
+          1000,
+          128
+        ],
+        [
+          1250,
+          137
+        ],
+        [
+          1500,
+          151
+        ]
+      ],
+      "threshold": {
+        "value": 0.82,
+        "source": "схема",
+        "n": 0,
+        "adaptive": false,
+        "background_p95": null
+      },
+      "rejected_by_novelty": 0,
+      "false_split": {
+        "n": 684,
+        "fired": 662,
+        "share": 0.9678362573099415
+      },
+      "false_merge": {
+        "n": 2195,
+        "fired": 26,
+        "share": 0.01184510250569476
+      },
+      "ambiguous_pairs": 1120
+    },
+    {
+      "means": {
+        "place_sequence_matching": false,
+        "place_adaptive_threshold": true,
+        "place_novelty_hypothesis": false
+      },
+      "label": "фон",
+      "seed": 11,
+      "observations": 1500,
+      "places": 218,
+      "new_per_observation_tail": 0.09867,
+      "curve": [
+        [
+          250,
+          49
+        ],
+        [
+          500,
+          102
+        ],
+        [
+          750,
+          144
+        ],
+        [
+          1000,
+          176
+        ],
+        [
+          1250,
+          193
+        ],
+        [
+          1500,
+          218
+        ]
+      ],
+      "threshold": {
+        "value": 0.82,
+        "source": "фон домена",
+        "n": 1440,
+        "adaptive": true,
+        "background_p95": 0.6094
+      },
+      "rejected_by_novelty": 0,
+      "false_split": {
+        "n": 743,
+        "fired": 712,
+        "share": 0.9582772543741588
+      },
+      "false_merge": {
+        "n": 1995,
+        "fired": 8,
+        "share": 0.0040100250626566416
+      },
+      "ambiguous_pairs": 1259
+    },
+    {
+      "means": {
+        "place_sequence_matching": false,
+        "place_adaptive_threshold": true,
+        "place_novelty_hypothesis": false
+      },
+      "label": "фон",
+      "seed": 12,
+      "observations": 1500,
+      "places": 300,
+      "new_per_observation_tail": 0.156,
+      "curve": [
+        [
+          250,
+          63
+        ],
+        [
+          500,
+          111
+        ],
+        [
+          750,
+          183
+        ],
+        [
+          1000,
+          225
+        ],
+        [
+          1250,
+          274
+        ],
+        [
+          1500,
+          300
+        ]
+      ],
+      "threshold": {
+        "value": 0.8533,
+        "source": "фон домена",
+        "n": 1440,
+        "adaptive": true,
+        "background_p95": 0.5938
+      },
+      "rejected_by_novelty": 0,
+      "false_split": {
+        "n": 481,
+        "fired": 472,
+        "share": 0.9812889812889813
+      },
+      "false_merge": {
+        "n": 2819,
+        "fired": 6,
+        "share": 0.002128414331323164
+      },
+      "ambiguous_pairs": 698
+    },
+    {
+      "means": {
+        "place_sequence_matching": false,
+        "place_adaptive_threshold": true,
+        "place_novelty_hypothesis": false
+      },
+      "label": "фон",
+      "seed": 13,
+      "observations": 1500,
+      "places": 179,
+      "new_per_observation_tail": 0.07333,
+      "curve": [
+        [
+          250,
+          57
+        ],
+        [
+          500,
+          114
+        ],
+        [
+          750,
+          124
+        ],
+        [
+          1000,
+          153
+        ],
+        [
+          1250,
+          162
+        ],
+        [
+          1500,
+          179
+        ]
+      ],
+      "threshold": {
+        "value": 0.8567,
+        "source": "фон домена",
+        "n": 1440,
+        "adaptive": true,
+        "background_p95": 0.6406
+      },
+      "rejected_by_novelty": 0,
+      "false_split": {
+        "n": 684,
+        "fired": 663,
+        "share": 0.9692982456140351
+      },
+      "false_merge": {
+        "n": 2195,
+        "fired": 15,
+        "share": 0.00683371298405467
+      },
+      "ambiguous_pairs": 1120
+    },
+    {
+      "means": {
+        "place_sequence_matching": false,
+        "place_adaptive_threshold": true,
+        "place_novelty_hypothesis": true
+      },
+      "label": "фон+новизна",
+      "seed": 11,
+      "observations": 1500,
+      "places": 218,
+      "new_per_observation_tail": 0.09867,
+      "curve": [
+        [
+          250,
+          49
+        ],
+        [
+          500,
+          102
+        ],
+        [
+          750,
+          144
+        ],
+        [
+          1000,
+          176
+        ],
+        [
+          1250,
+          193
+        ],
+        [
+          1500,
+          218
+        ]
+      ],
+      "threshold": {
+        "value": 0.82,
+        "source": "фон домена",
+        "n": 1440,
+        "adaptive": true,
+        "background_p95": 0.6094
+      },
+      "rejected_by_novelty": 0,
+      "false_split": {
+        "n": 743,
+        "fired": 712,
+        "share": 0.9582772543741588
+      },
+      "false_merge": {
+        "n": 1995,
+        "fired": 8,
+        "share": 0.0040100250626566416
+      },
+      "ambiguous_pairs": 1259
+    },
+    {
+      "means": {
+        "place_sequence_matching": false,
+        "place_adaptive_threshold": true,
+        "place_novelty_hypothesis": true
+      },
+      "label": "фон+новизна",
+      "seed": 12,
+      "observations": 1500,
+      "places": 300,
+      "new_per_observation_tail": 0.156,
+      "curve": [
+        [
+          250,
+          63
+        ],
+        [
+          500,
+          111
+        ],
+        [
+          750,
+          183
+        ],
+        [
+          1000,
+          225
+        ],
+        [
+          1250,
+          274
+        ],
+        [
+          1500,
+          300
+        ]
+      ],
+      "threshold": {
+        "value": 0.8533,
+        "source": "фон домена",
+        "n": 1440,
+        "adaptive": true,
+        "background_p95": 0.5938
+      },
+      "rejected_by_novelty": 0,
+      "false_split": {
+        "n": 481,
+        "fired": 472,
+        "share": 0.9812889812889813
+      },
+      "false_merge": {
+        "n": 2819,
+        "fired": 6,
+        "share": 0.002128414331323164
+      },
+      "ambiguous_pairs": 698
+    },
+    {
+      "means": {
+        "place_sequence_matching": false,
+        "place_adaptive_threshold": true,
+        "place_novelty_hypothesis": true
+      },
+      "label": "фон+новизна",
+      "seed": 13,
+      "observations": 1500,
+      "places": 179,
+      "new_per_observation_tail": 0.07333,
+      "curve": [
+        [
+          250,
+          57
+        ],
+        [
+          500,
+          114
+        ],
+        [
+          750,
+          124
+        ],
+        [
+          1000,
+          153
+        ],
+        [
+          1250,
+          162
+        ],
+        [
+          1500,
+          179
+        ]
+      ],
+      "threshold": {
+        "value": 0.8567,
+        "source": "фон домена",
+        "n": 1440,
+        "adaptive": true,
+        "background_p95": 0.6406
+      },
+      "rejected_by_novelty": 0,
+      "false_split": {
+        "n": 684,
+        "fired": 663,
+        "share": 0.9692982456140351
+      },
+      "false_merge": {
+        "n": 2195,
+        "fired": 15,
+        "share": 0.00683371298405467
+      },
+      "ambiguous_pairs": 1120
+    },
+    {
+      "means": {
+        "place_sequence_matching": true,
+        "place_adaptive_threshold": false,
+        "place_novelty_hypothesis": false
+      },
+      "label": "отрезок",
+      "seed": 11,
+      "observations": 1500,
+      "places": 342,
+      "new_per_observation_tail": 0.224,
+      "curve": [
+        [
+          250,
+          52
+        ],
+        [
+          500,
+          117
+        ],
+        [
+          750,
+          174
+        ],
+        [
+          1000,
+          237
+        ],
+        [
+          1250,
+          280
+        ],
+        [
+          1500,
+          342
+        ]
+      ],
+      "threshold": {
+        "value": 0.82,
+        "source": "схема",
+        "n": 0,
+        "adaptive": false,
+        "background_p95": null
+      },
+      "rejected_by_novelty": 0,
+      "false_split": {
+        "n": 743,
+        "fired": 725,
+        "share": 0.9757738896366084
+      },
+      "false_merge": {
+        "n": 1995,
+        "fired": 2,
+        "share": 0.0010025062656641604
+      },
+      "ambiguous_pairs": 1259
+    },
+    {
+      "means": {
+        "place_sequence_matching": true,
+        "place_adaptive_threshold": false,
+        "place_novelty_hypothesis": false
+      },
+      "label": "отрезок",
+      "seed": 12,
+      "observations": 1500,
+      "places": 416,
+      "new_per_observation_tail": 0.24933,
+      "curve": [
+        [
+          250,
+          78
+        ],
+        [
+          500,
+          151
+        ],
+        [
+          750,
+          229
+        ],
+        [
+          1000,
+          293
+        ],
+        [
+          1250,
+          360
+        ],
+        [
+          1500,
+          416
+        ]
+      ],
+      "threshold": {
+        "value": 0.82,
+        "source": "схема",
+        "n": 0,
+        "adaptive": false,
+        "background_p95": null
+      },
+      "rejected_by_novelty": 0,
+      "false_split": {
+        "n": 481,
+        "fired": 473,
+        "share": 0.9833679833679834
+      },
+      "false_merge": {
+        "n": 2819,
+        "fired": 1,
+        "share": 0.000354735721887194
+      },
+      "ambiguous_pairs": 698
+    },
+    {
+      "means": {
+        "place_sequence_matching": true,
+        "place_adaptive_threshold": false,
+        "place_novelty_hypothesis": false
+      },
+      "label": "отрезок",
+      "seed": 13,
+      "observations": 1500,
+      "places": 332,
+      "new_per_observation_tail": 0.228,
+      "curve": [
+        [
+          250,
+          57
+        ],
+        [
+          500,
+          121
+        ],
+        [
+          750,
+          161
+        ],
+        [
+          1000,
+          228
+        ],
+        [
+          1250,
+          280
+        ],
+        [
+          1500,
+          332
+        ]
+      ],
+      "threshold": {
+        "value": 0.82,
+        "source": "схема",
+        "n": 0,
+        "adaptive": false,
+        "background_p95": null
+      },
+      "rejected_by_novelty": 0,
+      "false_split": {
+        "n": 684,
+        "fired": 669,
+        "share": 0.9780701754385965
+      },
+      "false_merge": {
+        "n": 2195,
+        "fired": 2,
+        "share": 0.0009111617312072893
+      },
+      "ambiguous_pairs": 1120
+    },
+    {
+      "means": {
+        "place_sequence_matching": true,
+        "place_adaptive_threshold": false,
+        "place_novelty_hypothesis": true
+      },
+      "label": "отрезок+новизна",
+      "seed": 11,
+      "observations": 1500,
+      "places": 342,
+      "new_per_observation_tail": 0.224,
+      "curve": [
+        [
+          250,
+          52
+        ],
+        [
+          500,
+          117
+        ],
+        [
+          750,
+          174
+        ],
+        [
+          1000,
+          237
+        ],
+        [
+          1250,
+          280
+        ],
+        [
+          1500,
+          342
+        ]
+      ],
+      "threshold": {
+        "value": 0.82,
+        "source": "схема",
+        "n": 0,
+        "adaptive": false,
+        "background_p95": null
+      },
+      "rejected_by_novelty": 0,
+      "false_split": {
+        "n": 743,
+        "fired": 725,
+        "share": 0.9757738896366084
+      },
+      "false_merge": {
+        "n": 1995,
+        "fired": 2,
+        "share": 0.0010025062656641604
+      },
+      "ambiguous_pairs": 1259
+    },
+    {
+      "means": {
+        "place_sequence_matching": true,
+        "place_adaptive_threshold": false,
+        "place_novelty_hypothesis": true
+      },
+      "label": "отрезок+новизна",
+      "seed": 12,
+      "observations": 1500,
+      "places": 416,
+      "new_per_observation_tail": 0.24933,
+      "curve": [
+        [
+          250,
+          78
+        ],
+        [
+          500,
+          151
+        ],
+        [
+          750,
+          229
+        ],
+        [
+          1000,
+          293
+        ],
+        [
+          1250,
+          360
+        ],
+        [
+          1500,
+          416
+        ]
+      ],
+      "threshold": {
+        "value": 0.82,
+        "source": "схема",
+        "n": 0,
+        "adaptive": false,
+        "background_p95": null
+      },
+      "rejected_by_novelty": 0,
+      "false_split": {
+        "n": 481,
+        "fired": 473,
+        "share": 0.9833679833679834
+      },
+      "false_merge": {
+        "n": 2819,
+        "fired": 1,
+        "share": 0.000354735721887194
+      },
+      "ambiguous_pairs": 698
+    },
+    {
+      "means": {
+        "place_sequence_matching": true,
+        "place_adaptive_threshold": false,
+        "place_novelty_hypothesis": true
+      },
+      "label": "отрезок+новизна",
+      "seed": 13,
+      "observations": 1500,
+      "places": 332,
+      "new_per_observation_tail": 0.228,
+      "curve": [
+        [
+          250,
+          57
+        ],
+        [
+          500,
+          121
+        ],
+        [
+          750,
+          161
+        ],
+        [
+          1000,
+          228
+        ],
+        [
+          1250,
+          280
+        ],
+        [
+          1500,
+          332
+        ]
+      ],
+      "threshold": {
+        "value": 0.82,
+        "source": "схема",
+        "n": 0,
+        "adaptive": false,
+        "background_p95": null
+      },
+      "rejected_by_novelty": 0,
+      "false_split": {
+        "n": 684,
+        "fired": 669,
+        "share": 0.9780701754385965
+      },
+      "false_merge": {
+        "n": 2195,
+        "fired": 2,
+        "share": 0.0009111617312072893
+      },
+      "ambiguous_pairs": 1120
+    },
+    {
+      "means": {
+        "place_sequence_matching": true,
+        "place_adaptive_threshold": true,
+        "place_novelty_hypothesis": false
+      },
+      "label": "отрезок+фон",
+      "seed": 11,
+      "observations": 1500,
+      "places": 349,
+      "new_per_observation_tail": 0.224,
+      "curve": [
+        [
+          250,
+          52
+        ],
+        [
+          500,
+          122
+        ],
+        [
+          750,
+          181
+        ],
+        [
+          1000,
+          244
+        ],
+        [
+          1250,
+          287
+        ],
+        [
+          1500,
+          349
+        ]
+      ],
+      "threshold": {
+        "value": 0.82,
+        "source": "фон домена",
+        "n": 1440,
+        "adaptive": true,
+        "background_p95": 0.6094
+      },
+      "rejected_by_novelty": 0,
+      "false_split": {
+        "n": 743,
+        "fired": 725,
+        "share": 0.9757738896366084
+      },
+      "false_merge": {
+        "n": 1995,
+        "fired": 2,
+        "share": 0.0010025062656641604
+      },
+      "ambiguous_pairs": 1259
+    },
+    {
+      "means": {
+        "place_sequence_matching": true,
+        "place_adaptive_threshold": true,
+        "place_novelty_hypothesis": false
+      },
+      "label": "отрезок+фон",
+      "seed": 12,
+      "observations": 1500,
+      "places": 462,
+      "new_per_observation_tail": 0.29733,
+      "curve": [
+        [
+          250,
+          78
+        ],
+        [
+          500,
+          151
+        ],
+        [
+          750,
+          239
+        ],
+        [
+          1000,
+          311
+        ],
+        [
+          1250,
+          388
+        ],
+        [
+          1500,
+          462
+        ]
+      ],
+      "threshold": {
+        "value": 0.8533,
+        "source": "фон домена",
+        "n": 1440,
+        "adaptive": true,
+        "background_p95": 0.5938
+      },
+      "rejected_by_novelty": 0,
+      "false_split": {
+        "n": 481,
+        "fired": 475,
+        "share": 0.9875259875259875
+      },
+      "false_merge": {
+        "n": 2819,
+        "fired": 0,
+        "share": 0.0
+      },
+      "ambiguous_pairs": 698
+    },
+    {
+      "means": {
+        "place_sequence_matching": true,
+        "place_adaptive_threshold": true,
+        "place_novelty_hypothesis": false
+      },
+      "label": "отрезок+фон",
+      "seed": 13,
+      "observations": 1500,
+      "places": 355,
+      "new_per_observation_tail": 0.24267,
+      "curve": [
+        [
+          250,
+          62
+        ],
+        [
+          500,
+          129
+        ],
+        [
+          750,
+          173
+        ],
+        [
+          1000,
+          240
+        ],
+        [
+          1250,
+          294
+        ],
+        [
+          1500,
+          355
+        ]
+      ],
+      "threshold": {
+        "value": 0.8567,
+        "source": "фон домена",
+        "n": 1440,
+        "adaptive": true,
+        "background_p95": 0.6406
+      },
+      "rejected_by_novelty": 0,
+      "false_split": {
+        "n": 684,
+        "fired": 669,
+        "share": 0.9780701754385965
+      },
+      "false_merge": {
+        "n": 2195,
+        "fired": 3,
+        "share": 0.001366742596810934
+      },
+      "ambiguous_pairs": 1120
+    },
+    {
+      "means": {
+        "place_sequence_matching": true,
+        "place_adaptive_threshold": true,
+        "place_novelty_hypothesis": true
+      },
+      "label": "отрезок+фон+новизна",
+      "seed": 11,
+      "observations": 1500,
+      "places": 349,
+      "new_per_observation_tail": 0.224,
+      "curve": [
+        [
+          250,
+          52
+        ],
+        [
+          500,
+          122
+        ],
+        [
+          750,
+          181
+        ],
+        [
+          1000,
+          244
+        ],
+        [
+          1250,
+          287
+        ],
+        [
+          1500,
+          349
+        ]
+      ],
+      "threshold": {
+        "value": 0.82,
+        "source": "фон домена",
+        "n": 1440,
+        "adaptive": true,
+        "background_p95": 0.6094
+      },
+      "rejected_by_novelty": 0,
+      "false_split": {
+        "n": 743,
+        "fired": 725,
+        "share": 0.9757738896366084
+      },
+      "false_merge": {
+        "n": 1995,
+        "fired": 2,
+        "share": 0.0010025062656641604
+      },
+      "ambiguous_pairs": 1259
+    },
+    {
+      "means": {
+        "place_sequence_matching": true,
+        "place_adaptive_threshold": true,
+        "place_novelty_hypothesis": true
+      },
+      "label": "отрезок+фон+новизна",
+      "seed": 12,
+      "observations": 1500,
+      "places": 462,
+      "new_per_observation_tail": 0.29733,
+      "curve": [
+        [
+          250,
+          78
+        ],
+        [
+          500,
+          151
+        ],
+        [
+          750,
+          239
+        ],
+        [
+          1000,
+          311
+        ],
+        [
+          1250,
+          388
+        ],
+        [
+          1500,
+          462
+        ]
+      ],
+      "threshold": {
+        "value": 0.8533,
+        "source": "фон домена",
+        "n": 1440,
+        "adaptive": true,
+        "background_p95": 0.5938
+      },
+      "rejected_by_novelty": 0,
+      "false_split": {
+        "n": 481,
+        "fired": 475,
+        "share": 0.9875259875259875
+      },
+      "false_merge": {
+        "n": 2819,
+        "fired": 0,
+        "share": 0.0
+      },
+      "ambiguous_pairs": 698
+    },
+    {
+      "means": {
+        "place_sequence_matching": true,
+        "place_adaptive_threshold": true,
+        "place_novelty_hypothesis": true
+      },
+      "label": "отрезок+фон+новизна",
+      "seed": 13,
+      "observations": 1500,
+      "places": 355,
+      "new_per_observation_tail": 0.24267,
+      "curve": [
+        [
+          250,
+          62
+        ],
+        [
+          500,
+          129
+        ],
+        [
+          750,
+          173
+        ],
+        [
+          1000,
+          240
+        ],
+        [
+          1250,
+          294
+        ],
+        [
+          1500,
+          355
+        ]
+      ],
+      "threshold": {
+        "value": 0.8567,
+        "source": "фон домена",
+        "n": 1440,
+        "adaptive": true,
+        "background_p95": 0.6406
+      },
+      "rejected_by_novelty": 0,
+      "false_split": {
+        "n": 684,
+        "fired": 669,
+        "share": 0.9780701754385965
+      },
+      "false_merge": {
+        "n": 2195,
+        "fired": 3,
+        "share": 0.001366742596810934
+      },
+      "ambiguous_pairs": 1120
+    }
+  ],
+  "by_combination": {
+    "отрезок+фон+новизна": {
+      "n_runs": 3,
+      "unit": "прогон",
+      "places_median": 355,
+      "places_range": [
+        349,
+        462
+      ],
+      "tail_median": 0.24267,
+      "false_split_median": 0.9781,
+      "false_merge_median": 0.001,
+      "runs_with_adaptive_threshold": 3,
+      "adaptive_threshold_median": 0.8533
+    },
+    "отрезок": {
+      "n_runs": 3,
+      "unit": "прогон",
+      "places_median": 342,
+      "places_range": [
+        332,
+        416
+      ],
+      "tail_median": 0.228,
+      "false_split_median": 0.9781,
+      "false_merge_median": 0.0009,
+      "runs_with_adaptive_threshold": 0,
+      "adaptive_threshold_median": null
+    },
+    "отрезок+фон": {
+      "n_runs": 3,
+      "unit": "прогон",
+      "places_median": 355,
+      "places_range": [
+        349,
+        462
+      ],
+      "tail_median": 0.24267,
+      "false_split_median": 0.9781,
+      "false_merge_median": 0.001,
+      "runs_with_adaptive_threshold": 3,
+      "adaptive_threshold_median": 0.8533
+    },
+    "отрезок+новизна": {
+      "n_runs": 3,
+      "unit": "прогон",
+      "places_median": 342,
+      "places_range": [
+        332,
+        416
+      ],
+      "tail_median": 0.228,
+      "false_split_median": 0.9781,
+      "false_merge_median": 0.0009,
+      "runs_with_adaptive_threshold": 0,
+      "adaptive_threshold_median": null
+    },
+    "новизна": {
+      "n_runs": 3,
+      "unit": "прогон",
+      "places_median": 211,
+      "places_range": [
+        151,
+        218
+      ],
+      "tail_median": 0.08133,
+      "false_split_median": 0.9678,
+      "false_merge_median": 0.004,
+      "runs_with_adaptive_threshold": 0,
+      "adaptive_threshold_median": null
+    },
+    "контроль": {
+      "n_runs": 3,
+      "unit": "прогон",
+      "places_median": 211,
+      "places_range": [
+        151,
+        218
+      ],
+      "tail_median": 0.08133,
+      "false_split_median": 0.9678,
+      "false_merge_median": 0.004,
+      "runs_with_adaptive_threshold": 0,
+      "adaptive_threshold_median": null
+    },
+    "фон": {
+      "n_runs": 3,
+      "unit": "прогон",
+      "places_median": 218,
+      "places_range": [
+        179,
+        300
+      ],
+      "tail_median": 0.09867,
+      "false_split_median": 0.9693,
+      "false_merge_median": 0.004,
+      "runs_with_adaptive_threshold": 3,
+      "adaptive_threshold_median": 0.8533
+    },
+    "фон+новизна": {
+      "n_runs": 3,
+      "unit": "прогон",
+      "places_median": 218,
+      "places_range": [
+        179,
+        300
+      ],
+      "tail_median": 0.09867,
+      "false_split_median": 0.9693,
+      "false_merge_median": 0.004,
+      "runs_with_adaptive_threshold": 3,
+      "adaptive_threshold_median": 0.8533
+    }
+  },
+  "control": {
+    "n_runs": 3,
+    "unit": "прогон",
+    "places_median": 211,
+    "places_range": [
+      151,
+      218
+    ],
+    "tail_median": 0.08133,
+    "false_split_median": 0.9678,
+    "false_merge_median": 0.004,
+    "runs_with_adaptive_threshold": 0,
+    "adaptive_threshold_median": null
+  },
+  "fewest_nodes": {
+    "label": "новизна",
+    "n_runs": 3,
+    "unit": "прогон",
+    "places_median": 211,
+    "places_range": [
+      151,
+      218
+    ],
+    "tail_median": 0.08133,
+    "false_split_median": 0.9678,
+    "false_merge_median": 0.004,
+    "runs_with_adaptive_threshold": 0,
+    "adaptive_threshold_median": null
+  },
+  "cards": {
+    "true_things": 12,
+    "repaints": 4,
+    "plain_cards": 48,
+    "split_cards": 12,
+    "plain_doubled_share": 3.0,
+    "split_doubled_share": 0.0,
+    "property_events": 36,
+    "split_state": {
+      "cards": 12,
+      "changes": 36,
+      "changes_by_part": {
+        "colour": 36
+      },
+      "inner": "квантование"
+    },
+    "unit": "прогон (мир объявлен здесь, истина по построению)"
+  },
+  "truth": {
+    "same_place_px": 32.0,
+    "other_place_px": 64.0,
+    "source": "состояние мира (cam_x, cam_y), отладочный канал",
+    "same_as": "tools/measure_fingerprint.py, раздел 31.2"
+  },
+  "means": {
+    "place_sequence_matching": "отрезок",
+    "place_adaptive_threshold": "фон",
+    "place_novelty_hypothesis": "новизна"
+  },
+  "seeds": [
+    11,
+    12,
+    13
+  ],
+  "observations_per_run": 1500,
+  "pairs_per_run": 4000,
+  "unit": "прогон (сочетание средств, сид)",
+  "claim": "вклад каждого из трёх средств узнавания места измерен отдельно на восьми сочетаниях, узлы считаются против наблюдений, и обе ошибки предъявлены против истины из состояния мира",
+  "how_refuted": "если ни одно сочетание не уменьшает число узлов против контроля, средства не лечат ненасыщение, и менять надо функцию отпечатка, а не узнавание"
+}
