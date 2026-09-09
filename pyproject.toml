@@ -24,7 +24,11 @@ macos = ["mss>=9", "sounddevice>=0.4"]
 # отдельным extras: без неё дальность по потоку честно отказывается считаться
 # (FlowUnavailable), а не считается чем-нибудь другим молча.
 flow = ["opencv-python-headless>=4.9"]
-dev = ["pytest>=8", "opencv-python-headless>=4.9"]
+# matplotlib нужен не «для картинок вообще», а для того, чтобы прогон тестов был
+# зелёным на чистой установке: сборку фикстуры панели зовут два теста
+# (`test_panel_server`), и без него они падают на пустом месте. Числа при этом
+# целы — падает зеркало, а не замер, — но тест об этом не знает и краснеет.
+dev = ["pytest>=8", "opencv-python-headless>=4.9", "matplotlib>=3.8"]
 
 [project.scripts]
 harness = "harness.cli:main"
